@@ -3,10 +3,19 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-// Configuration provided by user
-// Note: In a production environment, it is recommended to use environment variables.
-const env = (import.meta as any).env || {};
+// Helper to safely access env vars
+const getEnv = () => {
+  try {
+    // @ts-ignore
+    return import.meta.env || {};
+  } catch {
+    return {};
+  }
+};
 
+const env = getEnv();
+
+// Use environment variables if available, otherwise fall back to hardcoded values (as provided)
 const firebaseConfig = {
   apiKey: env.VITE_FIREBASE_API_KEY || "AIzaSyD4BcKMNU54sbRVIz9qlA5lccyHJg730NA",
   authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || "askingkisd.firebaseapp.com",

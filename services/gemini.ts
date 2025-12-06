@@ -1,8 +1,25 @@
+
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Safely access environment variables
+// Using try-catch and avoiding direct casting on import.meta prevents runtime errors if env is undefined
+let apiKey = "";
+try {
+  // @ts-ignore
+  const env = import.meta.env;
+  if (env) {
+    apiKey = env.VITE_API_KEY || env.API_KEY || "";
+  }
+} catch (e) {
+  console.warn("Could not access environment variables via import.meta.env");
+}
+
+// Initialize Gemini with the key (or empty string if missing)
+const ai = new GoogleGenAI({ apiKey: apiKey });
 
 export const getAiAnswer = async (questionTitle: string, questionContent: string): Promise<string> => {
+  if (!apiKey) return "Vui lòng cấu hình VITE_API_KEY trên Vercel để sử dụng tính năng này.";
+  
   try {
     const model = "gemini-2.5-flash";
     const prompt = `
@@ -31,8 +48,9 @@ export const getAiAnswer = async (questionTitle: string, questionContent: string
 };
 
 export const suggestTitles = async (title: string, content: string = ""): Promise<string[]> => {
+  if (!apiKey) return [];
+
   try {
-    // Only suggest if we have enough context
     if (!title || title.length < 5) return [];
     
     const model = "gemini-2.5-flash";
@@ -66,6 +84,8 @@ export const suggestTitles = async (title: string, content: string = ""): Promis
 };
 
 export const generateDraftAnswer = async (questionTitle: string, questionContent: string): Promise<string> => {
+  if (!apiKey) return "";
+
   try {
     const model = "gemini-2.5-flash";
     const prompt = `
