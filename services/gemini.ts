@@ -1,16 +1,11 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Use import.meta.env for Vite compatibility
-// @ts-ignore
-const apiKey = (import.meta && import.meta.env) ? import.meta.env.VITE_API_KEY : "";
-
-// Initialize with the key (if available) or empty string to prevent crash on init
-const ai = new GoogleGenAI({ apiKey: apiKey || "dummy_key" });
+// Initialize with the key (if available) from process.env.API_KEY
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const getAiAnswer = async (questionTitle: string, questionContent: string): Promise<string> => {
-  if (!apiKey) {
-    console.warn("VITE_API_KEY is missing.");
+  if (!process.env.API_KEY) {
+    console.warn("API_KEY is missing.");
     return "Tính năng AI đang được bảo trì hoặc chưa cấu hình Key. Mẹ vui lòng quay lại sau nhé!";
   }
   
@@ -42,7 +37,7 @@ export const getAiAnswer = async (questionTitle: string, questionContent: string
 };
 
 export const suggestTitles = async (title: string, content: string = ""): Promise<string[]> => {
-  if (!apiKey) return [];
+  if (!process.env.API_KEY) return [];
 
   try {
     if (!title || title.length < 5) return [];
@@ -82,7 +77,7 @@ export const suggestTitles = async (title: string, content: string = ""): Promis
 };
 
 export const generateDraftAnswer = async (questionTitle: string, questionContent: string): Promise<string> => {
-  if (!apiKey) return "";
+  if (!process.env.API_KEY) return "";
 
   try {
     const model = "gemini-2.5-flash";

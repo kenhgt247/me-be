@@ -3,16 +3,23 @@ import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
-const env = (import.meta as any).env;
+// Safe environment variable access
+const getEnv = (key: string, fallback: string): string => {
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
+    return (import.meta as any).env[key] || fallback;
+  }
+  return fallback;
+};
 
+// Configuration with Fallbacks for Preview
 const firebaseConfig = {
-  apiKey: env.VITE_FIREBASE_API_KEY,
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: env.VITE_FIREBASE_APP_ID,
-  measurementId: env.VITE_FIREBASE_MEASUREMENT_ID,
+  apiKey: getEnv('VITE_FIREBASE_API_KEY', "AIzaSyD4BcKMNU54sbRVIz9qlA5lccyHJg730NA"),
+  authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN', "askingkisd.firebaseapp.com"),
+  projectId: getEnv('VITE_FIREBASE_PROJECT_ID', "askingkisd"),
+  storageBucket: getEnv('VITE_FIREBASE_STORAGE_BUCKET', "askingkisd.firebasestorage.app"),
+  messagingSenderId: getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID', "707611534408"),
+  appId: getEnv('VITE_FIREBASE_APP_ID', "1:707611534408:web:c0bcc4919a29dc7be7247d"),
+  measurementId: getEnv('VITE_FIREBASE_MEASUREMENT_ID', "G-QZTM2MTNS2"),
 };
 
 // Initialize Firebase (Singleton pattern)
