@@ -1,0 +1,7 @@
+{
+  "name": "Asking.vn",
+  "description": "A premium Q&A platform for mothers and a fun learning game zone for kids aged 2-6.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
