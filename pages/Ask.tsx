@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 // @ts-ignore
 import { useNavigate } from 'react-router-dom';
@@ -173,19 +172,16 @@ export const Ask: React.FC<AskProps> = ({
   const handleEmailLogin = async (email: string, pass: string) => {
     const user = await onLogin(email, pass);
     finalizeSubmission(user);
-    return user;
   };
 
   const handleRegister = async (email: string, pass: string, name: string) => {
     const user = await onRegister(email, pass, name);
     finalizeSubmission(user);
-    return user;
   };
 
   const handleGoogleAuth = async () => {
     const user = await onGoogleLogin();
     finalizeSubmission(user);
-    return user;
   };
 
   const handleGuestContinue = () => {
