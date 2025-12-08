@@ -134,8 +134,8 @@ export const sendMessage = async (sender: User, recipient: User, content: string
     id: chatId,
     participants: [sender.id, recipient.id],
     participantData: {
-      [sender.id]: { name: sender.name, avatar: sender.avatar, isExpert: sender.isExpert },
-      [recipient.id]: { name: recipient.name, avatar: recipient.avatar, isExpert: recipient.isExpert }
+      [sender.id]: { name: sender.name, avatar: sender.avatar, isExpert: sender.isExpert || false },
+      [recipient.id]: { name: recipient.name, avatar: recipient.avatar, isExpert: recipient.isExpert || false }
     },
     lastMessage: content,
     lastMessageTime: new Date().toISOString(),

@@ -79,9 +79,9 @@ export const AiChat: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-[#F0F2F5] fixed inset-0 z-[60]">
+    <div className="flex flex-col h-[100dvh] bg-[#F0F2F5] fixed inset-0 z-[60]">
       {/* Header */}
-      <div className="bg-white/90 backdrop-blur-xl border-b border-gray-200 px-4 py-3 flex items-center gap-3 pt-safe-top shadow-sm z-10">
+      <div className="bg-white/90 backdrop-blur-xl border-b border-gray-200 px-4 py-3 flex items-center gap-3 pt-safe-top shadow-sm z-10 shrink-0">
         <button 
             onClick={() => navigate(-1)} 
             className="p-2 -ml-2 rounded-full hover:bg-gray-100 active:scale-95 transition-all text-textDark"
@@ -104,7 +104,7 @@ export const AiChat: React.FC = () => {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         {messages.map((msg, idx) => {
             const isModel = msg.role === 'model';
             return (
@@ -138,7 +138,7 @@ export const AiChat: React.FC = () => {
       </div>
 
       {/* Input */}
-      <div className="bg-white p-3 border-t border-gray-100 pb-safe-bottom">
+      <div className="bg-white p-3 border-t border-gray-100 pb-safe-bottom shrink-0">
         <form onSubmit={handleSend} className="flex items-center gap-2 bg-gray-50 rounded-[1.5rem] p-1.5 border border-gray-200 focus-within:border-purple-300 focus-within:ring-4 focus-within:ring-purple-50 transition-all">
             <input 
                 ref={inputRef}

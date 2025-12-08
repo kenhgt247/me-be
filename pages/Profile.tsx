@@ -30,6 +30,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
   const isViewingSelf = !userId || userId === user.id;
   const profileUser = isViewingSelf ? user : (viewedUser || user); // Fallback to user to prevent crash while loading
   
+  // Safe array access
   const isFollowing = (user.following || []).includes(profileUser.id);
   const [followingState, setFollowingState] = useState(isFollowing);
 

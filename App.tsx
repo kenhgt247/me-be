@@ -201,7 +201,7 @@ export default function App() {
         } />
         <Route path="/messages/:userId" element={
           <Layout>
-            <ChatDetail />
+            <ChatDetail currentUser={currentUser} onOpenAuth={() => setShowGlobalAuthModal(true)} />
           </Layout>
         } />
         <Route path="/ai-chat" element={

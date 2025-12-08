@@ -51,7 +51,7 @@ service cloud.firestore {
 
     // --- Chats Collection (Mới) ---
     match /chats/{chatId} {
-      // Chỉ người trong cuộc mới đọc được chat
+      // Cho phép đọc/ghi nếu user là người tham gia (participants array)
       allow read: if isSignedIn() && request.auth.uid in resource.data.participants;
       allow create: if isSignedIn();
       allow update: if isSignedIn() && request.auth.uid in resource.data.participants;
