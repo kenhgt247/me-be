@@ -1,9 +1,11 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 // @ts-ignore
 import { Link } from 'react-router-dom';
 import { Search, MessageCircle, Heart, ChevronDown, ChevronUp, HelpCircle, Clock, Flame, MessageSquareOff, ShieldCheck, ChevronRight, Sparkles, X, Filter, User as UserIcon, CornerDownRight } from 'lucide-react';
 import { Question, User, toSlug } from '../types';
+import { AdBanner } from '../components/AdBanner';
+import { subscribeToAdConfig } from '../services/ads';
 
 interface HomeProps {
   questions: Question[];
@@ -65,6 +67,12 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
   const [activeCategory, setActiveCategory] = useState<string>('Tất cả');
   const [viewFilter, setViewFilter] = useState<'newest' | 'active' | 'unanswered'>('newest');
   const [searchQuery, setSearchQuery] = useState('');
+  const [adFrequency, setAdFrequency] = useState(5);
+
+  useEffect(() => {
+      const unsub = subscribeToAdConfig(config => setAdFrequency(config.frequency));
+      return () => unsub();
+  }, []);
 
   let displayQuestions = activeCategory === 'Tất cả' 
     ? [...questions] 
@@ -237,50 +245,56 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
             </div>
           )}
 
-          {displayQuestions.map(q => {
+          {displayQuestions.map((q, index) => {
              const query = searchQuery.toLowerCase().trim();
              const matchedAnswer = searchQuery && q.answers.find(a => a.content.toLowerCase().includes(query) || a.author.name.toLowerCase().includes(query));
              
              return (
-                <Link to={`/question/${toSlug(q.title, q.id)}`} key={q.id} className="block group">
-                <div className="bg-white p-5 rounded-[1.5rem] shadow-[0_2px_15px_rgba(0,0,0,0.03)] border border-gray-100 active:scale-[0.98] transition-all relative overflow-hidden">
-                    {q.answers.length === 0 && <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-orange-100 to-transparent rounded-bl-full -mr-8 -mt-8"></div>}
-                    <div className="flex items-start justify-between mb-3 relative z-10">
-                    <div className="flex items-center gap-2">
-                        <img src={q.author.avatar} className="w-8 h-8 rounded-full border border-gray-100 object-cover" />
-                        <div>
-                            <p className="text-xs font-bold text-textDark flex items-center gap-1">
-                                {q.author.name}
-                                {q.author.isExpert && <ShieldCheck size={10} className="text-blue-500" />}
-                            </p>
-                            <p className="text-[10px] text-gray-400">{new Date(q.createdAt).toLocaleDateString('vi-VN')}</p>
+                <React.Fragment key={q.id}>
+                    {(index > 0 && index % adFrequency === 0) && (
+                        <AdBanner className="mx-4 md:mx-0" debugLabel={`Feed Ad #${index}`} />
+                    )}
+                    
+                    <Link to={`/question/${toSlug(q.title, q.id)}`} className="block group">
+                    <div className="bg-white p-5 rounded-[1.5rem] shadow-[0_2px_15px_rgba(0,0,0,0.03)] border border-gray-100 active:scale-[0.98] transition-all relative overflow-hidden">
+                        {q.answers.length === 0 && <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-orange-100 to-transparent rounded-bl-full -mr-8 -mt-8"></div>}
+                        <div className="flex items-start justify-between mb-3 relative z-10">
+                        <div className="flex items-center gap-2">
+                            <img src={q.author.avatar} className="w-8 h-8 rounded-full border border-gray-100 object-cover" />
+                            <div>
+                                <p className="text-xs font-bold text-textDark flex items-center gap-1">
+                                    {q.author.name}
+                                    {q.author.isExpert && <ShieldCheck size={10} className="text-blue-500" />}
+                                </p>
+                                <p className="text-[10px] text-gray-400">{new Date(q.createdAt).toLocaleDateString('vi-VN')}</p>
+                            </div>
+                        </div>
+                        <span className="bg-gray-50 text-textGray text-[10px] font-bold px-2 py-1 rounded-lg border border-gray-100">{q.category}</span>
+                        </div>
+                        <h3 className="text-[16px] font-bold text-textDark mb-2 leading-snug line-clamp-2">{q.title}</h3>
+                        <p className="text-textGray text-sm line-clamp-2 mb-3 font-normal">{q.content}</p>
+                        <FBImageGrid images={q.images || []} />
+                        {matchedAnswer && (
+                            <div className="bg-blue-50 rounded-xl p-3 mb-3 flex gap-2 border border-blue-100 mt-3">
+                                <CornerDownRight size={16} className="text-blue-400 shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="text-xs font-bold text-textDark mb-0.5">{matchedAnswer.author.name} đã trả lời:</p>
+                                    <p className="text-xs text-textGray line-clamp-1 italic">"{matchedAnswer.content}"</p>
+                                </div>
+                            </div>
+                        )}
+                        <div className="flex items-center justify-between pt-3 border-t border-gray-50 mt-3">
+                        <div className="flex items-center gap-4 text-xs font-bold text-gray-400">
+                            <span className="flex items-center gap-1.5"><Heart size={14} className={q.likes > 0 ? "text-red-500 fill-red-500" : ""} /> {q.likes}</span>
+                            <span className="flex items-center gap-1.5"><MessageCircle size={14} className={q.answers.length > 0 ? "text-blue-500 fill-blue-500" : ""} /> {q.answers.length}</span>
+                        </div>
+                        {q.answers.length === 0 && (
+                            <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-1 rounded-full">Chưa có trả lời</span>
+                        )}
                         </div>
                     </div>
-                    <span className="bg-gray-50 text-textGray text-[10px] font-bold px-2 py-1 rounded-lg border border-gray-100">{q.category}</span>
-                    </div>
-                    <h3 className="text-[16px] font-bold text-textDark mb-2 leading-snug line-clamp-2">{q.title}</h3>
-                    <p className="text-textGray text-sm line-clamp-2 mb-3 font-normal">{q.content}</p>
-                    <FBImageGrid images={q.images || []} />
-                    {matchedAnswer && (
-                        <div className="bg-blue-50 rounded-xl p-3 mb-3 flex gap-2 border border-blue-100 mt-3">
-                             <CornerDownRight size={16} className="text-blue-400 shrink-0 mt-0.5" />
-                             <div>
-                                <p className="text-xs font-bold text-textDark mb-0.5">{matchedAnswer.author.name} đã trả lời:</p>
-                                <p className="text-xs text-textGray line-clamp-1 italic">"{matchedAnswer.content}"</p>
-                             </div>
-                        </div>
-                    )}
-                    <div className="flex items-center justify-between pt-3 border-t border-gray-50 mt-3">
-                    <div className="flex items-center gap-4 text-xs font-bold text-gray-400">
-                        <span className="flex items-center gap-1.5"><Heart size={14} className={q.likes > 0 ? "text-red-500 fill-red-500" : ""} /> {q.likes}</span>
-                        <span className="flex items-center gap-1.5"><MessageCircle size={14} className={q.answers.length > 0 ? "text-blue-500 fill-blue-500" : ""} /> {q.answers.length}</span>
-                    </div>
-                    {q.answers.length === 0 && (
-                        <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-1 rounded-full">Chưa có trả lời</span>
-                    )}
-                    </div>
-                </div>
-                </Link>
+                    </Link>
+                </React.Fragment>
              );
           })}
       </div>

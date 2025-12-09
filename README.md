@@ -24,7 +24,7 @@ Mặc định, tất cả tài khoản đăng ký mới đều là **Thành viê
 
 ## 🛠 QUAN TRỌNG: Cấu hình Bảo mật Firebase (Security Rules)
 
-Để các tính năng **Trả lời**, **Thông báo**, **Tin nhắn**, **Đăng ảnh**, **Admin**, **Sinh dữ liệu giả (Seed)** và **Game Data** hoạt động, bạn **BẮT BUỘC** phải cập nhật Firestore Rules và Storage Rules trên Firebase Console.
+Để các tính năng **Trả lời**, **Thông báo**, **Tin nhắn**, **Đăng ảnh**, **Admin**, **Sinh dữ liệu giả (Seed)**, **Game Data** và **Quảng cáo** hoạt động, bạn **BẮT BUỘC** phải cập nhật Firestore Rules và Storage Rules trên Firebase Console.
 
 ### 1. Cập nhật Firestore Rules (Database)
 Truy cập [Firebase Console](https://console.firebase.google.com/) -> **Firestore Database** -> **Rules**.
@@ -123,6 +123,12 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+
+    // --- AD CONFIGURATION ---
+    match /ad_config/{docId} {
+      allow read: if true; // Mọi người dùng xem được quảng cáo
+      allow write: if isAdmin(); // Chỉ Admin cấu hình
+    }
   }
 }
 ```
@@ -142,6 +148,12 @@ service firebase.storage {
       allow write: if request.auth != null 
                    && (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf')
                    && request.resource.size < 10 * 1024 * 1024;
+    }
+    
+    // Thêm cụ thể cho answer_images nếu cần (phòng trường hợp match allPaths không bắt được sub-folder trong một số cấu hình cũ)
+    match /answer_images/{fileName} {
+       allow read: if true;
+       allow write: if request.auth != null;
     }
   }
 }

@@ -156,6 +156,17 @@ export interface Report {
   status: 'open' | 'resolved' | 'dismissed';
 }
 
+// --- ADVERTISING ---
+export interface AdConfig {
+  isEnabled: boolean;
+  provider: 'adsense' | 'custom';
+  adsenseClientId?: string;
+  adsenseSlotId?: string;
+  customBannerUrl?: string;
+  customTargetUrl?: string;
+  frequency: number; // e.g. every 5 posts
+}
+
 export const CATEGORIES = [
   "Mang thai",
   "Dinh dưỡng",

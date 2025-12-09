@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 // @ts-ignore
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
@@ -13,6 +14,7 @@ import { toggleQuestionLikeDb, toggleSaveQuestion, toggleAnswerUseful } from '..
 import { ShareModal } from '../components/ShareModal';
 import { loginAnonymously } from '../services/auth';
 import { uploadFile } from '../services/storage';
+import { AdBanner } from '../components/AdBanner';
 
 interface DetailProps {
   questions: Question[];
@@ -548,90 +550,96 @@ export default function QuestionDetail({
                   </div>
               )}
 
-              {sortedAnswers.map(ans => {
+              {sortedAnswers.map((ans, index) => {
                   const isAnsOwner = currentUser.id === ans.author.id;
                   const isBest = ans.isBestAnswer;
                   const isVerified = ans.isExpertVerified;
                   const isUseful = (ans.usefulBy || []).includes(currentUser.id);
                   
                   return (
-                    <div key={ans.id} className={`bg-white p-5 rounded-3xl border transition-all ${isBest ? 'border-yellow-400 shadow-lg shadow-yellow-100 ring-1 ring-yellow-200' : 'border-gray-200 shadow-sm'}`}>
-                        <div className="flex justify-between items-start mb-3">
-                            <div className="flex items-center gap-3">
-                                <RouterLink to={`/profile/${ans.author.id}`}>
-                                   <div className="relative">
-                                     <img src={ans.author.avatar} className="w-10 h-10 rounded-full object-cover border border-gray-100 bg-gray-50" />
-                                     {ans.author.isExpert && <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white rounded-full p-0.5 border-2 border-white"><ShieldCheck size={10} /></div>}
-                                   </div>
-                                </RouterLink>
-                                <div>
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="font-bold text-sm text-textDark">{ans.author.name}</span>
-                                        {ans.author.isExpert && <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-md">Chuyên gia</span>}
-                                        {ans.author.isGuest && <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-2 py-0.5 rounded-md">Khách</span>}
+                    <React.Fragment key={ans.id}>
+                        {(index === 0) && <AdBanner className="mb-4" debugLabel="Detail Middle Ad" />}
+                        
+                        <div className={`bg-white p-5 rounded-3xl border transition-all ${isBest ? 'border-yellow-400 shadow-lg shadow-yellow-100 ring-1 ring-yellow-200' : 'border-gray-200 shadow-sm'}`}>
+                            <div className="flex justify-between items-start mb-3">
+                                <div className="flex items-center gap-3">
+                                    <RouterLink to={`/profile/${ans.author.id}`}>
+                                    <div className="relative">
+                                        <img src={ans.author.avatar} className="w-10 h-10 rounded-full object-cover border border-gray-100 bg-gray-50" />
+                                        {ans.author.isExpert && <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white rounded-full p-0.5 border-2 border-white"><ShieldCheck size={10} /></div>}
                                     </div>
-                                    <span className="text-[11px] text-gray-400">{new Date(ans.createdAt).toLocaleDateString('vi-VN')}</span>
+                                    </RouterLink>
+                                    <div>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="font-bold text-sm text-textDark">{ans.author.name}</span>
+                                            {ans.author.isExpert && <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-md">Chuyên gia</span>}
+                                            {ans.author.isGuest && <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-2 py-0.5 rounded-md">Khách</span>}
+                                        </div>
+                                        <span className="text-[11px] text-gray-400">{new Date(ans.createdAt).toLocaleDateString('vi-VN')}</span>
+                                    </div>
                                 </div>
+
+                                <div className="flex items-center gap-2">
+                                    {(isOwner || isAdmin) && !isBest && (
+                                        <button onClick={() => onMarkBestAnswer(question.id, ans.id)} className="text-gray-300 hover:text-yellow-500 transition-colors p-1" title="Chọn hay nhất">
+                                            <Sparkles size={18} />
+                                        </button>
+                                    )}
+                                    {(isAnsOwner || isAdmin) && (
+                                        <button onClick={(e) => toggleMenu(ans.id, e)} className="text-gray-400 p-1 hover:bg-gray-50 rounded-full">
+                                            <MoreVertical size={18} />
+                                        </button>
+                                    )}
+                                </div>
+                                
+                                {activeMenuId === ans.id && (
+                                    <div ref={menuRef} className="absolute right-6 mt-6 bg-white rounded-xl shadow-lg border border-gray-100 w-32 overflow-hidden z-20 animate-pop-in">
+                                        <button onClick={() => onDeleteAnswer(question.id, ans.id)} className="w-full text-left px-4 py-3 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2">
+                                            <Trash2 size={14} /> Xóa
+                                        </button>
+                                    </div>
+                                )}
                             </div>
 
-                            <div className="flex items-center gap-2">
-                                {(isOwner || isAdmin) && !isBest && (
-                                    <button onClick={() => onMarkBestAnswer(question.id, ans.id)} className="text-gray-300 hover:text-yellow-500 transition-colors p-1" title="Chọn hay nhất">
-                                        <Sparkles size={18} />
-                                    </button>
-                                )}
-                                {(isAnsOwner || isAdmin) && (
-                                    <button onClick={(e) => toggleMenu(ans.id, e)} className="text-gray-400 p-1 hover:bg-gray-50 rounded-full">
-                                        <MoreVertical size={18} />
-                                    </button>
-                                )}
-                            </div>
-                            
-                            {activeMenuId === ans.id && (
-                                <div ref={menuRef} className="absolute right-6 mt-6 bg-white rounded-xl shadow-lg border border-gray-100 w-32 overflow-hidden z-20 animate-pop-in">
-                                    <button onClick={() => onDeleteAnswer(question.id, ans.id)} className="w-full text-left px-4 py-3 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2">
-                                        <Trash2 size={14} /> Xóa
-                                    </button>
+                            <div className="mb-3 pl-1">
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                    {isBest && (
+                                        <div className="inline-flex items-center gap-1 bg-gradient-to-r from-yellow-400 to-yellow-500 text-white px-3 py-1 rounded-full text-[11px] font-bold shadow-sm">
+                                            <CheckCircle2 size={12} /> Câu trả lời hay nhất
+                                        </div>
+                                    )}
+                                    {isVerified && (
+                                        <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 px-3 py-1 rounded-full text-[11px] font-bold border border-green-100">
+                                            <ShieldCheck size={12} /> Đã xác thực y khoa
+                                        </span>
+                                    )}
                                 </div>
-                            )}
-                        </div>
+                                <RichTextRenderer content={ans.content} />
+                            </div>
 
-                        <div className="mb-3 pl-1">
-                             <div className="flex flex-wrap gap-2 mb-2">
-                                 {isBest && (
-                                    <div className="inline-flex items-center gap-1 bg-gradient-to-r from-yellow-400 to-yellow-500 text-white px-3 py-1 rounded-full text-[11px] font-bold shadow-sm">
-                                        <CheckCircle2 size={12} /> Câu trả lời hay nhất
-                                    </div>
-                                 )}
-                                 {isVerified && (
-                                    <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 px-3 py-1 rounded-full text-[11px] font-bold border border-green-100">
-                                        <ShieldCheck size={12} /> Đã xác thực y khoa
-                                    </span>
-                                 )}
-                             </div>
-                             <RichTextRenderer content={ans.content} />
-                        </div>
-
-                        <div className="flex items-center gap-4 border-t border-gray-50 pt-3 mt-2">
-                            <button 
-                                onClick={() => handleToggleUseful(ans)}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all active:scale-95 group ${
-                                    isUseful ? 'text-blue-600 bg-blue-50 font-bold' : 'text-gray-500 hover:bg-gray-100 font-medium'
-                                }`}
-                            >
-                                <ThumbsUp size={16} className={`group-hover:scale-110 transition-transform ${isUseful ? 'fill-current scale-110' : ''}`} /> 
-                                <span className="text-xs">Hữu ích {ans.likes > 0 ? `(${ans.likes})` : ''}</span>
-                            </button>
-                            {isAdmin && !isVerified && (
-                                <button onClick={() => onVerifyAnswer(question.id, ans.id)} className="text-xs font-bold text-gray-400 hover:text-green-600 ml-auto flex items-center gap-1">
-                                    <ShieldCheck size={14} /> Xác thực
+                            <div className="flex items-center gap-4 border-t border-gray-50 pt-3 mt-2">
+                                <button 
+                                    onClick={() => handleToggleUseful(ans)}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all active:scale-95 group ${
+                                        isUseful ? 'text-blue-600 bg-blue-50 font-bold' : 'text-gray-500 hover:bg-gray-100 font-medium'
+                                    }`}
+                                >
+                                    <ThumbsUp size={16} className={`group-hover:scale-110 transition-transform ${isUseful ? 'fill-current scale-110' : ''}`} /> 
+                                    <span className="text-xs">Hữu ích {ans.likes > 0 ? `(${ans.likes})` : ''}</span>
                                 </button>
-                            )}
+                                {isAdmin && !isVerified && (
+                                    <button onClick={() => onVerifyAnswer(question.id, ans.id)} className="text-xs font-bold text-gray-400 hover:text-green-600 ml-auto flex items-center gap-1">
+                                        <ShieldCheck size={14} /> Xác thực
+                                    </button>
+                                )}
+                            </div>
                         </div>
-                    </div>
+                    </React.Fragment>
                   );
               })}
           </div>
+          
+          <AdBanner className="mx-4 md:mx-0 mb-4" debugLabel="Detail Bottom Ad" />
       </div>
 
       <div className="fixed bottom-[88px] md:bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-100 shadow-[0_-5px_30px_rgba(0,0,0,0.06)] pb-2 md:pb-safe-bottom">
@@ -650,7 +658,7 @@ export default function QuestionDetail({
                          <img src={p.avatar} className="w-8 h-8 rounded-full border border-gray-200" />
                          <div>
                              <p className="font-bold text-sm text-textDark">{p.name}</p>
-                             <p className="text-xs text-textGray">{p.isExpert ? 'Chuyên gia' : 'Thành viên'}</p>
+                             <p className="text-[10px] text-gray-400">{p.isExpert ? 'Chuyên gia' : 'Thành viên'}</p>
                          </div>
                      </button>
                  ))}

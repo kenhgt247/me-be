@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 // @ts-ignore
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
@@ -25,6 +26,7 @@ import { SeedData } from './pages/admin/SeedData';
 import { GameManagement } from './pages/admin/GameManagement';
 import { GameDetail } from './pages/admin/GameDetail';
 import { ReportManagement } from './pages/admin/ReportManagement';
+import { AdSettings } from './pages/admin/AdSettings';
 
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { AuthModal } from './components/AuthModal';
@@ -201,6 +203,7 @@ export default function App() {
             <Route path="games" element={<GameManagement />} />
             <Route path="games/:gameId" element={<GameDetail />} />
             <Route path="reports" element={<ReportManagement />} />
+            <Route path="ads" element={<AdSettings />} />
             <Route path="seed" element={<SeedData />} />
         </Route>
 
