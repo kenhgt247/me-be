@@ -8,12 +8,17 @@ export interface User {
   specialty?: string; // e.g., "Bác sĩ Nhi khoa", "Chuyên gia Dinh dưỡng"
   workplace?: string;
   isAdmin?: boolean;
+  isBanned?: boolean; // New field for banning users
   bio?: string;
   points?: number;
   joinedAt?: string;
   isGuest?: boolean;
-  followers?: string[]; // Array of User IDs
-  following?: string[]; // Array of User IDs
+  followers?: string[];
+  following?: string[];
+  isOnline?: boolean;
+  lastActiveAt?: string;
+  email?: string; // Add email for admin management
+  isFake?: boolean; // For seed data management
 }
 
 export interface Answer {
@@ -27,6 +32,8 @@ export interface Answer {
   createdAt: string;
   isAi: boolean;
   isHidden?: boolean;
+  reportCount?: number;
+  isFake?: boolean; // For seed data management
 }
 
 export interface Question {
@@ -41,6 +48,8 @@ export interface Question {
   createdAt: string;
   images?: string[]; 
   isHidden?: boolean;
+  reportCount?: number;
+  isFake?: boolean; // For seed data management
 }
 
 export interface Notification {
@@ -65,7 +74,7 @@ export interface Message {
 
 export interface ChatSession {
   id: string;
-  participants: string[]; // [uid1, uid2]
+  participants: string[]; 
   participantData: { [uid: string]: { name: string; avatar: string; isExpert?: boolean } };
   lastMessage: string;
   lastMessageTime: string;
@@ -101,6 +110,30 @@ export interface GameItem {
   display: string;
   options: string[];
   audio: string;
+}
+
+export interface ExpertApplication {
+  id: string;
+  userId: string;
+  fullName: string;
+  phone: string;
+  workplace: string;
+  specialty: string;
+  proofImages: string[];
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+  reviewedBy?: string;
+  rejectionReason?: string;
+}
+
+export interface Report {
+  id: string;
+  targetId: string; // Question ID or Answer ID
+  targetType: 'question' | 'answer';
+  reason: string;
+  reportedBy: string; // User ID
+  createdAt: string;
+  status: 'open' | 'resolved' | 'dismissed';
 }
 
 export const CATEGORIES = [

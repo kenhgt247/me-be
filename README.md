@@ -5,11 +5,27 @@
 
 ---
 
-## 🛠 QUAN TRỌNG: Sửa lỗi "Missing permissions" (Permission denied)
+## 👑 Hướng dẫn Quản trị (Admin)
 
-Để các tính năng **Thông báo**, **Tin nhắn**, **Đăng ảnh** hoạt động cho cả Khách và Thành viên, bạn **BẮT BUỘC** phải cập nhật Firestore Rules trên Firebase Console.
+Mặc định, tất cả tài khoản đăng ký mới đều là **Thành viên (User)**. Để truy cập trang Admin (`/admin`), bạn cần cấp quyền thủ công trong Firebase Console.
 
-### 1. Cập nhật Firestore Rules (Quan trọng nhất)
+### Cách cấp quyền Admin:
+1. Truy cập [Firebase Console](https://console.firebase.google.com/) -> **Firestore Database**.
+2. Chọn collection `users`.
+3. Tìm document của user bạn muốn cấp quyền (dựa theo ID hoặc Email).
+4. Thêm một field mới:
+   - Field: `isAdmin`
+   - Type: `boolean`
+   - Value: `true`
+5. Quay lại ứng dụng và truy cập đường dẫn `/admin`.
+
+---
+
+## 🛠 QUAN TRỌNG: Cấu hình Bảo mật Firebase (Security Rules)
+
+Để các tính năng **Trả lời**, **Thông báo**, **Tin nhắn**, **Đăng ảnh** và **Admin** hoạt động, bạn **BẮT BUỘC** phải cập nhật Firestore Rules và Storage Rules trên Firebase Console.
+
+### 1. Cập nhật Firestore Rules (Database)
 Truy cập [Firebase Console](https://console.firebase.google.com/) -> **Firestore Database** -> **Rules**.
 Copy và thay thế toàn bộ bằng đoạn mã sau:
 
@@ -17,54 +33,70 @@ Copy và thay thế toàn bộ bằng đoạn mã sau:
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 1. Hàm kiểm tra đăng nhập (Bao gồm cả Khách ẩn danh)
-    function isSignedIn() { return request.auth != null; }
     
-    // 2. Hàm kiểm tra chính chủ
-    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    // --- Helper Functions ---
+    function isSignedIn() { 
+      return request.auth != null; 
+    }
+    
+    function isOwner(userId) { 
+      return isSignedIn() && request.auth.uid == userId; 
+    }
+    
+    // Kiểm tra quyền Admin bằng cách đọc document user hiện tại
+    function isAdmin() {
+      return isSignedIn() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
 
     // --- Users Collection ---
     match /users/{userId} {
       allow read: if true;
-      allow create: if isOwner(userId); // Cho phép Khách tạo user ẩn danh
-      allow update: if isSignedIn(); // Cho phép update thông tin (follow,...)
+      allow create: if isOwner(userId); 
+      // Admin được phép sửa (Ban user, cấp quyền), Chủ sở hữu được sửa profile
+      allow update: if isOwner(userId) || isAdmin(); 
     }
 
     // --- Questions Collection ---
     match /questions/{questionId} {
       allow read: if true;
       allow create: if isSignedIn();
-      // Cho phép update (like, comment) cho tất cả user đã đăng nhập
-      allow update: if isSignedIn();
-      allow delete: if isOwner(resource.data.author.id);
+      // Admin được phép ẩn/xóa bài vi phạm, Chủ sở hữu được sửa bài
+      allow update: if isSignedIn() || isAdmin(); 
+      allow delete: if isOwner(resource.data.author.id) || isAdmin();
     }
 
-    // --- Notifications Collection (Mới) ---
+    // --- Notifications Collection ---
     match /notifications/{notificationId} {
-      // Chỉ chủ sở hữu mới đọc được thông báo của mình
-      allow read: if isOwner(resource.data.userId);
-      // Cho phép bất kỳ ai đã đăng nhập gửi thông báo (khi like/comment)
+      allow read, update: if isOwner(resource.data.userId);
       allow create: if isSignedIn();
-      // Cho phép đánh dấu đã đọc
-      allow update: if isOwner(resource.data.userId);
     }
 
-    // --- Chats Collection (Mới) ---
+    // --- Chats Collection ---
     match /chats/{chatId} {
-      // Cho phép đọc/ghi nếu user là người tham gia (participants array)
       allow read: if isSignedIn() && (request.auth.uid in resource.data.participants);
-      
-      // Cho phép tạo chat mới
       allow create: if isSignedIn();
-      
-      // Cho phép update chat (gửi tin nhắn mới làm thay đổi lastMessage)
-      // Lưu ý: Dùng request.resource.data để kiểm tra dữ liệu MỚI gửi lên
-      allow update: if isSignedIn() && (request.auth.uid in request.resource.data.participants);
+      allow update: if isSignedIn() && (request.auth.uid in resource.data.participants);
       
       match /messages/{messageId} {
         allow read: if isSignedIn();
         allow create: if isSignedIn();
       }
+    }
+    
+    // --- Expert Applications (Dành cho Admin duyệt) ---
+    match /expert_applications/{appId} {
+      allow create: if isSignedIn();
+      // Chỉ user tạo đơn mới xem được đơn của mình, hoặc Admin xem tất cả
+      allow read: if isOwner(resource.data.userId) || isAdmin();
+      // Chỉ Admin mới được update trạng thái (Duyệt/Từ chối)
+      allow update: if isAdmin();
+    }
+
+    // --- Reports ---
+    match /reports/{reportId} {
+      allow create: if isSignedIn();
+      allow read, update: if isAdmin();
     }
   }
 }
@@ -72,24 +104,16 @@ service cloud.firestore {
 
 ### 2. Cập nhật Storage Rules (Upload Ảnh)
 Truy cập [Firebase Console](https://console.firebase.google.com/) -> **Storage** -> **Rules**.
-Copy và thay thế toàn bộ bằng đoạn mã sau:
 
 ```javascript
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Cho phép upload ảnh câu hỏi vào thư mục question_images
-    match /question_images/{allPaths=**} {
+    match /{allPaths=**} {
       allow read: if true;
-      // Cho phép ghi nếu đã đăng nhập và là file ảnh < 5MB
       allow write: if request.auth != null 
                    && request.resource.contentType.matches('image/.*')
-                   && request.resource.size < 5 * 1024 * 1024;
-    }
-    
-    // Hồ sơ chuyên gia
-    match /expert_docs/{userId}/{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+                   && request.resource.size < 5 * 1024 * 1024; // Max 5MB
     }
   }
 }
@@ -105,10 +129,15 @@ service firebase.storage {
     ```
 
 2.  **Cấu hình `.env`**:
+    Tạo file `.env` ở thư mục gốc và điền thông tin:
     ```env
     VITE_API_KEY=AIzaSy... (Gemini API Key)
     VITE_FIREBASE_API_KEY=AIzaSy... (Firebase API Key)
-    # ... các biến Firebase khác
+    VITE_FIREBASE_AUTH_DOMAIN=...
+    VITE_FIREBASE_PROJECT_ID=...
+    VITE_FIREBASE_STORAGE_BUCKET=...
+    VITE_FIREBASE_MESSAGING_SENDER_ID=...
+    VITE_FIREBASE_APP_ID=...
     ```
 
 3.  **Chạy dự án**:

@@ -131,9 +131,9 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
   return (
     <div className="space-y-4 animate-fade-in">
       
-      {/* Mobile Search Bar - Floating effect */}
-      <div className="px-4 md:px-0 sticky top-0 md:relative z-30 pt-2 pb-2 md:pt-0">
-        <div className="relative group shadow-[0_4px_20px_rgba(0,0,0,0.05)] rounded-2xl">
+      {/* Mobile Search Bar - Sticky with correct top offset to avoid hiding behind fixed header */}
+      <div className="px-4 md:px-0 sticky top-[68px] md:top-20 z-30 py-2 md:pt-0 -mx-4 md:mx-0 bg-[#F7F7F5]/95 md:bg-transparent backdrop-blur-sm transition-all">
+        <div className="relative group shadow-[0_4px_20px_rgba(0,0,0,0.05)] rounded-2xl mx-4 md:mx-0">
             <div className="absolute inset-0 bg-white/80 backdrop-blur-xl rounded-2xl"></div>
             <div className="relative flex items-center bg-white/90 rounded-2xl border border-gray-100 focus-within:ring-2 focus-within:ring-primary/20 transition-all overflow-hidden">
                 <div className="pl-4 text-primary">

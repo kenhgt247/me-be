@@ -3,6 +3,9 @@ import React, { useState, useEffect } from 'react';
 // @ts-ignore
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
+import { AdminLayout } from './layouts/AdminLayout'; // Import Admin Layout
+
+// User Pages
 import { Home } from './pages/Home';
 import { Ask } from './pages/Ask';
 import { QuestionDetail } from './pages/QuestionDetail';
@@ -14,6 +17,13 @@ import { ChatDetail } from './pages/ChatDetail';
 import { AiChat } from './pages/AiChat';
 import { ExpertRegistration } from './pages/ExpertRegistration';
 import { About, Terms, Privacy, Contact } from './pages/StaticPages';
+
+// Admin Pages
+import { UserManagement } from './pages/admin/UserManagement';
+import { ExpertApprovals } from './pages/admin/ExpertApprovals';
+import { QuestionManagement } from './pages/admin/QuestionManagement';
+import { SeedData } from './pages/admin/SeedData';
+
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { AuthModal } from './components/AuthModal';
 import { Question, User, Answer, CATEGORIES } from './types';
@@ -168,6 +178,17 @@ export default function App() {
       />
 
       <Routes>
+        {/* --- ADMIN ROUTES (Protected) --- */}
+        <Route path="/admin" element={<AdminLayout currentUser={currentUser} onLogout={handleLogout} />}>
+            <Route index element={<div className="p-10 text-center text-gray-500">Dashboard Overview (Coming Soon)</div>} />
+            <Route path="users" element={<UserManagement />} />
+            <Route path="experts" element={<ExpertApprovals />} />
+            <Route path="questions" element={<QuestionManagement />} />
+            <Route path="reports" element={<div className="p-10 text-center text-gray-500">Report Management (Coming Soon)</div>} />
+            <Route path="seed" element={<SeedData />} />
+        </Route>
+
+        {/* --- USER ROUTES --- */}
         <Route path="/" element={
           <Layout>
             <Home questions={questions} categories={categories} />
@@ -196,7 +217,7 @@ export default function App() {
         } />
         <Route path="/messages" element={
           <Layout>
-            <Messages />
+            <Messages currentUser={currentUser} />
           </Layout>
         } />
         <Route path="/messages/:userId" element={
@@ -233,7 +254,6 @@ export default function App() {
           </Layout>
         } />
         
-        {/* User Self Profile */}
         <Route path="/profile" element={
           <Layout>
             <Profile 
@@ -245,7 +265,6 @@ export default function App() {
           </Layout>
         } />
 
-        {/* Public Profile Route */}
         <Route path="/profile/:userId" element={
           <Layout>
             <Profile 

@@ -1,4 +1,3 @@
-
 import { 
   collection, 
   doc, 
@@ -13,7 +12,10 @@ import {
   arrayRemove,
   where,
   addDoc,
-  limit
+  limit,
+  QuerySnapshot,
+  DocumentData,
+  documentId
 } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { Question, Answer, Notification, User, ChatSession, Message } from '../types';
@@ -25,6 +27,62 @@ const CHATS_COLLECTION = 'chats';
 
 const sanitizeData = <T>(data: T): T => {
   return JSON.parse(JSON.stringify(data));
+};
+
+// --- USER UTILS ---
+export const getUsersByIds = async (userIds: string[]): Promise<User[]> => {
+  if (!db || !userIds || userIds.length === 0) return [];
+  
+  try {
+    // Firestore 'in' query supports up to 10 items. 
+    // For larger lists, we should fetch individually using Promise.all which is simpler for this scale.
+    const promises = userIds.map(id => getDoc(doc(db, USERS_COLLECTION, id)));
+    const snapshots = await Promise.all(promises);
+    
+    const users: User[] = [];
+    snapshots.forEach(snap => {
+      if (snap.exists()) {
+        users.push({ id: snap.id, ...snap.data() } as User);
+      }
+    });
+    return users;
+  } catch (error) {
+    console.error("Error fetching users by IDs:", error);
+    return [];
+  }
+};
+
+// --- USER PRESENCE & INFO ---
+export const updateUserStatus = async (userId: string, isOnline: boolean) => {
+  if (!db || !userId) return;
+  try {
+    const userRef = doc(db, USERS_COLLECTION, userId);
+    await updateDoc(userRef, {
+      isOnline: isOnline,
+      lastActiveAt: new Date().toISOString()
+    });
+  } catch (e) {
+    // Ignore presence errors to prevent log noise
+  }
+};
+
+export const subscribeToUser = (userId: string, callback: (user: User | null) => void) => {
+  if (!db || !userId) return () => {};
+  try {
+    const userRef = doc(db, USERS_COLLECTION, userId);
+    return onSnapshot(userRef, (docSnap) => {
+      if (docSnap.exists()) {
+        callback({ id: docSnap.id, ...(docSnap.data() as any) } as User);
+      } else {
+        callback(null);
+      }
+    }, (error) => {
+      console.warn("User subscription ignored:", error.code);
+    });
+  } catch (e) {
+    console.warn("Error subscribing to user", e);
+    return () => {};
+  }
 };
 
 // --- NOTIFICATIONS SYSTEM ---
@@ -65,7 +123,7 @@ export const subscribeToNotifications = (userId: string, callback: (notifs: Noti
         where('userId', '==', userId),
         limit(50)
     );
-    return onSnapshot(q, (snapshot) => {
+    return onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
         const notifs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Notification[];
         // Client-side sort
         notifs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -127,7 +185,12 @@ export const getChatId = (uid1: string, uid2: string) => {
   return [uid1, uid2].sort().join('_');
 };
 
-export const sendMessage = async (sender: User, recipient: User, content: string) => {
+export const sendMessage = async (
+  sender: User, 
+  recipient: User, 
+  content: string, 
+  type: 'text' | 'image' = 'text'
+) => {
   if (!db) return;
   
   // Guard clause against empty IDs
@@ -145,24 +208,41 @@ export const sendMessage = async (sender: User, recipient: User, content: string
     content,
     createdAt: new Date().toISOString(),
     isRead: false,
-    type: 'text'
-  };
-
-  // Create or Update Chat Session
-  const chatData: Partial<ChatSession> = {
-    id: chatId,
-    participants: [sender.id, recipient.id],
-    participantData: {
-      [sender.id]: { name: sender.name, avatar: sender.avatar, isExpert: sender.isExpert || false },
-      [recipient.id]: { name: recipient.name, avatar: recipient.avatar, isExpert: recipient.isExpert || false }
-    },
-    lastMessage: content,
-    lastMessageTime: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    type: type
   };
 
   try {
+      // 1. Get existing chat to preserve existing participant data if needed, 
+      // or ensure we don't overwrite unexpected fields.
+      const chatDoc = await getDoc(chatRef);
+      
+      const participantData = chatDoc.exists() ? chatDoc.data().participantData : {};
+      
+      // Ensure current info is up to date
+      participantData[sender.id] = { name: sender.name, avatar: sender.avatar, isExpert: sender.isExpert || false };
+      participantData[recipient.id] = { name: recipient.name, avatar: recipient.avatar, isExpert: recipient.isExpert || false };
+
+      const chatData: any = {
+        id: chatId,
+        participants: [sender.id, recipient.id],
+        participantData: participantData,
+        lastMessage: type === 'image' ? '[Hình ảnh]' : content,
+        lastMessageTime: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Handle unread count increment
+      const currentUnread = chatDoc.exists() ? chatDoc.data().unreadCount || {} : {};
+      const newUnread = { ...currentUnread };
+      // Increment for recipient
+      newUnread[recipient.id] = (newUnread[recipient.id] || 0) + 1;
+      // Reset for sender (since they just sent a message)
+      newUnread[sender.id] = 0;
+
+      chatData.unreadCount = newUnread;
+
       await setDoc(chatRef, chatData, { merge: true });
+      
       // Add Message to Subcollection
       const messagesRef = collection(db, CHATS_COLLECTION, chatId, 'messages');
       await addDoc(messagesRef, messageData);
@@ -180,7 +260,7 @@ export const subscribeToChats = (userId: string, callback: (chats: ChatSession[]
         collection(db, CHATS_COLLECTION),
         where('participants', 'array-contains', userId)
     );
-    return onSnapshot(q, (snapshot) => {
+    return onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
         const chats = snapshot.docs.map(doc => doc.data() as ChatSession);
         // Client-side sort
         chats.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
@@ -202,7 +282,7 @@ export const subscribeToMessages = (chatId: string, callback: (msgs: Message[]) 
     const q = query(
         collection(db, CHATS_COLLECTION, chatId, 'messages')
     );
-    return onSnapshot(q, (snapshot) => {
+    return onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
         const msgs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Message));
         // Client-side sort
         msgs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -222,7 +302,7 @@ export const subscribeToQuestions = (callback: (questions: Question[]) => void) 
   if (!db) return () => {};
   try {
     const q = query(collection(db, QUESTIONS_COLLECTION));
-    return onSnapshot(q, (snapshot) => {
+    return onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
         const questions = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Question[];
         // Client side sort for safety
         questions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -282,7 +362,12 @@ export const addAnswerToDb = async (question: Question, answer: Answer) => {
   try {
     const docRef = doc(db, QUESTIONS_COLLECTION, question.id);
     await updateDoc(docRef, { answers: arrayUnion(sanitizeData(answer)) });
-    await sendNotification(question.author.id, answer.author, 'ANSWER', `đã trả lời câu hỏi: "${question.title}"`, `/question/${question.id}`);
+    // Use separate try-catch for notification so it doesn't block the answer flow if it fails
+    try {
+        await sendNotification(question.author.id, answer.author, 'ANSWER', `đã trả lời câu hỏi: "${question.title}"`, `/question/${question.id}`);
+    } catch(err) {
+        console.warn("Failed to send answer notification", err);
+    }
   } catch (e) {
     console.error("Add answer error", e);
     throw e;

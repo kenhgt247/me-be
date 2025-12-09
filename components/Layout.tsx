@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 // @ts-ignore
 import { Link, useLocation } from 'react-router-dom';
 import { Home, Plus, Gamepad2, Facebook, Instagram, Youtube, User as UserIcon, Bell, MessageCircle, Bot } from 'lucide-react';
-import { subscribeToNotifications, subscribeToChats } from '../services/db';
+import { subscribeToNotifications, subscribeToChats, updateUserStatus } from '../services/db';
 import { auth } from '../firebaseConfig';
 
 interface LayoutProps {
@@ -23,6 +23,21 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             // @ts-ignore
             setCurrentUserAvatar(user.photoURL || "https://cdn-icons-png.flaticon.com/512/3177/3177440.png");
             
+            // --- PRESENCE SYSTEM (HEARTBEAT) ---
+            // Set online immediately
+            updateUserStatus(user.uid, true);
+            
+            // Pulse every 2 minutes to keep status active
+            const presenceInterval = setInterval(() => {
+                updateUserStatus(user.uid, true);
+            }, 2 * 60 * 1000);
+
+            // Set offline on window close
+            const handleUnload = () => {
+                updateUserStatus(user.uid, false);
+            };
+            window.addEventListener('beforeunload', handleUnload);
+
             // Subscribe Notifications (Safe call)
             const unsubNotif = subscribeToNotifications(user.uid, (notifs) => {
                 if (notifs) {
@@ -49,6 +64,10 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             return () => {
                 if (unsubNotif) unsubNotif();
                 if (unsubChats) unsubChats();
+                clearInterval(presenceInterval);
+                window.removeEventListener('beforeunload', handleUnload);
+                // Try to set offline on cleanup (might not fire on sudden close, but good practice)
+                updateUserStatus(user.uid, false);
             }
         } else {
             setUnreadNotifCount(0);

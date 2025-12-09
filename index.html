@@ -79,6 +79,8 @@
         scroll-behavior: smooth;
         height: 100%;
         background-color: #F7F7F5;
+        /* Prevent bounce on iOS body */
+        overscroll-behavior-y: none;
       }
       
       body {
@@ -91,6 +93,17 @@
         width: 100%;
         position: fixed;
         overflow: hidden;
+        /* Disable text selection generally to feel more like an app */
+        -webkit-user-select: none;
+        user-select: none;
+        /* Improve touch response */
+        touch-action: manipulation;
+      }
+      
+      /* Allow text selection in inputs and content areas that matter */
+      input, textarea, [contenteditable="true"], .selectable-text {
+        -webkit-user-select: text;
+        user-select: text;
       }
       
       #root {
@@ -110,12 +123,6 @@
         scrollbar-width: none;
       }
       
-      /* Disable selection for UI elements */
-      .select-none {
-        -webkit-user-select: none;
-        user-select: none;
-      }
-      
       /* Safe area padding utilities fallback */
       .pb-safe-bottom {
         padding-bottom: env(safe-area-inset-bottom, 20px);
@@ -123,10 +130,6 @@
       .pt-safe-top {
         padding-top: env(safe-area-inset-top, 20px);
       }
-
-      /* Animations helper */
-      .animate-delay-100 { animation-delay: 100ms; }
-      .animate-delay-200 { animation-delay: 200ms; }
     </style>
 <script type="importmap">
 {

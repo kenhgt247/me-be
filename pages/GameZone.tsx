@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Volume2, Star, Trophy, Sparkles, Grid } from 'lucide-react';
+import { ArrowLeft, Volume2, Star, Trophy, Sparkles, Grid, Play } from 'lucide-react';
 import { GameType } from '../types';
 
 // Mock Data - Massive Expansion
@@ -188,6 +188,8 @@ const GameEngine: React.FC<{ type: GameType; onBack: () => void }> = ({ type, on
   const [level, setLevel] = useState(0);
   const [score, setScore] = useState(0);
   const [showCelebration, setShowCelebration] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false); // New state to unlock audio context
+
   // @ts-ignore
   const questions: any[] = GAME_DATA[type] || [];
   const currentQ = questions[level];
@@ -202,9 +204,20 @@ const GameEngine: React.FC<{ type: GameType; onBack: () => void }> = ({ type, on
     }
   };
 
+  // Initial Sound Play - ONLY if started
   useEffect(() => {
-    if (currentQ) setTimeout(() => playSound(currentQ.q), 500);
-  }, [currentQ]);
+    if (hasStarted && currentQ) {
+        // Small delay to ensure render
+        const timer = setTimeout(() => playSound(currentQ.q), 500);
+        return () => clearTimeout(timer);
+    }
+  }, [hasStarted, currentQ]);
+
+  const handleStart = () => {
+    // Play a silent sound or short sound to unlock AudioContext on iOS
+    playSound("Bắt đầu nào");
+    setHasStarted(true);
+  };
 
   const handleAnswer = (opt: string) => {
     if (opt === currentQ.a) {
@@ -222,6 +235,25 @@ const GameEngine: React.FC<{ type: GameType; onBack: () => void }> = ({ type, on
       if(btn) { btn.classList.add('animate-shake'); setTimeout(() => btn.classList.remove('animate-shake'), 500); }
     }
   };
+
+  if (!hasStarted) {
+      return (
+        <div className="flex flex-col items-center justify-center h-screen bg-black/80 fixed inset-0 z-50 text-white p-6 text-center animate-fade-in">
+            <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center mb-6 animate-pulse">
+                <Play size={48} fill="white" />
+            </div>
+            <h2 className="text-2xl font-bold mb-4">Sẵn sàng chơi chưa?</h2>
+            <p className="mb-8 opacity-80">Bé hãy bật âm lượng lên nhé!</p>
+            <button 
+                onClick={handleStart}
+                className="bg-orange-500 text-white text-xl font-bold px-12 py-4 rounded-full shadow-xl hover:bg-orange-600 active:scale-95 transition-transform"
+            >
+                Bắt đầu
+            </button>
+            <button onClick={onBack} className="mt-8 text-sm opacity-60 underline">Quay lại</button>
+        </div>
+      );
+  }
 
   if (level >= questions.length) {
     return (
