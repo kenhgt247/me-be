@@ -140,7 +140,7 @@ const RichTextRenderer: React.FC<{ content: string }> = ({ content }) => {
 
 // --- MAIN COMPONENT ---
 
-export const QuestionDetail: React.FC<DetailProps> = ({ 
+const QuestionDetail: React.FC<DetailProps> = ({ 
   questions, 
   currentUser, 
   onAddAnswer, 
@@ -154,11 +154,9 @@ export const QuestionDetail: React.FC<DetailProps> = ({
   onDeleteAnswer, 
   onHideAnswer 
 }) => {
-  // Use 'slug' from useParams instead of 'id'
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   
-  // Extract real ID from slug
   const questionId = getIdFromSlug(slug);
   const question = questions.find(q => q.id === questionId);
   
@@ -723,3 +721,5 @@ export const QuestionDetail: React.FC<DetailProps> = ({
     </div>
   );
 };
+
+export default QuestionDetail;
