@@ -1,20 +1,10 @@
-
-import { 
-  signInWithPopup, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
-  signInAnonymously,
-  signOut, 
-  onAuthStateChanged,
-  updateProfile,
-  User as FirebaseUser
-} from 'firebase/auth';
+import * as firebaseAuth from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebaseConfig';
 import { User } from '../types';
 
 // Helper: Map Firebase User + Firestore Data to App User Type
-const mapUser = (fbUser: FirebaseUser, dbUser?: any): User => {
+const mapUser = (fbUser: firebaseAuth.User, dbUser?: any): User => {
   return {
     id: fbUser.uid,
     name: dbUser?.name || fbUser.displayName || (fbUser.isAnonymous ? 'Khách ẩn danh' : 'Người dùng'),
@@ -35,7 +25,7 @@ export const loginAnonymously = async (): Promise<User> => {
   if (!auth) throw new Error("Firebase chưa được cấu hình.");
   
   try {
-    const result = await signInAnonymously(auth);
+    const result = await firebaseAuth.signInAnonymously(auth);
     const fbUser = result.user;
     
     // Create a minimal user record in Firestore for the anonymous user
@@ -70,7 +60,7 @@ export const loginAnonymously = async (): Promise<User> => {
 export const loginWithGoogle = async (): Promise<User> => {
   if (!auth) throw new Error("Firebase chưa được cấu hình.");
   
-  const result = await signInWithPopup(auth, googleProvider);
+  const result = await firebaseAuth.signInWithPopup(auth, googleProvider);
   const fbUser = result.user;
   
   // Check if user exists in Firestore
@@ -98,11 +88,11 @@ export const loginWithGoogle = async (): Promise<User> => {
 export const registerWithEmail = async (email: string, pass: string, name: string): Promise<User> => {
   if (!auth) throw new Error("Firebase chưa được cấu hình.");
 
-  const result = await createUserWithEmailAndPassword(auth, email, pass);
+  const result = await firebaseAuth.createUserWithEmailAndPassword(auth, email, pass);
   const fbUser = result.user;
   
   // Update Display Name in Auth
-  await updateProfile(fbUser, { displayName: name });
+  await firebaseAuth.updateProfile(fbUser, { displayName: name });
   
   // Create Firestore Document
   const newUser = {
@@ -122,7 +112,7 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
 export const loginWithEmail = async (email: string, pass: string): Promise<User> => {
   if (!auth) throw new Error("Firebase chưa được cấu hình.");
 
-  const result = await signInWithEmailAndPassword(auth, email, pass);
+  const result = await firebaseAuth.signInWithEmailAndPassword(auth, email, pass);
   const fbUser = result.user;
   
   const userDoc = await getDoc(doc(db, 'users', fbUser.uid));
@@ -135,13 +125,13 @@ export const loginWithEmail = async (email: string, pass: string): Promise<User>
 
 export const logoutUser = async () => {
   if (!auth) return;
-  await signOut(auth);
+  await firebaseAuth.signOut(auth);
 };
 
 export const subscribeToAuthChanges = (callback: (user: User | null) => void) => {
   if (!auth) return () => {};
   
-  return onAuthStateChanged(auth, async (fbUser) => {
+  return firebaseAuth.onAuthStateChanged(auth, async (fbUser) => {
     if (fbUser) {
       try {
         const userDoc = await getDoc(doc(db, 'users', fbUser.uid));

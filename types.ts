@@ -167,6 +167,61 @@ export interface AdConfig {
   frequency: number; // e.g. every 5 posts
 }
 
+// --- BLOG MODULE TYPES ---
+
+export interface BlogCategory {
+  id: string;
+  name: string;
+  slug: string;
+  iconEmoji: string;
+  order: number;
+  isActive: boolean;
+}
+
+export interface BlogPost {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string;
+  content: string; // HTML or Markdown
+  coverImageUrl?: string;
+  iconEmoji?: string;
+  
+  // Media & Source
+  youtubeUrl?: string;
+  sourceUrl?: string;
+  sourceLabel?: string;
+  
+  categoryId?: string; // ID of BlogCategory
+  tags?: string[];
+  
+  // Author Denormalization
+  authorId: string;
+  authorName: string;
+  authorAvatar: string;
+  authorIsExpert: boolean;
+  
+  status: 'draft' | 'published';
+  views: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BlogComment {
+  id: string;
+  postId: string;
+  content: string;
+  
+  // Author Denormalization
+  authorId: string;
+  authorName: string;
+  authorAvatar: string;
+  isExpert: boolean;
+  
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const CATEGORIES = [
   "Mang thai",
   "Dinh dưỡng",
@@ -189,7 +244,6 @@ export const DEFAULT_GAME_CATEGORIES: CategoryDef[] = [
   { id: 'music', label: 'Âm nhạc', icon: '🎵', color: 'bg-teal-400', isDefault: true },
 ];
 
-// Fallback for old imports
 export const GAME_CATEGORIES = DEFAULT_GAME_CATEGORIES;
 
 // --- UTILS FOR SLUG ---
@@ -215,15 +269,14 @@ export const toSlug = (title: string, id: string) => {
     if (!title) return id;
     const slug = removeVietnameseTones(title)
         .toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
+        .replace(/[^a-z0-9\s-]/g, '') 
         .trim()
-        .replace(/\s+/g, '-'); // Replace spaces with -
+        .replace(/\s+/g, '-'); 
     return `${slug}-${id}`;
 };
 
 export const getIdFromSlug = (slug: string | undefined): string => {
     if (!slug) return '';
     const parts = slug.split('-');
-    // If only one part, it assumes it's just the ID (backward compatibility)
     return parts.pop() || ''; 
 };

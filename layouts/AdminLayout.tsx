@@ -2,7 +2,7 @@
 import React from 'react';
 // @ts-ignore
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { User, LayoutDashboard, Users, FileQuestion, GraduationCap, Flag, LogOut, Menu, X, ArrowLeft, Database, Gamepad2, Megaphone } from 'lucide-react';
+import { User, LayoutDashboard, Users, FileQuestion, GraduationCap, Flag, LogOut, Menu, X, ArrowLeft, Database, Gamepad2, Megaphone, BookOpen } from 'lucide-react';
 import { User as UserType } from '../types';
 
 interface AdminLayoutProps {
@@ -16,7 +16,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ currentUser, onLogout 
   const navigate = useNavigate();
 
   // Basic Security Check
-  if (!currentUser || !currentUser.isAdmin) {
+  if (!currentUser || (!currentUser.isAdmin && !currentUser.isExpert)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 p-4">
         <div className="bg-white p-8 rounded-2xl shadow-xl text-center max-w-md">
@@ -34,14 +34,15 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ currentUser, onLogout 
   }
 
   const navItems = [
-    { path: '/admin', label: 'Tổng quan', icon: <LayoutDashboard size={20} /> },
-    { path: '/admin/users', label: 'Người dùng', icon: <Users size={20} /> },
-    { path: '/admin/experts', label: 'Chuyên gia', icon: <GraduationCap size={20} /> },
-    { path: '/admin/questions', label: 'Câu hỏi', icon: <FileQuestion size={20} /> },
-    { path: '/admin/games', label: 'Quản lý Game', icon: <Gamepad2 size={20} /> },
-    { path: '/admin/reports', label: 'Báo cáo', icon: <Flag size={20} /> },
-    { path: '/admin/ads', label: 'Quảng cáo', icon: <Megaphone size={20} /> },
-    { path: '/admin/seed', label: 'Sinh dữ liệu (Demo)', icon: <Database size={20} /> },
+    { path: '/admin', label: 'Tổng quan', icon: <LayoutDashboard size={20} />, roles: ['admin'] },
+    { path: '/admin/users', label: 'Người dùng', icon: <Users size={20} />, roles: ['admin'] },
+    { path: '/admin/experts', label: 'Chuyên gia', icon: <GraduationCap size={20} />, roles: ['admin'] },
+    { path: '/admin/questions', label: 'Câu hỏi', icon: <FileQuestion size={20} />, roles: ['admin'] },
+    { path: '/admin/blog', label: 'Blog', icon: <BookOpen size={20} />, roles: ['admin', 'expert'] },
+    { path: '/admin/games', label: 'Quản lý Game', icon: <Gamepad2 size={20} />, roles: ['admin'] },
+    { path: '/admin/reports', label: 'Báo cáo', icon: <Flag size={20} />, roles: ['admin'] },
+    { path: '/admin/ads', label: 'Quảng cáo', icon: <Megaphone size={20} />, roles: ['admin'] },
+    { path: '/admin/seed', label: 'Sinh dữ liệu (Demo)', icon: <Database size={20} />, roles: ['admin'] },
   ];
 
   return (
@@ -56,7 +57,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ currentUser, onLogout 
         </div>
 
         <nav className="p-4 space-y-1">
-          {navItems.map(item => {
+          {navItems.filter(item => item.roles.includes(currentUser.isAdmin ? 'admin' : 'expert')).map(item => {
             const isActive = location.pathname === item.path || (item.path !== '/admin' && location.pathname.startsWith(item.path));
             return (
               <Link 
@@ -80,7 +81,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ currentUser, onLogout 
               <img src={currentUser.avatar} className="w-8 h-8 rounded-full bg-gray-200" />
               <div className="flex-1 min-w-0">
                  <p className="text-sm font-bold truncate">{currentUser.name}</p>
-                 <p className="text-xs text-gray-500">Administrator</p>
+                 <p className="text-xs text-gray-500">{currentUser.isAdmin ? 'Administrator' : 'Expert'}</p>
               </div>
            </div>
            <button 

@@ -24,7 +24,7 @@ Mặc định, tất cả tài khoản đăng ký mới đều là **Thành viê
 
 ## 🛠 QUAN TRỌNG: Cấu hình Bảo mật Firebase (Security Rules)
 
-Để các tính năng **Trả lời**, **Thông báo**, **Tin nhắn**, **Đăng ảnh**, **Admin**, **Sinh dữ liệu giả (Seed)**, **Game Data** và **Quảng cáo** hoạt động, bạn **BẮT BUỘC** phải cập nhật Firestore Rules và Storage Rules trên Firebase Console.
+Để các tính năng **Trả lời**, **Thông báo**, **Tin nhắn**, **Đăng ảnh**, **Admin**, **Sinh dữ liệu giả (Seed)**, **Game Data**, **Quảng cáo** và **Blog** hoạt động, bạn **BẮT BUỘC** phải cập nhật Firestore Rules và Storage Rules trên Firebase Console.
 
 ### 1. Cập nhật Firestore Rules (Database)
 Truy cập [Firebase Console](https://console.firebase.google.com/) -> **Firestore Database** -> **Rules**.
@@ -49,6 +49,12 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn() && 
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    // Kiểm tra quyền Chuyên gia
+    function isExpert() {
+      return isSignedIn() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isExpert == true;
     }
 
     // --- Users Collection ---
@@ -128,6 +134,24 @@ service cloud.firestore {
     match /ad_config/{docId} {
       allow read: if true; // Mọi người dùng xem được quảng cáo
       allow write: if isAdmin(); // Chỉ Admin cấu hình
+    }
+
+    // --- BLOG MODULE ---
+    match /blogCategories/{docId} {
+        allow read: if true;
+        allow write: if isAdmin();
+    }
+
+    match /blogPosts/{docId} {
+        allow read: if true;
+        allow create: if isAdmin() || (isExpert() && request.resource.data.authorId == request.auth.uid);
+        allow update, delete: if isAdmin() || (isExpert() && resource.data.authorId == request.auth.uid);
+    }
+
+    match /blogComments/{docId} {
+        allow read: if true;
+        allow create: if isSignedIn();
+        allow update, delete: if isAdmin() || (isSignedIn() && resource.data.authorId == request.auth.uid);
     }
   }
 }
