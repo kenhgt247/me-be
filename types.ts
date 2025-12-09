@@ -28,6 +28,7 @@ export interface Answer {
   author: User;
   content: string;
   likes: number;
+  usefulBy?: string[]; // List of user IDs who voted useful
   isBestAnswer: boolean;
   isExpertVerified?: boolean;
   createdAt: string;

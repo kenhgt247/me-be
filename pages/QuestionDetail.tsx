@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 // @ts-ignore
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
@@ -9,7 +10,7 @@ import {
 } from 'lucide-react';
 import { Question, Answer, User, getIdFromSlug } from '../types';
 import { generateDraftAnswer } from '../services/gemini';
-import { toggleQuestionLikeDb, toggleSaveQuestion } from '../services/db';
+import { toggleQuestionLikeDb, toggleSaveQuestion, toggleAnswerUseful } from '../services/db';
 import { ShareModal } from '../components/ShareModal';
 import { loginAnonymously } from '../services/auth';
 import { uploadFile } from '../services/storage';
@@ -267,6 +268,15 @@ const QuestionDetail: React.FC<DetailProps> = ({
              alert("Không thể lưu. Vui lòng thử lại.");
          }
     }
+  };
+
+  const handleToggleUseful = async (ans: Answer) => {
+      try {
+          const user = await ensureAuth();
+          await toggleAnswerUseful(question.id, ans.id, user.id);
+      } catch (e) {
+          // ignore, ensureAuth handles auth modal
+      }
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -574,8 +584,14 @@ const QuestionDetail: React.FC<DetailProps> = ({
                         </div>
 
                         <div className="flex items-center gap-4 border-t border-gray-50 pt-3 mt-2">
-                            <button className="flex items-center gap-1.5 text-gray-500 hover:text-primary transition-colors active:scale-95 group">
-                                <ThumbsUp size={16} className="group-hover:scale-110 transition-transform" /> <span className="text-xs font-bold">Hữu ích</span>
+                            <button 
+                                onClick={() => handleToggleUseful(ans)}
+                                className={`flex items-center gap-1.5 transition-colors active:scale-95 group ${
+                                    (ans.usefulBy || []).includes(currentUser.id) ? 'text-primary' : 'text-gray-500 hover:text-primary'
+                                }`}
+                            >
+                                <ThumbsUp size={16} className={`group-hover:scale-110 transition-transform ${(ans.usefulBy || []).includes(currentUser.id) ? 'fill-current' : ''}`} /> 
+                                <span className="text-xs font-bold">Hữu ích {ans.likes > 0 ? `(${ans.likes})` : ''}</span>
                             </button>
                             {isAdmin && !isVerified && (
                                 <button onClick={() => onVerifyAnswer(question.id, ans.id)} className="text-xs font-bold text-gray-400 hover:text-green-600 ml-auto flex items-center gap-1">

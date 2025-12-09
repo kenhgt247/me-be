@@ -436,3 +436,36 @@ export const deleteAnswerFromDb = async (questionId: string, answerId: string) =
     console.error("Delete answer error", e);
   }
 };
+
+export const toggleAnswerUseful = async (questionId: string, answerId: string, userId: string) => {
+  if (!db) return;
+  try {
+    const docRef = doc(db, QUESTIONS_COLLECTION, questionId);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+        const question = docSnap.data() as Question;
+        const updatedAnswers = question.answers.map(a => {
+            if (a.id === answerId) {
+                const usefulBy = a.usefulBy || [];
+                const isUseful = usefulBy.includes(userId);
+                let newUsefulBy;
+                if (isUseful) {
+                    newUsefulBy = usefulBy.filter(id => id !== userId);
+                } else {
+                    newUsefulBy = [...usefulBy, userId];
+                }
+                // Sync 'likes' count with 'usefulBy' length for display consistency
+                return { 
+                    ...a, 
+                    usefulBy: newUsefulBy,
+                    likes: newUsefulBy.length
+                };
+            }
+            return a;
+        });
+        await updateDoc(docRef, { answers: updatedAnswers });
+    }
+  } catch (e) {
+    console.error("Toggle useful error", e);
+  }
+};
