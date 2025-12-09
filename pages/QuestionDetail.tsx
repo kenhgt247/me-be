@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 // @ts-ignore
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
@@ -523,6 +524,7 @@ export default function QuestionDetail({
                   const isAnsOwner = currentUser.id === ans.author.id;
                   const isBest = ans.isBestAnswer;
                   const isVerified = ans.isExpertVerified;
+                  const isUseful = (ans.usefulBy || []).includes(currentUser.id);
                   
                   return (
                     <div key={ans.id} className={`bg-white p-5 rounded-3xl border transition-all ${isBest ? 'border-yellow-400 shadow-lg shadow-yellow-100 ring-1 ring-yellow-200' : 'border-gray-200 shadow-sm'}`}>
@@ -585,12 +587,12 @@ export default function QuestionDetail({
                         <div className="flex items-center gap-4 border-t border-gray-50 pt-3 mt-2">
                             <button 
                                 onClick={() => handleToggleUseful(ans)}
-                                className={`flex items-center gap-1.5 transition-colors active:scale-95 group ${
-                                    (ans.usefulBy || []).includes(currentUser.id) ? 'text-primary' : 'text-gray-500 hover:text-primary'
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all active:scale-95 group ${
+                                    isUseful ? 'text-blue-600 bg-blue-50 font-bold' : 'text-gray-500 hover:bg-gray-100 font-medium'
                                 }`}
                             >
-                                <ThumbsUp size={16} className={`group-hover:scale-110 transition-transform ${(ans.usefulBy || []).includes(currentUser.id) ? 'fill-current' : ''}`} /> 
-                                <span className="text-xs font-bold">Hữu ích {ans.likes > 0 ? `(${ans.likes})` : ''}</span>
+                                <ThumbsUp size={16} className={`group-hover:scale-110 transition-transform ${isUseful ? 'fill-current scale-110' : ''}`} /> 
+                                <span className="text-xs">Hữu ích {ans.likes > 0 ? `(${ans.likes})` : ''}</span>
                             </button>
                             {isAdmin && !isVerified && (
                                 <button onClick={() => onVerifyAnswer(question.id, ans.id)} className="text-xs font-bold text-gray-400 hover:text-green-600 ml-auto flex items-center gap-1">
