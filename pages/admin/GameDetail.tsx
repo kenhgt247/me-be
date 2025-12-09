@@ -5,7 +5,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Game, GameQuestion } from '../../types';
 import { getGameById, fetchGameQuestions, createGameQuestion, deleteGameQuestion, updateGameQuestion, importQuestionsBatch } from '../../services/game';
 import { generateGameContent } from '../../services/gemini';
-import { ArrowLeft, Sparkles, Plus, Trash2, Eye, EyeOff, Save, Loader2, Bot, FileJson, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Sparkles, Plus, Trash2, Eye, EyeOff, Save, Loader2, Bot, FileJson, Copy, Check, AlertTriangle, X } from 'lucide-react';
 
 export const GameDetail: React.FC = () => {
   const { gameId } = useParams<{ gameId: string }>();
@@ -166,7 +166,7 @@ export const GameDetail: React.FC = () => {
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-             <button onClick={() => navigate('/admin/games')} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200">
+             <button onClick={() => navigate('/admin/games')} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors">
                 <ArrowLeft size={20} />
              </button>
              <div>
@@ -180,13 +180,13 @@ export const GameDetail: React.FC = () => {
           <div className="flex gap-2">
             <button 
                 onClick={() => setShowJsonModal(true)}
-                className="bg-white border border-gray-300 text-gray-700 px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-sm hover:bg-gray-50 transition-all"
+                className="bg-green-600 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-green-200 hover:bg-green-700 transition-all active:scale-95"
             >
                 <FileJson size={18} /> Import JSON
             </button>
             <button 
                 onClick={() => { setShowAiModal(true); setAiTopic(game.title); }}
-                className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg active:scale-95 transition-all"
+                className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-200 active:scale-95 transition-all"
             >
                 <Sparkles size={18} /> AI Generator
             </button>
@@ -197,8 +197,8 @@ export const GameDetail: React.FC = () => {
        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
           <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><Plus size={18}/> Thêm thủ công</h3>
           <div className="grid md:grid-cols-2 gap-4 mb-4">
-             <input value={newQ} onChange={e => setNewQ(e.target.value)} placeholder="Nội dung câu hỏi" className="border p-2 rounded-lg" />
-             <select value={displayType} onChange={e => setDisplayType(e.target.value as any)} className="border p-2 rounded-lg">
+             <input value={newQ} onChange={e => setNewQ(e.target.value)} placeholder="Nội dung câu hỏi" className="border p-2 rounded-lg outline-none focus:border-indigo-500 transition-all" />
+             <select value={displayType} onChange={e => setDisplayType(e.target.value as any)} className="border p-2 rounded-lg outline-none focus:border-indigo-500 transition-all">
                 <option value="emoji">Hiển thị Emoji</option>
                 <option value="text">Hiển thị Chữ</option>
                 <option value="color">Hiển thị Màu</option>
@@ -208,18 +208,23 @@ export const GameDetail: React.FC = () => {
              {newOpts.map((opt, i) => (
                 <input key={i} value={opt} onChange={e => {
                     const no = [...newOpts]; no[i] = e.target.value; setNewOpts(no);
-                }} placeholder={`Lựa chọn ${i+1}`} className="border p-2 rounded-lg" />
+                }} placeholder={`Lựa chọn ${i+1}`} className="border p-2 rounded-lg outline-none focus:border-indigo-500 transition-all" />
              ))}
           </div>
           <div className="flex gap-4">
-             <input value={newA} onChange={e => setNewA(e.target.value)} placeholder="Đáp án đúng (Copy y hệt lựa chọn)" className="border p-2 rounded-lg flex-1" />
-             <button onClick={handleAddQuestion} disabled={!newQ || !newA} className="bg-gray-900 text-white px-6 rounded-lg font-bold">Thêm</button>
+             <input value={newA} onChange={e => setNewA(e.target.value)} placeholder="Đáp án đúng (Copy y hệt lựa chọn)" className="border p-2 rounded-lg flex-1 outline-none focus:border-indigo-500 transition-all" />
+             <button onClick={handleAddQuestion} disabled={!newQ || !newA} className="bg-gray-900 text-white px-6 rounded-lg font-bold hover:bg-black transition-colors disabled:opacity-50">Thêm</button>
           </div>
        </div>
 
        {/* QUESTION LIST */}
        <div className="space-y-3">
-          {questions.map((q, idx) => (
+          {questions.length === 0 ? (
+              <div className="text-center py-10 bg-gray-50 rounded-2xl border border-dashed border-gray-300">
+                  <p className="text-gray-500 mb-2">Chưa có câu hỏi nào.</p>
+                  <button onClick={() => setShowJsonModal(true)} className="text-indigo-600 font-bold hover:underline">Import JSON ngay</button>
+              </div>
+          ) : questions.map((q, idx) => (
              <div key={q.id} className={`bg-white p-4 rounded-xl border flex items-center justify-between ${!q.isActive ? 'opacity-60 bg-gray-50' : 'border-gray-200'}`}>
                 <div className="flex items-center gap-4">
                    <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center font-bold text-gray-500 text-xs">
@@ -257,7 +262,7 @@ export const GameDetail: React.FC = () => {
                    <h2 className="text-xl font-bold flex items-center gap-2 text-indigo-700">
                       <Bot size={24} /> AI Generator
                    </h2>
-                   <button onClick={() => setShowAiModal(false)}><ArrowLeft size={20} className="rotate-180" /></button>
+                   <button onClick={() => setShowAiModal(false)} className="p-2 hover:bg-gray-100 rounded-full"><X size={20} /></button>
                 </div>
                 
                 <div className="p-6 overflow-y-auto flex-1">
@@ -318,12 +323,12 @@ export const GameDetail: React.FC = () => {
        {/* IMPORT JSON MODAL */}
        {showJsonModal && (
           <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
-             <div className="bg-white rounded-2xl w-full max-w-xl animate-pop-in">
+             <div className="bg-white rounded-2xl w-full max-w-xl animate-pop-in shadow-2xl">
                 <div className="p-5 border-b border-gray-100 flex justify-between items-center">
                    <h2 className="text-lg font-bold flex items-center gap-2 text-gray-800">
                       <FileJson size={20} /> Import JSON
                    </h2>
-                   <button onClick={() => setShowJsonModal(false)}><ArrowLeft size={20} className="rotate-180 text-gray-400" /></button>
+                   <button onClick={() => setShowJsonModal(false)} className="p-2 hover:bg-gray-100 rounded-full"><X size={20} /></button>
                 </div>
                 
                 <div className="p-5">
@@ -338,6 +343,11 @@ export const GameDetail: React.FC = () => {
                       className="w-full h-48 border border-gray-300 rounded-xl p-3 text-xs font-mono focus:ring-2 focus:ring-indigo-200 outline-none resize-none"
                       placeholder='[{"q": "Câu hỏi?", "opts": ["A", "B"], "a": "A", "displayType": "text"}]'
                    />
+                   
+                   <div className="bg-yellow-50 p-3 rounded-lg mt-3 flex gap-2 border border-yellow-100">
+                        <AlertTriangle size={16} className="text-yellow-600 shrink-0 mt-0.5" />
+                        <p className="text-xs text-yellow-700">Lưu ý: Đảm bảo đáp án đúng (a) giống hệt một trong các lựa chọn (opts).</p>
+                   </div>
                    
                    <div className="mt-4 flex justify-end gap-2">
                       <button onClick={() => setShowJsonModal(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-bold">Hủy</button>

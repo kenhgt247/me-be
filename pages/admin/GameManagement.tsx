@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Game } from '../../types';
 import { fetchAllGames, createGame, deleteGame, updateGame } from '../../services/game';
-import { Plus, Edit2, Trash2, ToggleRight, ToggleLeft, Gamepad2, Loader2, ArrowRight, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, ToggleRight, ToggleLeft, Gamepad2, Loader2, ArrowRight, X, Sparkles } from 'lucide-react';
 // @ts-ignore
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -11,7 +11,8 @@ const EMOJI_OPTIONS = [
   '🐶', '🐱', '🦁', '🐻', '🐼', '🐸', '🦄', '🦖',
   '🍎', '🍌', '🍇', '🍓', '🥕', '🍕', '🍦', '🍪',
   '🚗', '🚀', '✈️', '🚂', '⚽', '🏀', '🎵', '🌟',
-  '🏠', '🏫', '🌈', '☀️', '🌙', '💧', '🔥', '⛄'
+  '🏠', '🏫', '🌈', '☀️', '🌙', '💧', '🔥', '⛄',
+  '👑', '🎈', '🎁', '🧸', '🥁', '🎷', '🎸', '🎺'
 ];
 
 export const GameManagement: React.FC = () => {
@@ -30,7 +31,8 @@ export const GameManagement: React.FC = () => {
 
   const colors = [
     'bg-blue-400', 'bg-red-400', 'bg-green-400', 'bg-yellow-400', 
-    'bg-purple-400', 'bg-pink-400', 'bg-orange-400', 'bg-teal-400'
+    'bg-purple-400', 'bg-pink-400', 'bg-orange-400', 'bg-teal-400',
+    'bg-indigo-400', 'bg-rose-400', 'bg-cyan-400', 'bg-lime-400'
   ];
 
   useEffect(() => {
@@ -65,6 +67,7 @@ export const GameManagement: React.FC = () => {
     // Reset form
     setTitle('');
     setIcon('🎮');
+    setOrder(games.length + 2);
   };
 
   const handleToggleActive = async (game: Game) => {
@@ -79,7 +82,7 @@ export const GameManagement: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20">
       <div className="flex justify-between items-center">
         <div>
            <h1 className="text-2xl font-bold text-gray-900">Quản lý Trò chơi</h1>
@@ -138,81 +141,102 @@ export const GameManagement: React.FC = () => {
       {/* CREATE MODAL */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-           <div className="bg-white rounded-[2rem] w-full max-w-lg p-6 animate-pop-in shadow-2xl relative">
-              <button onClick={() => setShowModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+           <div className="bg-white rounded-[2rem] w-full max-w-4xl p-6 animate-pop-in shadow-2xl relative flex flex-col md:flex-row gap-8 max-h-[90vh] overflow-y-auto">
+              <button onClick={() => setShowModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 z-10 bg-gray-100 rounded-full p-1">
                   <X size={24} />
               </button>
               
-              <h2 className="text-2xl font-bold mb-1 text-gray-900">Thêm trò chơi mới</h2>
-              <p className="text-sm text-gray-500 mb-6">Thiết lập thông tin cơ bản cho trò chơi.</p>
-              
-              <form onSubmit={handleCreate} className="space-y-5">
-                 <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">Tên trò chơi</label>
-                    <input 
-                        value={title} 
-                        onChange={e => setTitle(e.target.value)} 
-                        className="w-full border border-gray-200 rounded-xl p-3 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none transition-all" 
-                        placeholder="Ví dụ: Đố vui hoa quả"
-                        required 
-                    />
-                 </div>
-                 
-                 <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">Chọn Biểu tượng</label>
-                    <div className="grid grid-cols-8 gap-2 border border-gray-200 rounded-xl p-3 max-h-40 overflow-y-auto bg-gray-50 scrollbar-thin scrollbar-thumb-gray-200">
-                        {EMOJI_OPTIONS.map(emoji => (
-                           <button
-                             key={emoji}
-                             type="button"
-                             onClick={() => setIcon(emoji)}
-                             className={`text-2xl p-2 rounded-lg transition-all active:scale-90 flex items-center justify-center aspect-square ${
-                                icon === emoji
-                                ? 'bg-white shadow-md ring-2 ring-indigo-500 scale-110 z-10'
-                                : 'hover:bg-gray-200 hover:scale-105'
-                             }`}
-                           >
-                             {emoji}
-                           </button>
-                        ))}
-                    </div>
-                 </div>
+              {/* Form Section */}
+              <div className="flex-1 space-y-6">
+                  <div>
+                    <h2 className="text-2xl font-bold mb-1 text-gray-900">Thêm trò chơi mới</h2>
+                    <p className="text-sm text-gray-500">Thiết lập thông tin hiển thị cho trò chơi.</p>
+                  </div>
+                  
+                  <form onSubmit={handleCreate} className="space-y-5">
+                     <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1">Tên trò chơi</label>
+                        <input 
+                            value={title} 
+                            onChange={e => setTitle(e.target.value)} 
+                            className="w-full border border-gray-200 rounded-xl p-3 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none transition-all" 
+                            placeholder="Ví dụ: Đố vui hoa quả"
+                            required 
+                        />
+                     </div>
+                     
+                     <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Chọn Biểu tượng (Icon)</label>
+                        <div className="grid grid-cols-8 gap-2 border border-gray-200 rounded-xl p-3 max-h-40 overflow-y-auto bg-gray-50 scrollbar-thin scrollbar-thumb-gray-200">
+                            {EMOJI_OPTIONS.map(emoji => (
+                               <button
+                                 key={emoji}
+                                 type="button"
+                                 onClick={() => setIcon(emoji)}
+                                 className={`text-2xl p-2 rounded-lg transition-all active:scale-90 flex items-center justify-center aspect-square ${
+                                    icon === emoji
+                                    ? 'bg-white shadow-md ring-2 ring-indigo-500 scale-110 z-10'
+                                    : 'hover:bg-gray-200 hover:scale-105'
+                                 }`}
+                               >
+                                 {emoji}
+                               </button>
+                            ))}
+                        </div>
+                     </div>
 
-                 <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">Màu chủ đạo</label>
-                    <div className="flex gap-2 overflow-x-auto pb-2">
-                        {colors.map(c => (
-                            <button
-                                key={c}
-                                type="button"
-                                onClick={() => setColor(c)}
-                                className={`w-8 h-8 rounded-full flex-shrink-0 transition-all ${c} ${color === c ? 'ring-4 ring-offset-2 ring-gray-200 scale-110' : 'hover:scale-110'}`}
-                            ></button>
-                        ))}
-                    </div>
-                 </div>
+                     <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Màu chủ đạo</label>
+                        <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
+                            {colors.map(c => (
+                                <button
+                                    key={c}
+                                    type="button"
+                                    onClick={() => setColor(c)}
+                                    className={`w-10 h-10 rounded-full flex-shrink-0 transition-all ${c} ${color === c ? 'ring-4 ring-offset-2 ring-gray-300 scale-110 shadow-md' : 'hover:scale-110 opacity-80 hover:opacity-100'}`}
+                                ></button>
+                            ))}
+                        </div>
+                     </div>
 
-                 <div className="grid grid-cols-3 gap-4">
-                    <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1">Tuổi Min</label>
-                        <input type="number" value={minAge} onChange={e => setMinAge(Number(e.target.value))} className="w-full border border-gray-200 rounded-xl p-2 text-center font-bold" />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1">Tuổi Max</label>
-                        <input type="number" value={maxAge} onChange={e => setMaxAge(Number(e.target.value))} className="w-full border border-gray-200 rounded-xl p-2 text-center font-bold" />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1">Thứ tự</label>
-                        <input type="number" value={order} onChange={e => setOrder(Number(e.target.value))} className="w-full border border-gray-200 rounded-xl p-2 text-center font-bold" />
-                    </div>
-                 </div>
+                     <div className="grid grid-cols-3 gap-4">
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">Tuổi Min</label>
+                            <input type="number" value={minAge} onChange={e => setMinAge(Number(e.target.value))} className="w-full border border-gray-200 rounded-xl p-2 text-center font-bold" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">Tuổi Max</label>
+                            <input type="number" value={maxAge} onChange={e => setMaxAge(Number(e.target.value))} className="w-full border border-gray-200 rounded-xl p-2 text-center font-bold" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">Thứ tự</label>
+                            <input type="number" value={order} onChange={e => setOrder(Number(e.target.value))} className="w-full border border-gray-200 rounded-xl p-2 text-center font-bold" />
+                        </div>
+                     </div>
 
-                 <div className="pt-2">
-                    <button type="submit" className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-200 active:scale-95 transition-all">
-                        Tạo trò chơi mới
-                    </button>
-                 </div>
-              </form>
+                     <div className="pt-2">
+                        <button type="submit" className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-200 active:scale-95 transition-all">
+                            Tạo trò chơi ngay
+                        </button>
+                     </div>
+                  </form>
+              </div>
+
+              {/* Preview Section */}
+              <div className="md:w-72 flex flex-col items-center justify-center bg-gray-50 rounded-2xl p-6 border border-gray-200">
+                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Xem trước (Preview)</h3>
+                  
+                  {/* The Card */}
+                  <div className={`relative overflow-hidden rounded-[1.5rem] p-4 text-white text-left transition-all ${color} shadow-xl border-b-4 border-black/10 flex flex-col items-center justify-center gap-2 aspect-[4/3] w-full max-w-[200px]`}>
+                    <div className="text-5xl drop-shadow-md animate-bounce-small">{icon}</div>
+                    <h3 className="text-xl font-black drop-shadow-sm text-center leading-tight">{title || "Tên trò chơi"}</h3>
+                    <div className="absolute top-0 right-0 p-2 opacity-20"><Sparkles size={24} /></div>
+                  </div>
+
+                  <p className="mt-6 text-xs text-gray-400 text-center">
+                      Thẻ game sẽ hiển thị như thế này trên ứng dụng của bé.
+                  </p>
+              </div>
            </div>
         </div>
       )}
