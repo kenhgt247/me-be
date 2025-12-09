@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 // @ts-ignore
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
@@ -141,7 +140,7 @@ const RichTextRenderer: React.FC<{ content: string }> = ({ content }) => {
 
 // --- MAIN COMPONENT ---
 
-const QuestionDetail: React.FC<DetailProps> = ({ 
+export default function QuestionDetail({ 
   questions, 
   currentUser, 
   onAddAnswer, 
@@ -154,7 +153,7 @@ const QuestionDetail: React.FC<DetailProps> = ({
   onEditAnswer, 
   onDeleteAnswer, 
   onHideAnswer 
-}) => {
+}: DetailProps) {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   
@@ -736,6 +735,4 @@ const QuestionDetail: React.FC<DetailProps> = ({
       />
     </div>
   );
-};
-
-export default QuestionDetail;
+}
