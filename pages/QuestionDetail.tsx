@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 // @ts-ignore
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
@@ -100,42 +99,60 @@ const FBImageGridDetail: React.FC<{ images: string[]; onImageClick: (url: string
   );
 };
 
+// IMPROVED RICH TEXT RENDERER TO SUPPORT IMAGES
 const RichTextRenderer: React.FC<{ content: string }> = ({ content }) => {
+  // 1. Check for Big Emoji (Only emojis, short length)
   const isBigEmoji = /^(\p{Extended_Pictographic}|\p{Emoji_Presentation}|\s)+$/u.test(content) && [...content].length <= 5;
   if (isBigEmoji) {
       return <div className="text-5xl md:text-6xl py-2 animate-pop-in">{content}</div>;
   }
 
-  const regex = /((?:https?:\/\/[^\s]+)|(?:@[\w\p{L}]+))/gu;
-  const parts = content.split(regex);
+  // 2. Split content by Image Markdown: ![alt](url)
+  // This regex captures the whole image tag
+  const imageRegex = /(!\[.*?\]\(https?:\/\/[^\s)]+\))/g;
+  const parts = content.split(imageRegex);
 
   return (
-    <p className="text-[15px] text-textDark leading-relaxed whitespace-pre-wrap break-words">
+    <div className="text-[15px] text-textDark leading-relaxed whitespace-pre-wrap break-words">
       {parts.map((part, i) => {
-        if (part.match(/^https?:\/\//)) {
-          return (
-            <a 
-                key={i} 
-                href={part} 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                className="text-blue-600 hover:underline font-medium"
-                onClick={(e) => e.stopPropagation()}
-            >
-              {part}
-            </a>
-          );
+        // Check if part is an image markdown
+        const imgMatch = part.match(/!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/);
+        if (imgMatch) {
+           return (
+             <img 
+               key={i} 
+               src={imgMatch[2]} 
+               alt={imgMatch[1] || 'Image'} 
+               className="max-w-full h-auto rounded-xl my-3 border border-gray-100 shadow-sm block hover:opacity-95 cursor-zoom-in" 
+               loading="lazy"
+               onClick={() => window.open(imgMatch[2], '_blank')}
+             />
+           );
         }
-        if (part.startsWith('@')) {
-            return (
-                <span key={i} className="font-bold text-blue-600 bg-blue-50 px-1 rounded hover:bg-blue-100 cursor-pointer transition-colors">
-                    {part}
-                </span>
-            );
-        }
-        return part;
+
+        // Process Links and Mentions in text parts
+        const subRegex = /((?:https?:\/\/[^\s]+)|(?:@[\w\p{L}]+))/gu;
+        const subParts = part.split(subRegex);
+        
+        return (
+          <span key={i}>
+            {subParts.map((subPart, j) => {
+               if (subPart.match(/^https?:\/\//)) {
+                  return (
+                    <a key={j} href={subPart} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium" onClick={(e) => e.stopPropagation()}>
+                      {subPart}
+                    </a>
+                  );
+               }
+               if (subPart.startsWith('@')) {
+                  return <span key={j} className="font-bold text-blue-600 bg-blue-50 px-1 rounded hover:bg-blue-100 cursor-pointer transition-colors">{subPart}</span>;
+               }
+               return subPart;
+            })}
+          </span>
+        );
       })}
-    </p>
+    </div>
   );
 };
 
@@ -282,16 +299,27 @@ export default function QuestionDetail({
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    if (file.size > 5 * 1024 * 1024) {
+        alert("Ảnh quá lớn! Vui lòng chọn ảnh dưới 5MB.");
+        return;
+    }
+
     try {
         setUploadingImage(true);
         await ensureAuth();
         const url = await uploadFile(file, 'answer_images');
         setAnswerImage(url);
-    } catch (e) {
-        console.error(e);
-        alert("Lỗi tải ảnh. Vui lòng thử lại.");
+    } catch (e: any) {
+        console.error("Upload error details:", e);
+        if (e.message.includes('unauthorized') || e.message.includes('permission')) {
+            alert("Lỗi quyền: Bạn không có quyền đăng ảnh vào bình luận. Vui lòng kiểm tra Storage Rules trên Firebase Console.");
+        } else {
+            alert(`Lỗi tải ảnh: ${e.message}`);
+        }
     } finally {
         setUploadingImage(false);
+        if (e.target) e.target.value = ''; // Reset file input
     }
   };
 
@@ -622,7 +650,7 @@ export default function QuestionDetail({
                          <img src={p.avatar} className="w-8 h-8 rounded-full border border-gray-200" />
                          <div>
                              <p className="font-bold text-sm text-textDark">{p.name}</p>
-                             <p className="text-[10px] text-gray-400">{p.isExpert ? 'Chuyên gia' : 'Thành viên'}</p>
+                             <p className="text-xs text-textGray">{p.isExpert ? 'Chuyên gia' : 'Thành viên'}</p>
                          </div>
                      </button>
                  ))}
