@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Game, GAME_CATEGORIES, GameCategory, GameType, GameOrientation } from '../../types';
 import { fetchAllGames, createGame, deleteGame, updateGame } from '../../services/game';
-import { Plus, Trash2, ToggleRight, ToggleLeft, Loader2, ArrowRight, X, Sparkles, RefreshCw, Palette, Smile, Eye, Grid, Smartphone, Monitor } from 'lucide-react';
+import { Plus, Trash2, ToggleRight, ToggleLeft, Loader2, ArrowRight, X, Sparkles, RefreshCw, Palette, Smile, Eye, Grid, Smartphone, Monitor, Edit2, Filter, Check } from 'lucide-react';
 // @ts-ignore
 import { useNavigate } from 'react-router-dom';
 
@@ -29,7 +29,11 @@ export const GameManagement: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const navigate = useNavigate();
 
+  // Filter State
+  const [filterCategory, setFilterCategory] = useState<string>('all');
+
   // Form State
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [icon, setIcon] = useState('🎮');
   const [color, setColor] = useState('bg-blue-400');
@@ -51,11 +55,25 @@ export const GameManagement: React.FC = () => {
     setLoading(false);
   };
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const handleEdit = (game: Game) => {
+      setEditingId(game.id);
+      setTitle(game.title);
+      setIcon(game.icon);
+      setColor(game.color);
+      setCategory(game.category);
+      setGameType(game.gameType);
+      setOrientation(game.orientation || 'auto');
+      setMinAge(game.minAge);
+      setMaxAge(game.maxAge);
+      setOrder(game.order);
+      setShowModal(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title) return;
 
-    await createGame({
+    const gameData = {
       title,
       icon,
       color,
@@ -65,9 +83,17 @@ export const GameManagement: React.FC = () => {
       minAge,
       maxAge,
       order,
-      isActive: true,
-      createdAt: new Date().toISOString()
-    });
+    };
+
+    if (editingId) {
+        await updateGame(editingId, gameData);
+    } else {
+        await createGame({
+            ...gameData,
+            isActive: true,
+            createdAt: new Date().toISOString()
+        });
+    }
 
     setShowModal(false);
     loadGames();
@@ -75,6 +101,7 @@ export const GameManagement: React.FC = () => {
   };
 
   const resetForm = () => {
+    setEditingId(null);
     setTitle('');
     setIcon('🎮');
     setColor('bg-blue-400');
@@ -94,6 +121,9 @@ export const GameManagement: React.FC = () => {
     await deleteGame(id);
     loadGames();
   };
+
+  // Filter Logic
+  const filteredGames = games.filter(g => filterCategory === 'all' || g.category === filterCategory);
 
   return (
     <div className="space-y-6 pb-20 animate-fade-in">
@@ -119,11 +149,33 @@ export const GameManagement: React.FC = () => {
         </div>
       </div>
 
+      {/* Category Filter */}
+      <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+          <button 
+            onClick={() => setFilterCategory('all')}
+            className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all ${filterCategory === 'all' ? 'bg-gray-800 text-white shadow-md' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+          >
+              Tất cả
+          </button>
+          {GAME_CATEGORIES.map(cat => (
+              <button
+                key={cat.id}
+                onClick={() => setFilterCategory(cat.id)}
+                className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 ${filterCategory === cat.id ? `${cat.color} text-white shadow-md` : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+              >
+                  <span>{cat.icon}</span> {cat.label}
+              </button>
+          ))}
+      </div>
+
       {loading ? (
         <div className="text-center py-20"><Loader2 className="animate-spin mx-auto text-indigo-500" size={32} /></div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-           {games.map(game => (
+           {filteredGames.length === 0 && (
+               <div className="col-span-full text-center py-10 text-gray-400 italic">Không tìm thấy trò chơi nào trong mục này.</div>
+           )}
+           {filteredGames.map(game => (
              <div key={game.id} className={`bg-white rounded-[1.5rem] shadow-sm border p-5 flex flex-col relative overflow-hidden transition-all hover:shadow-lg hover:-translate-y-1 ${!game.isActive ? 'opacity-70 grayscale border-gray-200 bg-gray-50' : 'border-gray-200'}`}>
                 {/* Badges */}
                 <div className="absolute top-0 right-0 flex">
@@ -140,7 +192,7 @@ export const GameManagement: React.FC = () => {
                       {game.icon}
                    </div>
                    <div>
-                      <h3 className="font-bold text-lg text-gray-900 leading-tight mb-1">{game.title}</h3>
+                      <h3 className="font-bold text-lg text-gray-900 leading-tight mb-1 line-clamp-1">{game.title}</h3>
                       <div className="flex flex-wrap gap-2 text-xs">
                           <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-bold">{GAME_CATEGORIES.find(c => c.id === game.category)?.label || game.category}</span>
                           <span className="text-gray-400 font-mono">#{game.order}</span>
@@ -152,6 +204,9 @@ export const GameManagement: React.FC = () => {
                     <div className="flex gap-1">
                        <button onClick={() => handleDelete(game.id)} className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition-colors" title="Xóa">
                           <Trash2 size={18} />
+                       </button>
+                       <button onClick={() => handleEdit(game)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="Sửa thông tin">
+                          <Edit2 size={18} />
                        </button>
                        <button onClick={() => handleToggleActive(game)} className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-gray-100 rounded-lg transition-colors" title={game.isActive ? "Tắt" : "Bật"}>
                           {game.isActive ? <ToggleRight size={24} className="text-green-500" /> : <ToggleLeft size={24} />}
@@ -170,7 +225,7 @@ export const GameManagement: React.FC = () => {
         </div>
       )}
 
-      {/* CREATE MODAL */}
+      {/* CREATE/EDIT MODAL */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
            <div className="bg-white rounded-[2rem] w-full max-w-5xl animate-pop-in shadow-2xl relative flex flex-col md:flex-row overflow-hidden max-h-[95vh]">
@@ -183,11 +238,11 @@ export const GameManagement: React.FC = () => {
               {/* LEFT: Form Section */}
               <div className="flex-1 p-6 md:p-8 overflow-y-auto">
                   <div className="mb-6">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-1">Thêm nội dung mới</h2>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-1">{editingId ? 'Cập nhật Trò chơi' : 'Thêm nội dung mới'}</h2>
                     <p className="text-sm text-gray-500">Tạo trò chơi, truyện kể hoặc bài học cho bé.</p>
                   </div>
                   
-                  <form onSubmit={handleCreate} className="space-y-6">
+                  <form onSubmit={handleSubmit} className="space-y-6">
                      {/* Name Input */}
                      <div>
                         <label className="block text-sm font-bold text-gray-700 mb-2">Tên hiển thị</label>
@@ -201,8 +256,8 @@ export const GameManagement: React.FC = () => {
                         />
                      </div>
 
-                     {/* Type & Category Grid */}
-                     <div className="grid grid-cols-2 gap-4">
+                     {/* Type & Orientation */}
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-2">Loại hình</label>
                             <select 
@@ -217,44 +272,59 @@ export const GameManagement: React.FC = () => {
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-2">Chủ đề</label>
-                            <select 
-                                value={category} 
-                                onChange={e => setCategory(e.target.value as GameCategory)} 
-                                className="w-full border border-gray-200 rounded-xl p-3 outline-none focus:border-indigo-500 bg-white font-medium"
-                            >
-                                {GAME_CATEGORIES.map(cat => (
-                                    <option key={cat.id} value={cat.id}>{cat.label}</option>
-                                ))}
-                            </select>
+                            <label className="block text-sm font-bold text-gray-700 mb-2">Chiều màn hình (HTML5)</label>
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setOrientation('auto')}
+                                    className={`flex-1 p-2 rounded-xl border-2 flex items-center justify-center gap-1 transition-all text-xs font-bold ${orientation === 'auto' ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-500'}`}
+                                >
+                                    <Smartphone size={16} /> Tự động
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setOrientation('portrait')}
+                                    className={`flex-1 p-2 rounded-xl border-2 flex items-center justify-center gap-1 transition-all text-xs font-bold ${orientation === 'portrait' ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-500'}`}
+                                >
+                                    <Smartphone size={16} /> Dọc
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setOrientation('landscape')}
+                                    className={`flex-1 p-2 rounded-xl border-2 flex items-center justify-center gap-1 transition-all text-xs font-bold ${orientation === 'landscape' ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-500'}`}
+                                >
+                                    <Monitor size={16} /> Ngang
+                                </button>
+                            </div>
                         </div>
                      </div>
 
-                     {/* Orientation Picker */}
+                     {/* Visual Category Picker */}
                      <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-2">Chiều màn hình (Cho HTML5)</label>
-                        <div className="flex gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setOrientation('auto')}
-                                className={`flex-1 p-3 rounded-xl border-2 flex items-center justify-center gap-2 transition-all ${orientation === 'auto' ? 'border-indigo-500 bg-indigo-50 text-indigo-700 font-bold' : 'border-gray-200 text-gray-500'}`}
-                            >
-                                <Smartphone size={18} /> Tự động
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setOrientation('portrait')}
-                                className={`flex-1 p-3 rounded-xl border-2 flex items-center justify-center gap-2 transition-all ${orientation === 'portrait' ? 'border-indigo-500 bg-indigo-50 text-indigo-700 font-bold' : 'border-gray-200 text-gray-500'}`}
-                            >
-                                <Smartphone size={18} /> Dọc
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setOrientation('landscape')}
-                                className={`flex-1 p-3 rounded-xl border-2 flex items-center justify-center gap-2 transition-all ${orientation === 'landscape' ? 'border-indigo-500 bg-indigo-50 text-indigo-700 font-bold' : 'border-gray-200 text-gray-500'}`}
-                            >
-                                <Monitor size={18} /> Ngang
-                            </button>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Chủ đề</label>
+                        <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto scrollbar-thin">
+                            {GAME_CATEGORIES.map(cat => (
+                                <button
+                                    key={cat.id}
+                                    type="button"
+                                    onClick={() => setCategory(cat.id)}
+                                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all text-left group ${
+                                        category === cat.id 
+                                        ? `border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500 shadow-sm` 
+                                        : 'border-gray-200 hover:bg-gray-50 hover:border-gray-300'
+                                    }`}
+                                >
+                                    <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg ${cat.color} text-white shadow-sm group-hover:scale-110 transition-transform`}>
+                                        {cat.icon}
+                                    </span>
+                                    <div className="flex-1">
+                                        <span className={`block text-sm font-bold ${category === cat.id ? 'text-indigo-700' : 'text-gray-700'}`}>
+                                            {cat.label}
+                                        </span>
+                                    </div>
+                                    {category === cat.id && <Check size={16} className="text-indigo-600" />}
+                                </button>
+                            ))}
                         </div>
                      </div>
                      
@@ -315,7 +385,7 @@ export const GameManagement: React.FC = () => {
 
                      <div className="pt-4 border-t border-gray-100">
                         <button type="submit" className="w-full py-4 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-xl shadow-indigo-200 active:scale-95 transition-all text-lg">
-                            Hoàn tất & Tạo
+                            {editingId ? 'Lưu thay đổi' : 'Hoàn tất & Tạo'}
                         </button>
                      </div>
                   </form>
@@ -333,7 +403,7 @@ export const GameManagement: React.FC = () => {
                   <div className="transform scale-110 transition-all duration-300">
                       <div className={`relative overflow-hidden rounded-[1.5rem] p-6 text-white text-left transition-all ${color} shadow-2xl border-b-4 border-black/10 flex flex-col items-center justify-center gap-4 aspect-[4/3] w-[240px]`}>
                         <div className="text-7xl drop-shadow-md animate-bounce-small filter brightness-110">{icon}</div>
-                        <h3 className="text-2xl font-black drop-shadow-sm text-center leading-tight">{title || "Tên trò chơi"}</h3>
+                        <h3 className="text-2xl font-black drop-shadow-sm text-center leading-tight line-clamp-2">{title || "Tên trò chơi"}</h3>
                         <div className="absolute top-0 right-0 p-3 opacity-30"><Sparkles size={32} /></div>
                         
                         <div className="absolute top-0 right-0 bg-black/20 backdrop-blur-sm px-3 py-1 rounded-bl-xl text-xs font-bold">
@@ -345,11 +415,23 @@ export const GameManagement: React.FC = () => {
                       </div>
                   </div>
 
-                  <p className="mt-8 text-xs text-gray-400 text-center max-w-[200px] leading-relaxed">
-                      Loại hình: <strong>{gameType}</strong><br/>
-                      Chủ đề: <strong>{GAME_CATEGORIES.find(c => c.id === category)?.label}</strong><br/>
-                      Màn hình: <strong>{orientation === 'landscape' ? 'Ngang' : orientation === 'portrait' ? 'Dọc' : 'Tự động'}</strong>
-                  </p>
+                  <div className="mt-8 bg-white p-4 rounded-xl border border-gray-100 w-full max-w-[240px]">
+                      <p className="text-xs text-gray-500 mb-2 border-b border-gray-100 pb-2 font-bold uppercase">Thông tin</p>
+                      <div className="space-y-2 text-xs">
+                          <div className="flex justify-between">
+                              <span className="text-gray-400">Loại hình:</span>
+                              <span className="font-bold text-gray-700 capitalize">{gameType}</span>
+                          </div>
+                          <div className="flex justify-between">
+                              <span className="text-gray-400">Chủ đề:</span>
+                              <span className="font-bold text-gray-700">{GAME_CATEGORIES.find(c => c.id === category)?.label}</span>
+                          </div>
+                          <div className="flex justify-between">
+                              <span className="text-gray-400">Màn hình:</span>
+                              <span className="font-bold text-gray-700 capitalize">{orientation}</span>
+                          </div>
+                      </div>
+                  </div>
               </div>
            </div>
         </div>
