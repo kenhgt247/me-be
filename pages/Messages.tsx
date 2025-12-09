@@ -5,7 +5,7 @@ import { subscribeToChats } from '../services/db';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChatSession } from '../types';
 import { auth } from '../firebaseConfig';
-import { MessageCircle, ShieldCheck, Search, Plus } from 'lucide-react';
+import { MessageCircle, ShieldCheck, Search, Plus, Loader2 } from 'lucide-react';
 
 export const Messages: React.FC = () => {
     const [chats, setChats] = useState<ChatSession[]>([]);
@@ -14,7 +14,10 @@ export const Messages: React.FC = () => {
     const navigate = useNavigate();
 
     useEffect(() => {
-        if (!currentUser) return;
+        if (!currentUser) {
+            setLoading(false);
+            return;
+        }
         const unsubscribe = subscribeToChats(currentUser.uid, (data) => {
             setChats(data);
             setLoading(false);
@@ -29,7 +32,15 @@ export const Messages: React.FC = () => {
         return { id: otherId, ...chat.participantData[otherId] };
     };
 
-    if (!currentUser) return <div className="p-10 text-center">Vui lòng đăng nhập để xem tin nhắn.</div>;
+    if (!currentUser) return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center animate-fade-in pt-safe-top">
+             <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center mb-6 text-primary">
+                <MessageCircle size={40} />
+             </div>
+             <h2 className="text-2xl font-bold text-textDark mb-3">Tin nhắn</h2>
+             <p className="text-textGray mb-6">Vui lòng đăng nhập để xem tin nhắn.</p>
+        </div>
+    );
 
     return (
         <div className="min-h-screen bg-[#F7F7F5] pb-24 animate-fade-in">
@@ -54,9 +65,12 @@ export const Messages: React.FC = () => {
 
             <div className="p-2 space-y-1">
                 {loading ? (
-                    <div className="text-center py-10 text-gray-400">Đang tải...</div>
+                    <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                        <Loader2 className="animate-spin mb-2" size={24} />
+                        <span className="text-sm">Đang tải tin nhắn...</span>
+                    </div>
                 ) : chats.length === 0 ? (
-                     <div className="flex flex-col items-center justify-center py-20 text-center">
+                     <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
                         <div className="w-20 h-20 bg-blue-50 text-blue-400 rounded-full flex items-center justify-center mb-4">
                             <MessageCircle size={32} />
                         </div>
@@ -70,7 +84,8 @@ export const Messages: React.FC = () => {
                         if (!other) return null;
                         
                         const isExpert = other.isExpert;
-                        const time = new Date(chat.lastMessageTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                        const date = new Date(chat.lastMessageTime);
+                        const time = isNaN(date.getTime()) ? '' : date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
                         return (
                             <Link 
@@ -87,8 +102,13 @@ export const Messages: React.FC = () => {
                                         <h4 className="font-bold text-textDark truncate pr-2">{other.name}</h4>
                                         <span className="text-[11px] text-gray-400 shrink-0">{time}</span>
                                     </div>
-                                    <p className="text-sm text-textGray truncate">{chat.lastMessage}</p>
+                                    <p className={`text-sm truncate ${chat.unreadCount && chat.unreadCount[currentUser.uid] > 0 ? 'font-bold text-textDark' : 'text-textGray'}`}>
+                                        {chat.lastMessage}
+                                    </p>
                                 </div>
+                                {chat.unreadCount && chat.unreadCount[currentUser.uid] > 0 && (
+                                    <div className="w-3 h-3 bg-red-500 rounded-full shrink-0"></div>
+                                )}
                             </Link>
                         );
                     })

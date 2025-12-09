@@ -59,17 +59,18 @@ export const subscribeToNotifications = (userId: string, callback: (notifs: Noti
   if (!db || !userId) return () => {};
   
   try {
+    // FIX: Removed orderBy('createdAt', 'desc') to avoid "Missing Index" error
     const q = query(
         collection(db, NOTIFICATIONS_COLLECTION),
         where('userId', '==', userId),
-        orderBy('createdAt', 'desc'),
         limit(50)
     );
     return onSnapshot(q, (snapshot) => {
         const notifs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Notification[];
+        // Client-side sort
+        notifs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         callback(notifs);
     }, (error) => {
-        // Log warning but prevent crash
         console.warn("Notification listener ignored:", error.code);
     });
   } catch (e) {
@@ -174,13 +175,15 @@ export const sendMessage = async (sender: User, recipient: User, content: string
 export const subscribeToChats = (userId: string, callback: (chats: ChatSession[]) => void) => {
   if (!db || !userId) return () => {};
   try {
+    // FIX: Removed orderBy('updatedAt', 'desc') to avoid "Missing Index" error
     const q = query(
         collection(db, CHATS_COLLECTION),
-        where('participants', 'array-contains', userId),
-        orderBy('updatedAt', 'desc')
+        where('participants', 'array-contains', userId)
     );
     return onSnapshot(q, (snapshot) => {
         const chats = snapshot.docs.map(doc => doc.data() as ChatSession);
+        // Client-side sort
+        chats.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
         callback(chats);
     }, (error) => {
         console.warn("Chat subscription ignored:", error.code);
@@ -194,12 +197,15 @@ export const subscribeToChats = (userId: string, callback: (chats: ChatSession[]
 export const subscribeToMessages = (chatId: string, callback: (msgs: Message[]) => void) => {
   if (!db || !chatId) return () => {};
   try {
+    // Messages usually don't need complex index if just sorting by default, 
+    // but explicit orderBy usually works fine here. Keeping it safe.
     const q = query(
-        collection(db, CHATS_COLLECTION, chatId, 'messages'),
-        orderBy('createdAt', 'asc')
+        collection(db, CHATS_COLLECTION, chatId, 'messages')
     );
     return onSnapshot(q, (snapshot) => {
         const msgs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Message));
+        // Client-side sort
+        msgs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
         callback(msgs);
     }, (error) => {
         console.warn("Message subscription ignored:", error.code);
@@ -215,9 +221,11 @@ export const subscribeToMessages = (chatId: string, callback: (msgs: Message[]) 
 export const subscribeToQuestions = (callback: (questions: Question[]) => void) => {
   if (!db) return () => {};
   try {
-    const q = query(collection(db, QUESTIONS_COLLECTION), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, QUESTIONS_COLLECTION));
     return onSnapshot(q, (snapshot) => {
         const questions = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Question[];
+        // Client side sort for safety
+        questions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         callback(questions);
     }, (error) => { 
         console.warn("Questions sync error:", error.code); 
