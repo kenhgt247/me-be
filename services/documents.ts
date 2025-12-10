@@ -3,38 +3,38 @@ import {
   query, where, orderBy, limit, increment, QuerySnapshot, DocumentData,
   Timestamp,
 } from 'firebase/firestore';
-import { db } from '../firebaseConfig'; // Đảm bảo đường dẫn này chính xác
-import { Document, DocumentCategory, DocumentReview, User } from '../types'; // Đảm bảo các Types này là chính xác
+import { db } from '../firebaseConfig';
+import { Document, DocumentCategory, DocumentReview, User } from '../types';
 
 // --- COLLECTION NAMES ---
 const DOCS_COL = 'documents';
 const DOC_CATS_COL = 'documentCategories';
 const DOC_REVIEWS_COL = 'documentReviews';
 
-// --- UTILITY FUNCTIONS ---
+// --- TYPE HELPERS ---
+
+// Định nghĩa kiểu dữ liệu cho dữ liệu đầu vào khi tạo Document
+export type CreateDocumentData = Omit<Document, 
+  'id' | 'views' | 'downloads' | 'rating' | 'ratingCount' | 'createdAt' | 'updatedAt'
+>;
 
 /**
  * Chuyển đổi Firestore DocumentData thành DocumentCategory
- * @param data Dữ liệu từ Firestore
- * @param id ID của tài liệu
  */
 const toDocumentCategory = (data: DocumentData, id: string): DocumentCategory => ({
   id,
   name: data.name || '',
   slug: data.slug || '',
-  iconEmoji: data.iconEmoji || '📄',
+  iconEmoji: data.iconEmoji || '📁',
   order: data.order || 0,
   isActive: data.isActive ?? true,
-} as DocumentCategory); // Ép kiểu cuối cùng vì đã biết cấu trúc
+} as DocumentCategory); 
 
 /**
  * Chuyển đổi Firestore DocumentData thành Document
- * @param data Dữ liệu từ Firestore
- * @param id ID của tài liệu
  */
 const toDocument = (data: DocumentData, id: string): Document => {
-  // Chuẩn hóa thời gian (Nếu bạn lưu trữ createdAt/updatedAt dưới dạng Firestore Timestamp)
-  // Nếu bạn lưu dưới dạng string ISO, bỏ qua bước này.
+  // Chuẩn hóa thời gian từ Timestamp (nếu có) sang ISO string
   const createdAt = (data.createdAt instanceof Timestamp) ? data.createdAt.toDate().toISOString() : data.createdAt;
   const updatedAt = (data.updatedAt instanceof Timestamp) ? data.updatedAt.toDate().toISOString() : data.updatedAt;
 
@@ -65,9 +65,7 @@ const toDocument = (data: DocumentData, id: string): Document => {
 };
 
 /**
- * Chuyển đổi Firestore Snapshot thành mảng các Document/Category/Review
- * @param snapshot Snapshot từ Firestore
- * @param converter Hàm chuyển đổi (toDocument, toDocumentCategory,...)
+ * Chuyển đổi Firestore Snapshot thành mảng các đối tượng T
  */
 const mapSnapshot = <T>(snapshot: QuerySnapshot<DocumentData>, converter: (data: DocumentData, id: string) => T): T[] => {
   return snapshot.docs.map(doc => converter(doc.data(), doc.id));
@@ -120,35 +118,6 @@ export const deleteDocumentCategory = async (id: string) => {
 // --- DOCUMENTS ---
 // =================================================================
 
-export const fetchDocuments = async (categoryId?: string, limitCount = 20): Promise<Document[]> => {
-  if (!db) return [];
-  try {
-    const conditions = [];
-    if (categoryId && categoryId !== 'all') {
-      conditions.push(where('categoryId', '==', categoryId));
-    }
-    // Gợi ý: Nếu bạn muốn sort theo createdAt, bạn nên thêm orderBy vào đây 
-    // và tạo Index trong Firebase. Việc sort client-side (như code cũ) 
-    // chỉ nên dùng cho tập dữ liệu nhỏ.
-
-    const q = query(
-      collection(db, DOCS_COL),
-      ...conditions,
-      orderBy('createdAt', 'desc'), // Thêm orderBy để tránh sort client-side
-      limit(limitCount)
-    );
-    
-    const snapshot = await getDocs(q);
-    return mapSnapshot(snapshot, toDocument);
-    
-    // Bỏ sort client-side nếu đã có orderBy trên query
-    // return docs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  } catch (e) {
-    console.error("Error fetching documents:", e);
-    return [];
-  }
-};
-
 export const fetchAllDocumentsAdmin = async (authorId?: string): Promise<Document[]> => {
   if (!db) return [];
   try {
@@ -160,7 +129,7 @@ export const fetchAllDocumentsAdmin = async (authorId?: string): Promise<Documen
     const q = query(
       collection(db, DOCS_COL), 
       ...conditions,
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc') // Sắp xếp trên server
     );
     
     const snapshot = await getDocs(q);
@@ -171,37 +140,10 @@ export const fetchAllDocumentsAdmin = async (authorId?: string): Promise<Documen
   }
 };
 
-export const fetchDocumentBySlug = async (slug: string): Promise<Document | null> => {
-  if (!db) return null;
-  try {
-    // Nên lấy ID từ slug trước để truy vấn theo ID doc(db, DOCS_COL, getIdFromSlug(slug)) 
-    // để tránh query theo trường 'slug'
-    // Tuy nhiên, nếu bạn phải query theo 'slug', code dưới đây là hợp lý
-    
-    const q = query(collection(db, DOCS_COL), where('slug', '==', slug), limit(1));
-    const snapshot = await getDocs(q);
-
-    if (!snapshot.empty) {
-      const docData = snapshot.docs[0];
-      
-      // Tăng lượt xem (không cần await để không chặn luồng chính)
-      updateDoc(docData.ref, { views: increment(1) }).catch((e) => {
-        console.warn("Failed to increment view count:", e);
-      });
-      
-      return toDocument(docData.data(), docData.id);
-    }
-    return null;
-  } catch (e) {
-    console.error("Error fetching document by slug:", e);
-    return null;
-  }
-};
-
-export const createDocument = async (data: Omit<Document, 'id' | 'views' | 'downloads' | 'rating' | 'ratingCount' | 'createdAt' | 'updatedAt'>) => {
+export const createDocument = async (data: CreateDocumentData) => {
   if (!db) return;
   try {
-    const timestamp = new Date().toISOString(); // Hoặc dùng Timestamp.now()
+    const timestamp = new Date().toISOString(); 
 
     await addDoc(collection(db, DOCS_COL), {
       ...data,
@@ -229,43 +171,25 @@ export const updateDocument = async (id: string, data: Partial<Document>) => {
   }
 };
 
-// ... (Các hàm deleteDoc, incrementDownload giữ nguyên)
-// ...
-
-// =================================================================
-// --- REVIEWS ---
-// =================================================================
-
-const toDocumentReview = (data: DocumentData, id: string): DocumentReview => {
-  const createdAt = (data.createdAt instanceof Timestamp) ? data.createdAt.toDate().toISOString() : data.createdAt;
-  
-  return {
-    id,
-    documentId: data.documentId || '',
-    userId: data.userId || '',
-    userName: data.userName || '',
-    userAvatar: data.userAvatar || '',
-    rating: data.rating || 0,
-    comment: data.comment || '',
-    createdAt: createdAt || new Date().toISOString(),
-  } as DocumentReview;
-};
-
-export const fetchDocumentReviews = async (docId: string): Promise<DocumentReview[]> => {
-    if (!db) return [];
+export const deleteDocument = async (id: string) => {
+    if (!db) return;
     try {
-        const q = query(
-          collection(db, DOC_REVIEWS_COL), 
-          where('documentId', '==', docId),
-          orderBy('createdAt', 'desc') // Sắp xếp trên server
-        );
-        const snapshot = await getDocs(q);
-        return mapSnapshot(snapshot, toDocumentReview);
+        await deleteDoc(doc(db, DOCS_COL, id));
     } catch (e) {
-        console.error("Error fetching document reviews:", e);
-        return [];
+        console.error("Error deleting document:", e);
     }
 };
 
-// ... (Hàm addDocumentReview giữ nguyên logic cập nhật Rating)
-// ...
+export const incrementDownload = async (id: string) => {
+    if (!db) return;
+    try {
+        await updateDoc(doc(db, DOCS_COL, id), { downloads: increment(1) });
+    } catch (e) {
+        console.error("Error incrementing download count:", e);
+    }
+};
+
+// =================================================================
+// --- REVIEWS ---
+// (Giữ nguyên các hàm Reviews nếu bạn đã có, hoặc bổ sung nếu cần)
+// =================================================================
