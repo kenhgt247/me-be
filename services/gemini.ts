@@ -316,6 +316,31 @@ export const generateStory = async (
   }
 };
 /**
+ * Sinh tiêu đề Blog hấp dẫn
+ */
+export const generateBlogTitle = async (topic: string): Promise<string> => {
+  if (!ai) return "";
+  try {
+    const model = "gemini-2.5-flash";
+    const prompt = `
+      Bạn là một biên tập viên chuyên nghiệp cho blog Mẹ & Bé.
+      Hãy viết 1 tiêu đề bài viết thật hấp dẫn, chuẩn SEO, thu hút người đọc click vào, dựa trên chủ đề: "${topic}".
+      
+      Yêu cầu:
+      - Chỉ trả về duy nhất 1 tiêu đề hay nhất.
+      - Không để trong ngoặc kép.
+      - Độ dài dưới 70 ký tự.
+    `;
+    const response = await ai.models.generateContent({ model, contents: prompt });
+    const text = (response as any).text ?? (response as any).response?.text?.();
+    return text?.trim() || "";
+  } catch (e) {
+    console.error("AI Title Error:", e);
+    return "";
+  }
+};
+
+/**
  * Sinh nội dung bài viết Blog chuyên sâu
  */
 export const generateBlogPost = async (title: string, outline: string = ""): Promise<string> => {
