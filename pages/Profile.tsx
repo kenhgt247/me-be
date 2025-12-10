@@ -21,12 +21,48 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
   const [viewedUser, setViewedUser] = useState<User | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
 
-  const isViewingSelf = !userId || userId === user.id;
-  const profileUser = isViewingSelf ? user : (viewedUser || user); 
-  const isFollowing = (user.following || []).includes(profileUser.id);
+  // Determine viewing mode
+  const isViewingSelf = !userId || (user && userId === user.id);
+  
+  // Determine which user object to display
+  // CRITICAL FIX: Fallback to 'user' if viewing self, but ensure 'user' exists.
+  const profileUser = isViewingSelf ? user : (viewedUser || null);
+
+  // Fetch Viewed User Profile
+  useEffect(() => {
+    const fetchUser = async () => {
+        if (userId && userId !== user.id) {
+            setLoadingProfile(true);
+            try {
+                const docRef = doc(db, 'users', userId);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    // @ts-ignore
+                    setViewedUser({ id: docSnap.id, ...docSnap.data() });
+                } else {
+                    setViewedUser(null);
+                }
+            } catch (error) {
+                console.error("Error fetching user profile:", error);
+            } finally {
+                setLoadingProfile(false);
+            }
+        }
+    };
+    fetchUser();
+  }, [userId, user.id]);
+
+  // Handle Following State
+  const isFollowing = profileUser && user.following ? user.following.includes(profileUser.id) : false;
   const [followingState, setFollowingState] = useState(isFollowing);
 
-  // --- GUEST VIEW HANDLER ---
+  useEffect(() => {
+    if (profileUser && user.following) {
+        setFollowingState(user.following.includes(profileUser.id));
+    }
+  }, [user.following, profileUser]);
+
+  // --- GUEST VIEW HANDLER (For Self Profile) ---
   if (user.isGuest && isViewingSelf) {
       return (
           <div className="min-h-screen bg-[#F7F7F5] flex flex-col items-center justify-center p-6 text-center animate-fade-in pt-safe-top pb-24">
@@ -61,32 +97,22 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
       );
   }
 
-  // --- REGULAR PROFILE LOGIC ---
-  useEffect(() => {
-    const fetchUser = async () => {
-        if (userId && userId !== user.id) {
-            setLoadingProfile(true);
-            try {
-                const docRef = doc(db, 'users', userId);
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) {
-                    // @ts-ignore
-                    setViewedUser({ id: docSnap.id, ...docSnap.data() });
-                }
-            } catch (error) {
-                console.error("Error fetching user profile:", error);
-            } finally {
-                setLoadingProfile(false);
-            }
-        }
-    };
-    fetchUser();
-  }, [userId, user.id]);
+  // --- LOADING / NOT FOUND STATES ---
+  if (loadingProfile) {
+      return <div className="min-h-screen flex items-center justify-center bg-[#F7F7F5]"><Loader2 className="animate-spin text-primary" size={32} /></div>;
+  }
 
-  useEffect(() => {
-    setFollowingState((user.following || []).includes(profileUser.id));
-  }, [user.following, profileUser.id]);
+  if (!profileUser) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-[#F7F7F5] p-4 text-center">
+            <h2 className="text-xl font-bold text-gray-800 mb-2">Người dùng không tồn tại</h2>
+            <p className="text-gray-500 mb-6">Liên kết bạn truy cập có thể bị hỏng hoặc người dùng đã bị xóa.</p>
+            <button onClick={() => navigate('/')} className="bg-primary text-white px-6 py-2 rounded-xl font-bold">Về trang chủ</button>
+        </div>
+      );
+  }
 
+  // --- MAIN CONTENT ---
   const userQuestions = questions.filter(q => q.author.id === profileUser.id);
   const userAnswersCount = questions.reduce((acc, q) => acc + q.answers.filter(a => a.author.id === profileUser.id).length, 0);
   const bestAnswersCount = questions.reduce((acc, q) => acc + q.answers.filter(a => a.author.id === profileUser.id && a.isBestAnswer).length, 0);
@@ -94,7 +120,11 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
 
   const handleAuthAction = () => {
     if (user.isGuest) onOpenAuth();
-    else onLogout();
+    else {
+        onLogout();
+        // Redirect to home immediately after logout click to prevent white screen on profile
+        navigate('/');
+    }
   };
 
   const handleFollowToggle = async () => {
@@ -120,10 +150,6 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
       }
       navigate(`/messages/${profileUser.id}`);
   };
-
-  if (loadingProfile) {
-      return <div className="min-h-screen flex items-center justify-center bg-[#F7F7F5]"><Loader2 className="animate-spin text-primary" size={32} /></div>;
-  }
 
   return (
     <div className="pb-24 md:pb-10 animate-fade-in bg-[#F7F7F5] min-h-screen">
