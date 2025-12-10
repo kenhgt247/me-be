@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Document, DocumentReview, User } from '../types';
 import { fetchDocumentBySlug, incrementDownload, fetchDocumentReviews, addDocumentReview } from '../services/documents';
-import { Loader2, ArrowLeft, Download, Star, FileText, Share2, Send } from 'lucide-react';
+import { Loader2, ArrowLeft, Download, Star, FileText, Share2, Send, Link as LinkIcon } from 'lucide-react';
 import { loginAnonymously } from '../services/auth';
 
 export const DocumentDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }> = ({ currentUser, onOpenAuth }) => {
@@ -33,7 +33,11 @@ export const DocumentDetail: React.FC<{ currentUser: User; onOpenAuth: () => voi
 
   const handleDownload = async () => {
       if (!doc) return;
-      window.open(doc.fileUrl, '_blank');
+      
+      const targetUrl = doc.isExternal ? doc.externalLink : doc.fileUrl;
+      if (!targetUrl) return;
+
+      window.open(targetUrl, '_blank');
       await incrementDownload(doc.id);
       setDoc(prev => prev ? ({ ...prev, downloads: prev.downloads + 1 }) : null);
   };
@@ -72,12 +76,12 @@ export const DocumentDetail: React.FC<{ currentUser: User; onOpenAuth: () => voi
        <div className="max-w-3xl mx-auto p-4 space-y-6">
            <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100">
                <div className="flex flex-col items-center text-center mb-6">
-                   <div className="w-24 h-24 bg-green-50 rounded-2xl flex items-center justify-center text-5xl mb-4 shadow-inner">
-                       {doc.fileType === 'pdf' ? '📕' : doc.fileType === 'docx' ? '📝' : '📄'}
+                   <div className={`w-24 h-24 rounded-2xl flex items-center justify-center text-5xl mb-4 shadow-inner ${doc.isExternal ? 'bg-blue-50 text-blue-500' : 'bg-green-50'}`}>
+                       {doc.isExternal ? <LinkIcon size={48} /> : (doc.fileType === 'pdf' ? '📕' : doc.fileType === 'docx' ? '📝' : '📄')}
                    </div>
                    <h1 className="text-2xl font-bold text-gray-900 mb-2">{doc.title}</h1>
                    <div className="flex items-center gap-4 text-sm text-gray-500">
-                       <span className="bg-gray-100 px-2 py-0.5 rounded text-xs">{doc.fileType.toUpperCase()}</span>
+                       <span className="bg-gray-100 px-2 py-0.5 rounded text-xs uppercase">{doc.isExternal ? 'Link' : doc.fileType}</span>
                        <span>{doc.downloads} lượt tải</span>
                        <span className="flex items-center gap-1"><Star size={14} className="text-yellow-400 fill-yellow-400"/> {doc.rating.toFixed(1)}</span>
                    </div>
@@ -85,8 +89,9 @@ export const DocumentDetail: React.FC<{ currentUser: User; onOpenAuth: () => voi
                
                <p className="text-gray-600 mb-6 leading-relaxed">{doc.description}</p>
                
-               <button onClick={handleDownload} className="w-full bg-green-600 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-green-200 hover:bg-green-700 active:scale-95 transition-all flex items-center justify-center gap-2">
-                   <Download size={20} /> Tải xuống ngay
+               <button onClick={handleDownload} className={`w-full text-white font-bold py-3.5 rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 ${doc.isExternal ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200' : 'bg-green-600 hover:bg-green-700 shadow-green-200'}`}>
+                   {doc.isExternal ? <LinkIcon size={20} /> : <Download size={20} />} 
+                   {doc.isExternal ? 'Truy cập liên kết' : 'Tải xuống ngay'}
                </button>
            </div>
 
