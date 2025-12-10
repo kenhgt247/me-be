@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 // @ts-ignore
 import { Link } from 'react-router-dom';
@@ -74,11 +75,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
       const unsub = subscribeToAdConfig(config => setAdFrequency(config.frequency));
       
       // Load recent blogs
-      fetchPublishedPosts('all', 5).then(data => {
-          if (data && data.length > 0) {
-              setBlogPosts(data);
-          }
-      });
+      fetchPublishedPosts('all', 3).then(setBlogPosts);
 
       return () => unsub();
   }, []);
@@ -202,9 +199,9 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
                 </div>
             </div>
 
-            {/* EXPERT BLOGS BLOCK - Added Here */}
+            {/* EXPERT BLOGS BLOCK */}
             {blogPosts.length > 0 && (
-                <div className="space-y-3 pt-2">
+                <div className="space-y-3">
                     <div className="flex justify-between items-center px-1">
                         <div className="flex items-center gap-2">
                             <BookOpen size={18} className="text-blue-600" />
@@ -215,20 +212,16 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
                     
                     <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 pr-4 snap-x -mx-4 px-4 md:mx-0 md:px-0">
                         {blogPosts.map(post => (
-                            <Link to={`/blog/${post.slug}`} key={post.id} className="snap-start flex-shrink-0 w-64 bg-white rounded-2xl p-3 border border-gray-100 shadow-sm hover:shadow-md transition-all active:scale-95 flex flex-col">
-                                <div className="aspect-[2/1] rounded-xl bg-gray-100 mb-3 overflow-hidden relative shrink-0">
+                            <Link to={`/blog/${post.slug}`} key={post.id} className="snap-start flex-shrink-0 w-64 bg-white rounded-2xl p-3 border border-gray-100 shadow-sm hover:shadow-md transition-all active:scale-95">
+                                <div className="aspect-[2/1] rounded-xl bg-gray-100 mb-3 overflow-hidden relative">
                                     {post.coverImageUrl ? (
                                         <img src={post.coverImageUrl} className="w-full h-full object-cover" loading="lazy" />
                                     ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-3xl bg-gradient-to-br from-blue-50 to-purple-50">{post.iconEmoji || '📝'}</div>
+                                        <div className="w-full h-full flex items-center justify-center text-3xl">{post.iconEmoji || '📝'}</div>
                                     )}
                                 </div>
-                                <h4 className="font-bold text-sm text-textDark line-clamp-2 mb-1 leading-snug flex-1">{post.title}</h4>
-                                <div className="flex items-center gap-1 mt-auto pt-2">
-                                    <span className="text-[10px] text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 line-clamp-1 max-w-[100px]">{post.authorName}</span>
-                                    <span className="text-[10px] text-gray-300">•</span>
-                                    <span className="text-[10px] text-gray-400">{new Date(post.createdAt).toLocaleDateString('vi-VN')}</span>
-                                </div>
+                                <h4 className="font-bold text-sm text-textDark line-clamp-2 mb-1 leading-snug">{post.title}</h4>
+                                <p className="text-[10px] text-gray-400 line-clamp-2">{post.excerpt}</p>
                             </Link>
                         ))}
                     </div>
@@ -238,7 +231,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
       )}
 
       {!searchQuery && (
-        <div className="pl-4 md:px-0 mt-4">
+        <div className="pl-4 md:px-0 mt-6">
             <div className="flex items-center gap-1 mb-2">
                 <Sparkles size={14} className="text-accent" fill="currentColor" />
                 <span className="text-xs font-bold text-textGray uppercase tracking-wider">Chủ đề</span>
@@ -263,7 +256,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
         </div>
       )}
 
-      <div className="px-4 md:px-0 flex items-center justify-between mt-2">
+      <div className="px-4 md:px-0 flex items-center justify-between">
          <h3 className="font-bold text-lg text-textDark">
              {searchQuery ? `Kết quả tìm kiếm (${displayQuestions.length})` : 'Cộng đồng hỏi đáp'}
          </h3>
