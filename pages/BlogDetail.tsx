@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 // @ts-ignore
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -7,6 +6,7 @@ import { fetchPostBySlug, fetchRelatedPosts, fetchBlogComments, addBlogComment }
 import { loginAnonymously } from '../services/auth';
 import { Loader2, ArrowLeft, Calendar, User as UserIcon, Share2, MessageCircle, Send, PlayCircle, ExternalLink, ShieldCheck } from 'lucide-react';
 import { AuthModal } from '../components/AuthModal';
+import { ShareModal } from '../components/ShareModal';
 
 export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }> = ({ currentUser, onOpenAuth }) => {
   const { slug } = useParams<{ slug: string }>();
@@ -17,6 +17,7 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
   const [loading, setLoading] = useState(true);
   const [commentContent, setCommentContent] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [showShare, setShowShare] = useState(false);
 
   useEffect(() => {
     if (slug) loadData(slug);
@@ -70,7 +71,7 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
               <ArrowLeft size={22} />
           </button>
           <span className="font-bold text-sm text-textDark uppercase tracking-wider">Bài viết chuyên gia</span>
-          <button className="p-2 -mr-2 hover:bg-gray-100 rounded-full text-textDark transition-colors">
+          <button onClick={() => setShowShare(true)} className="p-2 -mr-2 hover:bg-gray-100 rounded-full text-blue-600 transition-colors">
               <Share2 size={20} />
           </button>
        </div>
@@ -201,6 +202,14 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
                </button>
            </div>
        </div>
+
+       {/* Share Modal */}
+       <ShareModal 
+          isOpen={showShare}
+          onClose={() => setShowShare(false)}
+          url={window.location.href}
+          title={post.title}
+       />
     </div>
   );
 };
