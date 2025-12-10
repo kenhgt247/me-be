@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 // @ts-ignore
 import { Link, useLocation } from 'react-router-dom';
@@ -89,7 +88,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   // Hide Top Bar on Chat Detail/AI/Question Detail to allow custom headers
   const hideTopBar = isChatDetail || isAiChat || isQuestionDetail; 
   
-  // REMOVED isGameZone from hideBottomBar to allow navigation in Game Hub
   const hideBottomBar = isAskPage || isChatDetail || isAiChat;
 
   return (
