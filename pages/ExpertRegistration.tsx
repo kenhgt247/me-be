@@ -130,6 +130,10 @@ export const ExpertRegistration: React.FC<ExpertRegistrationProps> = ({ currentU
                 <CheckCircle className="text-green-500 shrink-0" size={16} />
                 <span>Tiếp cận 10,000+ phụ huynh</span>
               </li>
+              <li className="flex gap-3">
+                <CheckCircle className="text-green-500 shrink-0" size={16} />
+                <span>Được quyền Viết Blog và chia sẻ tài liệu của riêng chuyên gia</span>
+              </li>
             </ul>
           </div>
 
