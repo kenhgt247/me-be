@@ -1,4 +1,3 @@
-
 export interface User {
   id: string;
   name: string;
@@ -222,6 +221,61 @@ export interface BlogComment {
   updatedAt: string;
 }
 
+// --- DOCUMENT MODULE TYPES ---
+
+export interface DocumentCategory {
+  id: string;
+  name: string;
+  slug: string;
+  iconEmoji: string;
+  order: number;
+  isActive: boolean;
+}
+
+export interface Document {
+  id: string;
+  title: string;
+  slug: string;
+  description: string;
+  
+  // File or Link
+  isExternal?: boolean; 
+  externalLink?: string; 
+  fileUrl?: string;     
+  
+  fileType: 'pdf' | 'docx' | 'xlsx' | 'pptx' | 'image' | 'video' | 'link' | 'other';
+  fileName?: string;
+  fileSize?: number;
+  
+  categoryId: string;
+  tags: string[];
+  
+  // Author
+  authorId: string;
+  authorName: string;
+  authorAvatar: string;
+  isExpert: boolean;
+  
+  views: number;
+  downloads: number;
+  rating: number; 
+  ratingCount: number;
+  
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DocumentReview {
+  id: string;
+  documentId: string;
+  userId: string;
+  userName: string;
+  userAvatar: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+}
+
 export const CATEGORIES = [
   "Mang thai",
   "Dinh dưỡng",
@@ -280,59 +334,3 @@ export const getIdFromSlug = (slug: string | undefined): string => {
     const parts = slug.split('-');
     return parts.pop() || ''; 
 };
-// ... existing types
-
-// --- DOCUMENT MODULE TYPES ---
-
-export interface DocumentCategory {
-  id: string;
-  name: string;
-  slug: string;
-  iconEmoji: string;
-  order: number;
-  isActive: boolean;
-}
-
-export interface Document {
-  id: string;
-  title: string;
-  slug: string;
-  description: string;
-  
-  // File or Link
-  isExternal?: boolean; 
-  externalLink?: string; 
-  fileUrl?: string;     
-  
-  fileType: 'pdf' | 'docx' | 'xlsx' | 'pptx' | 'image' | 'video' | 'link' | 'other';
-  fileName?: string;
-  fileSize?: number;
-  
-  categoryId: string;
-  tags: string[];
-  
-  // Author
-  authorId: string;
-  authorName: string;
-  authorAvatar: string;
-  isExpert: boolean;
-  
-  views: number;
-  downloads: number;
-  rating: number; 
-  ratingCount: number;
-  
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface DocumentReview {
-  id: string;
-  documentId: string;
-  userId: string;
-  userName: string;
-  userAvatar: string;
-  rating: number;
-  comment: string;
-  createdAt: string;
-}
