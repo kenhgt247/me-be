@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { User, Question, toSlug } from '../types';
-import { Settings, ShieldCheck, MessageCircle, HelpCircle, Heart, Star, Briefcase, Share2, Users, UserPlus, UserCheck, ArrowLeft, Loader2 } from 'lucide-react';
+import { Settings, ShieldCheck, MessageCircle, HelpCircle, Heart, Star, Briefcase, Share2, Users, UserPlus, UserCheck, ArrowLeft, Loader2, LogIn, UserPlus as RegisterIcon } from 'lucide-react';
 // @ts-ignore
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { followUser, unfollowUser, sendNotification } from '../services/db';
@@ -27,6 +26,39 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
   const isFollowing = (user.following || []).includes(profileUser.id);
   const [followingState, setFollowingState] = useState(isFollowing);
 
+  // --- GUEST VIEW HANDLER ---
+  if (user.isGuest && isViewingSelf) {
+      return (
+          <div className="min-h-screen bg-[#F7F7F5] flex flex-col items-center justify-center p-6 text-center animate-fade-in pt-safe-top pb-24">
+              <div className="bg-white p-8 rounded-[2rem] shadow-xl border border-gray-100 max-w-sm w-full">
+                  <div className="w-24 h-24 bg-gradient-to-tr from-primary to-blue-400 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-200">
+                      <LogIn size={40} className="text-white" />
+                  </div>
+                  <h1 className="text-2xl font-bold text-textDark mb-2">Chào bạn mới! 👋</h1>
+                  <p className="text-textGray mb-8 text-sm leading-relaxed">
+                      Đăng nhập để tham gia cộng đồng, theo dõi chuyên gia và lưu lại những kiến thức bổ ích nhé.
+                  </p>
+                  
+                  <div className="space-y-3">
+                      <button 
+                          onClick={onOpenAuth}
+                          className="w-full bg-primary text-white font-bold py-3.5 rounded-xl shadow-lg shadow-primary/30 hover:bg-[#25A99C] active:scale-95 transition-all flex items-center justify-center gap-2"
+                      >
+                          <LogIn size={20} /> Đăng nhập / Đăng ký
+                      </button>
+                      <button 
+                          onClick={() => navigate('/')}
+                          className="w-full bg-gray-50 text-textGray font-bold py-3.5 rounded-xl hover:bg-gray-100 active:scale-95 transition-all"
+                      >
+                          Về trang chủ
+                      </button>
+                  </div>
+              </div>
+          </div>
+      );
+  }
+
+  // --- REGULAR PROFILE LOGIC ---
   useEffect(() => {
     const fetchUser = async () => {
         if (userId && userId !== user.id) {
