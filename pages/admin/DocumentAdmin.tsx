@@ -2,13 +2,11 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Document, DocumentCategory, User } from '../../types'; // Đã thêm User
 import { 
   fetchDocumentCategories, createDocumentCategory, updateDocumentCategory, deleteDocumentCategory,
-  fetchAllDocumentsAdmin, createDocument, updateDocument, deleteDocument, CreateDocumentData
+  fetchAllDocumentsAdmin, createDocument, updateDocument, deleteDocument, CreateDocumentData // Đã thêm deleteDocument
 } from '../../services/documents';
 import { uploadFile } from '../../services/storage';
 import { subscribeToAuthChanges } from '../../services/auth';
-import { Plus, Trash2, Edit2, X, FileText, Folder, UploadCloud, Loader2, Video, Image as ImageIcon, File, Link as LinkIcon, Globe, FileType } from 'lucide-react';
-// Nếu bạn có hàm toSlug, hãy import nó tại đây
-// import { toSlug } from '../../utils';
+import { Plus, Trash2, Edit2, X, FileText, Folder, UploadCloud, Loader2, Video, Image as ImageIcon, File, Link as LinkIcon, Globe } from 'lucide-react';
 
 // --- INITIAL STATE & HELPERS ---
 const INITIAL_DOC_FORM: Partial<Document> = {
@@ -27,8 +25,9 @@ const getFileType = (file: File): Document['fileType'] => {
     return 'other';
 };
 
-// Helper đơn giản hóa tạo slug nếu không có hàm toSlug đầy đủ
+// Helper đơn giản hóa tạo slug
 const simpleSlugify = (title: string): string => {
+    // Lưu ý: Nếu bạn có hàm removeVietnameseTones/toSlug, nên sử dụng nó ở đây
     return title.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
 };
 
@@ -46,7 +45,7 @@ export const DocumentAdmin: React.FC = () => {
   const [uploading, setUploading] = useState(false);
 
   // Forms
-  const [catForm, setCatForm] = useState<Partial<DocumentCategory>>({ id: '', name: '', iconEmoji: '📁', order: 0 }); // Type Safe
+  const [catForm, setCatForm] = useState<Partial<DocumentCategory>>({ id: '', name: '', iconEmoji: '📁', order: 0 }); 
   const [docForm, setDocForm] = useState<Partial<Document>>(INITIAL_DOC_FORM);
   const [tagsInput, setTagsInput] = useState('');
   const [inputMode, setInputMode] = useState<'upload' | 'link'>('upload');
@@ -59,9 +58,8 @@ export const DocumentAdmin: React.FC = () => {
     return () => unsub();
   }, []);
 
-  const loadData = async (user: User) => { // User đã được typed
+  const loadData = async (user: User) => { 
     setLoading(true);
-    // Nếu currentUser không tồn tại hoặc không đủ quyền, fetch chỉ các tài liệu của họ.
     const authorId = user.isAdmin ? undefined : user.id;
 
     const [cats, allDocs] = await Promise.all([
@@ -75,16 +73,15 @@ export const DocumentAdmin: React.FC = () => {
 
   // --- CATEGORY ---
   const handleSaveCat = async () => {
-      if (!catForm.name) return;
+      if (!catForm.name || !currentUser || !currentUser.isAdmin) return;
       
-      const slug = simpleSlugify(catForm.name); // Sử dụng helper
+      const slug = simpleSlugify(catForm.name); 
       const categoryData = { ...catForm, slug, isActive: true, order: catForm.order || 0 };
 
       try {
           if (catForm.id) {
-              await updateDocumentCategory(catForm.id, categoryData);
+              await updateDocumentCategory(catForm.id, categoryData as Partial<DocumentCategory>);
           } else {
-              // Bỏ trường id khi tạo mới
               const { id, ...dataToCreate } = categoryData;
               await createDocumentCategory(dataToCreate as Omit<DocumentCategory, 'id'>);
           }
@@ -94,6 +91,7 @@ export const DocumentAdmin: React.FC = () => {
   };
 
   const handleDeleteCat = async (id: string) => {
+      if(!currentUser || !currentUser.isAdmin) return;
       if(confirm("Xóa danh mục này?")) {
           await deleteDocumentCategory(id);
           loadData(currentUser);
@@ -116,7 +114,7 @@ export const DocumentAdmin: React.FC = () => {
               fileName: file.name,
               fileSize: file.size,
               fileType: type,
-              externalLink: '', // Đảm bảo clear link ngoài khi upload file
+              externalLink: '', 
           }));
       } catch (e) {
           console.error("Upload thất bại:", e);
@@ -134,7 +132,6 @@ export const DocumentAdmin: React.FC = () => {
       const slug = docForm.slug || simpleSlugify(docForm.title);
       const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t);
 
-      // Xây dựng dữ liệu dựa trên kiểu CreateDocumentData hoặc Partial<Document>
       const baseData: Partial<Document> = {
           ...docForm,
           slug,
@@ -145,7 +142,6 @@ export const DocumentAdmin: React.FC = () => {
           isExpert: currentUser.isExpert,
           isExternal: inputMode === 'link',
           
-          // Logic cho file/link
           fileType: inputMode === 'link' ? 'link' : (docForm.fileType || 'other'),
           fileUrl: inputMode === 'link' ? '' : docForm.fileUrl,
           externalLink: inputMode === 'upload' ? '' : docForm.externalLink,
@@ -155,7 +151,7 @@ export const DocumentAdmin: React.FC = () => {
           if (docForm.id) {
               await updateDocument(docForm.id, baseData);
           } else {
-              // Ép kiểu đảm bảo rằng tất cả các trường bắt buộc đã được điền
+              // Ép kiểu sang CreateDocumentData vì đã kiểm tra đủ các trường bắt buộc
               await createDocument(baseData as CreateDocumentData); 
           }
           setShowDocModal(false);
@@ -175,13 +171,13 @@ export const DocumentAdmin: React.FC = () => {
 
   // --- JSX RENDER ---
 
+  // Xử lý Loading
   if (loading) {
     return <div className="p-10 text-center text-lg text-gray-500 flex items-center justify-center gap-2"><Loader2 className="animate-spin" /> Đang tải dữ liệu...</div>
   }
 
-  // Guardrail 
+  // Xử lý Quyền truy cập
   if (!currentUser || (!currentUser.isAdmin && !currentUser.isExpert)) {
-      // Đã sửa lỗi JSX: File phải là .tsx
       return <div className="p-10 text-center">Không có quyền truy cập</div>;
   }
 
