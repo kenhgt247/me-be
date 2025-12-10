@@ -25,17 +25,33 @@ export const fetchBlogCategories = async (): Promise<BlogCategory[]> => {
 
 export const createBlogCategory = async (data: Omit<BlogCategory, 'id'>) => {
   if (!db) return;
-  await addDoc(collection(db, BLOG_CATS_COL), data);
+  try {
+    await addDoc(collection(db, BLOG_CATS_COL), data);
+  } catch (error) {
+    console.error("Error creating blog category:", error);
+    throw error;
+  }
 };
 
 export const updateBlogCategory = async (id: string, updates: Partial<BlogCategory>) => {
   if (!db) return;
-  await updateDoc(doc(db, BLOG_CATS_COL, id), updates);
+  try {
+    const docRef = doc(db, BLOG_CATS_COL, id);
+    await updateDoc(docRef, updates);
+  } catch (error) {
+    console.error("Error updating blog category:", error);
+    throw error;
+  }
 };
 
 export const deleteBlogCategory = async (id: string) => {
   if (!db) return;
-  await deleteDoc(doc(db, BLOG_CATS_COL, id));
+  try {
+    await deleteDoc(doc(db, BLOG_CATS_COL, id));
+  } catch (error) {
+    console.error("Error deleting blog category:", error);
+    throw error;
+  }
 };
 
 // --- POSTS ---
@@ -70,22 +86,16 @@ export const fetchAllPostsAdmin = async (authorId?: string): Promise<BlogPost[]>
   if (!db) return [];
   try {
     let q;
+    // If authorId is provided (Expert), filter by it. If undefined (Admin), fetch all.
     if (authorId) {
-      q = query(
-        collection(db, BLOG_POSTS_COL),
-        where('authorId', '==', authorId),
-        orderBy('createdAt', 'desc')
-      );
+        q = query(collection(db, BLOG_POSTS_COL), where('authorId', '==', authorId), orderBy('createdAt', 'desc'));
     } else {
-      q = query(
-        collection(db, BLOG_POSTS_COL),
-        orderBy('createdAt', 'desc')
-      );
+        q = query(collection(db, BLOG_POSTS_COL), orderBy('createdAt', 'desc'));
     }
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BlogPost));
   } catch (e) {
-    console.error("Error fetching admin posts", e);
+    console.error("Error fetching admin blog posts", e);
     return [];
   }
 };
@@ -133,7 +143,7 @@ export const fetchRelatedPosts = async (currentPostId: string, categoryId?: stri
     const posts = snapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() } as BlogPost))
         .filter(p => p.id !== currentPostId)
-        .slice(0, 3); 
+        .slice(0, 3); // Take top 3
     
     return posts;
   } catch (e) {
@@ -142,28 +152,42 @@ export const fetchRelatedPosts = async (currentPostId: string, categoryId?: stri
   }
 };
 
-export const createBlogPost = async (data: any) => {
+export const createBlogPost = async (data: Omit<BlogPost, 'id'>) => {
   if (!db) return;
-  const postData = {
-    ...data,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  await addDoc(collection(db, BLOG_POSTS_COL), postData);
+  try {
+    await addDoc(collection(db, BLOG_POSTS_COL), {
+        ...data,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error("Error creating blog post:", error);
+    throw error;
+  }
 };
 
 export const updateBlogPost = async (id: string, updates: Partial<BlogPost>) => {
   if (!db) return;
-  const updateData = {
-    ...updates,
-    updatedAt: new Date().toISOString(),
-  };
-  await updateDoc(doc(db, BLOG_POSTS_COL, id), updateData);
+  try {
+    const docRef = doc(db, BLOG_POSTS_COL, id);
+    await updateDoc(docRef, {
+        ...updates,
+        updatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error("Error updating blog post:", error);
+    throw error;
+  }
 };
 
 export const deleteBlogPost = async (id: string) => {
   if (!db) return;
-  await deleteDoc(doc(db, BLOG_POSTS_COL, id));
+  try {
+    await deleteDoc(doc(db, BLOG_POSTS_COL, id));
+  } catch (error) {
+    console.error("Error deleting blog post:", error);
+    throw error;
+  }
 };
 
 // --- COMMENTS ---

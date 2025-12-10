@@ -29,7 +29,6 @@ import { GameManagement } from './pages/admin/GameManagement';
 import { GameDetail } from './pages/admin/GameDetail';
 import { ReportManagement } from './pages/admin/ReportManagement';
 import { AdSettings } from './pages/admin/AdSettings';
-import { BlogAdmin } from './pages/admin/BlogAdmin';
 
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { AuthModal } from './components/AuthModal';
@@ -203,7 +202,6 @@ export default function App() {
             <Route path="users" element={<UserManagement />} />
             <Route path="experts" element={<ExpertApprovals />} />
             <Route path="questions" element={<QuestionManagement />} />
-            <Route path="blog" element={<BlogAdmin />} />
             <Route path="games" element={<GameManagement />} />
             <Route path="games/:gameId" element={<GameDetail />} />
             <Route path="reports" element={<ReportManagement />} />

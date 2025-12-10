@@ -199,7 +199,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
                 </div>
             </div>
 
-            {/* EXPERT BLOGS BLOCK */}
+            {/* EXPERT BLOGS BLOCK - Added Here */}
             {blogPosts.length > 0 && (
                 <div className="space-y-3">
                     <div className="flex justify-between items-center px-1">
@@ -231,7 +231,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
       )}
 
       {!searchQuery && (
-        <div className="pl-4 md:px-0 mt-6">
+        <div className="pl-4 md:px-0">
             <div className="flex items-center gap-1 mb-2">
                 <Sparkles size={14} className="text-accent" fill="currentColor" />
                 <span className="text-xs font-bold text-textGray uppercase tracking-wider">Chủ đề</span>

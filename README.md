@@ -139,7 +139,7 @@ service cloud.firestore {
     // --- BLOG MODULE ---
     match /blogCategories/{docId} {
         allow read: if true;
-        allow write: if isAdmin();
+        allow create, update, delete: if isAdmin();
     }
 
     match /blogPosts/{docId} {
