@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Document, DocumentCategory } from '../types';
 import { fetchDocuments, fetchDocumentCategories } from '../services/documents';
-import { FileText, Download, Star, Filter, Loader2, Search } from 'lucide-react';
+import { FileText, Download, Star, Filter, Loader2, Search, Link as LinkIcon } from 'lucide-react';
 
 export const DocumentList: React.FC = () => {
   const [categories, setCategories] = useState<DocumentCategory[]>([]);
@@ -77,8 +77,8 @@ export const DocumentList: React.FC = () => {
                <div className="grid md:grid-cols-2 gap-4">
                    {filteredDocs.map(doc => (
                        <Link to={`/documents/${doc.slug}`} key={doc.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all flex gap-4 items-start group">
-                           <div className="w-16 h-16 bg-green-50 rounded-xl flex items-center justify-center text-3xl shrink-0 group-hover:scale-105 transition-transform">
-                               {doc.fileType === 'pdf' ? '📕' : doc.fileType === 'docx' ? '📝' : '📄'}
+                           <div className={`w-16 h-16 rounded-xl flex items-center justify-center text-3xl shrink-0 group-hover:scale-105 transition-transform ${doc.isExternal ? 'bg-blue-50 text-blue-500' : 'bg-green-50'}`}>
+                               {doc.isExternal ? <LinkIcon /> : (doc.fileType === 'pdf' ? '📕' : doc.fileType === 'docx' ? '📝' : '📄')}
                            </div>
                            <div className="flex-1 min-w-0">
                                <h3 className="font-bold text-gray-900 line-clamp-1 mb-1 group-hover:text-green-700 transition-colors">{doc.title}</h3>
