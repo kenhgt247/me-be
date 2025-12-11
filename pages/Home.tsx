@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 // @ts-ignore
-import { Link, useNavigate } from 'react-router-dom';
-import { Search, MessageCircle, Heart, ChevronDown, ChevronUp, HelpCircle, Clock, Flame, MessageSquareOff, ShieldCheck, ChevronRight, Sparkles, X, Filter, User as UserIcon, CornerDownRight, BookOpen, FileText, Download } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom'; // Thêm useNavigate
+import { Search, MessageCircle, Heart, HelpCircle, Clock, Flame, MessageSquareOff, ShieldCheck, ChevronRight, Sparkles, X, User as UserIcon, CornerDownRight, BookOpen, FileText, Download } from 'lucide-react';
 import { Question, User, toSlug, BlogPost, Document } from '../types';
 import { AdBanner } from '../components/AdBanner';
 import { subscribeToAdConfig } from '../services/ads';
@@ -15,9 +15,8 @@ interface HomeProps {
 
 const PAGE_SIZE = 20;
 
-// --- 1. HÀM LẤY LINK CHUẨN (Ưu tiên Username) ---
+// --- 1. HÀM TẠO LINK PROFILE CHUẨN (Ưu tiên Username) ---
 const getProfileLink = (user: User) => {
-    // Nếu có username thì dùng /profile/username, không thì dùng /profile/id
     return `/profile/${user.username || user.id}`;
 };
 
@@ -73,7 +72,7 @@ const FBImageGrid: React.FC<{ images: string[] }> = ({ images }) => {
 };
 
 export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
-  const navigate = useNavigate(); // Thêm hook navigate
+  const navigate = useNavigate(); // Hook chuyển trang
   const [activeCategory, setActiveCategory] = useState<string>('Tất cả');
   const [viewFilter, setViewFilter] = useState<'newest' | 'active' | 'unanswered'>('newest');
   const [searchQuery, setSearchQuery] = useState('');
@@ -154,11 +153,11 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
 
   const paginatedQuestions = displayQuestions.slice(0, visibleCount);
 
-  // --- HÀM XỬ LÝ CLICK AVATAR (Tránh xung đột link bài viết) ---
+  // --- 2. HÀM XỬ LÝ CLICK VÀO USER TRONG FEED ---
   const handleUserClick = (e: React.MouseEvent, user: User) => {
-      e.preventDefault(); 
-      e.stopPropagation();
-      navigate(getProfileLink(user));
+      e.preventDefault(); // Ngăn mở bài viết
+      e.stopPropagation(); // Ngăn sự kiện nổi bọt
+      navigate(getProfileLink(user)); // Chuyển hướng sang trang cá nhân (Link đẹp)
   };
 
   return (
@@ -186,7 +185,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
         </div>
       </div>
 
-      {/* --- KẾT QUẢ TÌM KIẾM NGƯỜI DÙNG (ĐÃ SỬA LINK) --- */}
+      {/* --- 3. KẾT QUẢ TÌM KIẾM NGƯỜI DÙNG (DÙNG LINK ĐẸP) --- */}
       {searchQuery && matchingUsers.length > 0 && (
         <div className="pl-4 md:px-0 animate-slide-up">
            <div className="flex items-center gap-1 mb-2">
@@ -195,7 +194,6 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
            </div>
            <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 pr-4 snap-x">
               {matchingUsers.map(user => (
-                  // SỬA: Dùng getProfileLink để tạo link đẹp
                   <Link to={getProfileLink(user)} key={user.id} className="snap-start flex-shrink-0 bg-white p-3 pr-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-3 min-w-[160px] active:scale-95 transition-transform">
                       <div className="relative">
                         <img src={user.avatar} className="w-10 h-10 rounded-full object-cover border border-gray-100" />
@@ -213,6 +211,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
 
       {!searchQuery && (
         <div className="px-4 md:px-0 space-y-4">
+            {/* EXPERT PROMO */}
             <div className="bg-gradient-to-br from-primary to-[#26A69A] rounded-3xl p-6 text-white shadow-xl shadow-primary/20 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
                 <div className="relative z-10 flex justify-between items-center">
@@ -223,10 +222,13 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
                             Đăng ký ngay <ChevronRight size={14} />
                         </Link>
                     </div>
-                    <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center text-3xl shadow-inner border border-white/10">👨‍⚕️</div>
+                    <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center text-3xl shadow-inner border border-white/10">
+                        👨‍⚕️
+                    </div>
                 </div>
             </div>
 
+            {/* EXPERT BLOGS BLOCK */}
             {blogPosts.length > 0 && (
                 <div className="space-y-3 pt-2">
                     <div className="flex justify-between items-center px-1">
@@ -236,6 +238,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
                         </div>
                         <Link to="/blog" className="text-xs font-bold text-blue-500 hover:underline">Xem tất cả</Link>
                     </div>
+                    
                     <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 pr-4 snap-x -mx-4 px-4 md:mx-0 md:px-0">
                         {blogPosts.map(post => (
                             <Link to={`/blog/${post.slug}`} key={post.id} className="snap-start flex-shrink-0 w-64 bg-white rounded-2xl p-3 border border-gray-100 shadow-sm hover:shadow-md transition-all active:scale-95 flex flex-col">
@@ -258,6 +261,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
                 </div>
             )}
 
+            {/* DOCUMENTS BLOCK */}
             {documents.length > 0 && (
                 <div className="space-y-3 pt-2">
                     <div className="flex justify-between items-center px-1">
@@ -267,6 +271,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
                         </div>
                         <Link to="/documents" className="text-xs font-bold text-green-500 hover:underline">Xem tất cả</Link>
                     </div>
+                    
                     <div className="space-y-3">
                         {documents.length > 0 && (
                             <>
@@ -355,23 +360,34 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
                         <AdBanner className="mx-4 md:mx-0" debugLabel={`Feed Ad #${index}`} />
                     )}
                     
+                    {/* LINK BAO BỌC THẺ BÀI VIẾT */}
                     <Link to={`/question/${toSlug(q.title, q.id)}`} className="block group">
                     <div className="bg-white p-5 rounded-[1.5rem] shadow-[0_2px_15px_rgba(0,0,0,0.03)] border border-gray-100 active:scale-[0.98] transition-all relative overflow-hidden">
                         {q.answers.length === 0 && <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-orange-100 to-transparent rounded-bl-full -mr-8 -mt-8"></div>}
                         <div className="flex items-start justify-between mb-3 relative z-10">
-                        {/* --- SỬA AVATAR TRONG FEED: THÊM SỰ KIỆN CLICK --- */}
+                        
+                        {/* --- 4. AVATAR & TÊN NGƯỜI DÙNG CÓ LINK RIÊNG --- */}
                         <div className="flex items-center gap-2">
-                            <div onClick={(e) => handleUserClick(e, q.author)} className="cursor-pointer hover:opacity-80 transition-opacity">
+                            {/* Bấm vào ảnh -> Về trang cá nhân */}
+                            <div 
+                                onClick={(e) => handleUserClick(e, q.author)}
+                                className="cursor-pointer hover:opacity-80 transition-opacity"
+                            >
                                 <img src={q.author.avatar} className="w-8 h-8 rounded-full border border-gray-100 object-cover" />
                             </div>
                             <div>
-                                <div onClick={(e) => handleUserClick(e, q.author)} className="text-xs font-bold text-textDark flex items-center gap-1 cursor-pointer hover:text-primary transition-colors">
+                                {/* Bấm vào tên -> Về trang cá nhân */}
+                                <div 
+                                    onClick={(e) => handleUserClick(e, q.author)}
+                                    className="text-xs font-bold text-textDark flex items-center gap-1 cursor-pointer hover:text-primary transition-colors"
+                                >
                                     {q.author.name}
                                     {q.author.isExpert && <ShieldCheck size={10} className="text-blue-500" />}
                                 </div>
                                 <p className="text-[10px] text-gray-400">{new Date(q.createdAt).toLocaleDateString('vi-VN')}</p>
                             </div>
                         </div>
+                        
                         <span className="bg-gray-50 text-textGray text-[10px] font-bold px-2 py-1 rounded-lg border border-gray-100">{q.category}</span>
                         </div>
                         <h3 className="text-[16px] font-bold text-textDark mb-2 leading-snug line-clamp-2">{q.title}</h3>
