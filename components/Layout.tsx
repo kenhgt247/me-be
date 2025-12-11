@@ -221,7 +221,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                   <li><Link to="/terms" className="hover:text-primary transition-colors">Điều khoản sử dụng</Link></li>
                   <li><Link to="/privacy" className="hover:text-primary transition-colors">Chính sách bảo mật</Link></li>
                   <li><Link to="/contact" className="hover:text-primary transition-colors">Liên hệ báo cáo</Link></li>
-                  <li><a href="#" className="hover:text-primary transition-colors">Câu hỏi thường gặp</a></li>
+                  <li><a href="/faq" className="hover:text-primary transition-colors">Câu hỏi thường gặp</a></li>
                 </ul>
               </div>
 
