@@ -40,15 +40,14 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
   // --- 1. XỬ LÝ KHI VÀO TRANG TRỐNG (/profile) ---
   useEffect(() => {
     if (!userId && user && !user.isGuest) {
-        // Ưu tiên dùng username nếu có, không thì dùng ID
         const slug = user.username || user.id;
         navigate(`/profile/${slug}`, { replace: true });
     } else if (!userId && user?.isGuest) {
-        setLoadingProfile(false); // Dừng loading để hiện Guest View
+        setLoadingProfile(false);
     }
   }, [userId, user, navigate]);
 
-  // --- 2. TẢI DỮ LIỆU PROFILE (QUAN TRỌNG) ---
+  // --- 2. TẢI DỮ LIỆU PROFILE ---
   useEffect(() => {
     if (!userId) return;
     
@@ -58,14 +57,12 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
         setLoadingProfile(true);
         let foundId = '';
 
-        // A. Thử tìm theo ID (nếu chuỗi dài > 20 ký tự giống ID Firebase)
         if (userId.length > 20) { 
             const docRef = doc(db, 'users', userId);
             const docSnap = await getDoc(docRef);
             if (docSnap.exists()) foundId = docSnap.id;
         }
 
-        // B. Nếu chưa thấy, tìm theo Username (Custom ID)
         if (!foundId) {
             const q = query(
                 collection(db, 'users'), 
@@ -76,7 +73,6 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
             if (!querySnap.empty) foundId = querySnap.docs[0].id;
         }
 
-        // C. Lắng nghe dữ liệu Realtime
         if (foundId) {
             unsubscribe = onSnapshot(doc(db, 'users', foundId), (docSnap) => {
                 if (docSnap.exists()) {
@@ -99,16 +95,14 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
 
   const isViewingSelf = user && profileData && user.id === profileData.id;
 
-  // --- 3. [MỚI] TỰ ĐỘNG ÉP CHUYỂN LINK ID -> LINK USERNAME ---
+  // --- 3. AUTO REDIRECT ID → USERNAME ---
   useEffect(() => {
-    // Logic: Nếu đang xem chính mình + Có username + URL hiện tại KHÔNG PHẢI là username
     if (isViewingSelf && profileData?.username && userId !== profileData.username) {
-        // Chuyển hướng ngay lập tức sang link đẹp
         navigate(`/profile/${profileData.username}`, { replace: true });
     }
   }, [profileData, isViewingSelf, userId, navigate]);
 
-  // --- 4. LẮNG NGHE TRẠNG THÁI THEO DÕI ---
+  // --- 4. LẮNG NGHE FOLLOW ---
   useEffect(() => {
     if (user && !user.isGuest && profileData && user.id !== profileData.id) {
         const unsub = onSnapshot(doc(db, 'users', user.id), (docSnap) => {
@@ -131,7 +125,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
         if (isFollowing) await unfollowUser(user.id, profileData.id);
         else {
             await followUser(user.id, profileData);
-            await sendNotification(profileData.id, user, 'FOLLOW', 'đã theo dõi bạn.', `/profile/${user.id}`);
+            await sendNotification(profileData.id, user, 'FOLLOW', 'đã theo dõi bạn.', `/profile/${user.username || user.id}`);
         }
     } catch (e) { alert("Lỗi kết nối."); }
   };
@@ -172,12 +166,11 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
         let finalUsername = editForm.username.trim().toLowerCase(); 
         
         if (finalUsername && !/^[a-z0-9._]+$/.test(finalUsername)) {
-            alert("Tên định danh không hợp lệ (chỉ dùng chữ thường, số, dấu chấm, gạch dưới)");
+            alert("Tên định danh không hợp lệ");
             setIsSaving(false);
             return;
         }
 
-        // Check trùng username
         if (finalUsername && finalUsername !== profileData.username) {
             const q = query(collection(db, 'users'), where('username', '==', finalUsername));
             const snapshot = await getDocs(q);
@@ -197,7 +190,6 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
         });
         
         setShowEditModal(false);
-        // Lưu xong thì logic ở useEffect số 3 sẽ tự động chuyển hướng URL nếu cần
     } catch (error) {
         alert("Lỗi khi lưu hồ sơ.");
     } finally {
@@ -210,9 +202,10 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
     else { onLogout(); navigate('/'); }
   };
 
+  // ✅ SỬA DUY NHẤT 1 DÒNG TẠI ĐÂY — ƯU TIÊN USERNAME
   const handleMessage = () => {
       if (user.isGuest) return onOpenAuth();
-      if (profileData) navigate(`/messages/${profileData.id}`);
+      if (profileData) navigate(`/messages/${profileData.username || profileData.id}`);
   };
 
   // --- GUEST VIEW ---
