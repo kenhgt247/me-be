@@ -271,7 +271,7 @@ export default function App() {
         <Route path="/terms" element={<Layout><Terms /></Layout>} />
         <Route path="/privacy" element={<Layout><Privacy /></Layout>} />
         <Route path="/contact" element={<Layout><Contact /></Layout>} />
-        
+        <Route path="/faq" element={<Layout><Contact /></Layout>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
