@@ -37,24 +37,29 @@ export const deleteDocumentCategory = async (id: string) => {
   await deleteDoc(doc(db, DOC_CATS_COL, id));
 };
 
-// --- DOCUMENTS ---
+// --- DOCUMENTS (Đã sửa logic lấy mới nhất) ---
 export const fetchDocuments = async (categoryId?: string, limitCount = 20): Promise<Document[]> => {
   if (!db) return [];
   try {
     let q;
     if (categoryId && categoryId !== 'all') {
+        // Lọc theo danh mục + Sắp xếp mới nhất
         q = query(
             collection(db, DOCS_COL),
             where('categoryId', '==', categoryId),
+            orderBy('createdAt', 'desc'), // <--- QUAN TRỌNG: Mới nhất lên đầu
             limit(limitCount)
         );
     } else {
-        q = query(collection(db, DOCS_COL), limit(limitCount));
+        // Lấy tất cả + Sắp xếp mới nhất
+        q = query(
+            collection(db, DOCS_COL),
+            orderBy('createdAt', 'desc'), // <--- QUAN TRỌNG
+            limit(limitCount)
+        );
     }
     const snapshot = await getDocs(q);
-    const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Document));
-    // Client-side sort to avoid index issues
-    return docs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Document));
   } catch (e) {
     console.error("Error fetching documents", e);
     return [];
@@ -65,16 +70,20 @@ export const fetchAllDocumentsAdmin = async (authorId?: string): Promise<Documen
     if (!db) return [];
     try {
       let q;
-      // If authorId is provided (e.g. for Expert), filter by it.
-      // If not provided (e.g. for Admin seeing all), fetch all.
       if (authorId) {
-        q = query(collection(db, DOCS_COL), where('authorId', '==', authorId));
+        q = query(
+            collection(db, DOCS_COL), 
+            where('authorId', '==', authorId),
+            orderBy('createdAt', 'desc')
+        );
       } else {
-        q = query(collection(db, DOCS_COL));
+        q = query(
+            collection(db, DOCS_COL),
+            orderBy('createdAt', 'desc')
+        );
       }
       const snapshot = await getDocs(q);
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Document));
-      return docs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Document));
     } catch (e) {
       console.error("Error fetching admin documents", e);
       return [];
@@ -88,6 +97,7 @@ export const fetchDocumentBySlug = async (slug: string): Promise<Document | null
         const snapshot = await getDocs(q);
         if (!snapshot.empty) {
             const docData = snapshot.docs[0];
+            // Tăng view (không cần await để mượt UI)
             updateDoc(docData.ref, { views: increment(1) }).catch(()=>{});
             return { id: docData.id, ...docData.data() } as Document;
         }
@@ -132,10 +142,13 @@ export const incrementDownload = async (id: string) => {
 export const fetchDocumentReviews = async (docId: string): Promise<DocumentReview[]> => {
     if (!db) return [];
     try {
-        const q = query(collection(db, DOC_REVIEWS_COL), where('documentId', '==', docId));
+        const q = query(
+            collection(db, DOC_REVIEWS_COL), 
+            where('documentId', '==', docId),
+            orderBy('createdAt', 'desc') // Sắp xếp review mới nhất lên đầu
+        );
         const snapshot = await getDocs(q);
-        const reviews = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as DocumentReview));
-        return reviews.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DocumentReview));
     } catch (e) {
         return [];
     }
@@ -155,7 +168,7 @@ export const addDocumentReview = async (user: User, docId: string, rating: numbe
         createdAt: new Date().toISOString()
     });
 
-    // Update document average
+    // Update document average rating
     const newCount = currentCount + 1;
     const newRating = ((currentRating * currentCount) + rating) / newCount;
 
