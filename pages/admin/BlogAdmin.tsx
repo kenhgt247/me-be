@@ -7,7 +7,8 @@ import {
 } from '../../services/blog';
 import { generateBlogPost, generateBlogTitle } from '../../services/gemini';
 import { subscribeToAuthChanges } from '../../services/auth';
-import { Plus, Trash2, Edit2, X, Image as ImageIcon, Video, Link as LinkIcon, BookOpen, Layers, Sparkles, Loader2, RefreshCw, FileText, CheckCircle, AlertCircle } from 'lucide-react';
+// ĐÃ SỬA: Thêm "Eye" vào dòng import dưới đây
+import { Plus, Trash2, Edit2, X, Image as ImageIcon, Video, Link as LinkIcon, BookOpen, Layers, Sparkles, Loader2, RefreshCw, FileText, CheckCircle, AlertCircle, Eye } from 'lucide-react';
 
 export const BlogAdmin: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -213,7 +214,6 @@ export const BlogAdmin: React.FC = () => {
       await createBlogPost(postData);
     }
     setShowPostModal(false);
-    // Reload data với đúng user hiện tại
     loadData(currentUser);
   };
 
@@ -336,7 +336,6 @@ export const BlogAdmin: React.FC = () => {
                                           {categories.find(c => c.id === post.categoryId)?.name || 'Chưa phân loại'}
                                       </span>
                                       <span>{new Date(post.createdAt).toLocaleDateString('vi-VN')}</span>
-                                      {/* Hiển thị lượt xem cho chuyên gia thấy hiệu quả */}
                                       <span className="flex items-center gap-1 text-gray-500"><Eye size={10}/> {post.views || 0} lượt xem</span>
                                   </div>
                               </div>
