@@ -3,8 +3,11 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Document, DocumentCategory, User } from '../types';
 import { fetchDocuments, fetchDocumentCategories } from '../services/documents';
-import { FileText, Download, Star, Filter, Loader2, Search, Link as LinkIcon, UploadCloud } from 'lucide-react';
+import { FileText, Download, Star, Filter, Loader2, Search, Link as LinkIcon, UploadCloud, ArrowDown } from 'lucide-react';
 import { subscribeToAuthChanges } from '../services/auth';
+
+// Số lượng tài liệu hiển thị mỗi lần tải
+const PAGE_SIZE = 9;
 
 export const DocumentList: React.FC = () => {
   const [categories, setCategories] = useState<DocumentCategory[]>([]);
@@ -12,6 +15,10 @@ export const DocumentList: React.FC = () => {
   const [activeCat, setActiveCat] = useState('all');
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // State quản lý số lượng hiển thị
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const navigate = useNavigate();
 
@@ -24,7 +31,8 @@ export const DocumentList: React.FC = () => {
         setLoading(true);
         const [cData, dData] = await Promise.all([
             fetchDocumentCategories(),
-            fetchDocuments()
+            // Lấy 100 tài liệu ban đầu để có dữ liệu phân trang
+            fetchDocuments('all', 100) 
         ]);
         setCategories(cData);
         setDocs(dData);
@@ -38,12 +46,24 @@ export const DocumentList: React.FC = () => {
   const handleFilter = async (catId: string) => {
       setActiveCat(catId);
       setLoading(true);
-      const data = await fetchDocuments(catId);
+      // Reset về trang đầu khi đổi danh mục
+      setVisibleCount(PAGE_SIZE);
+      
+      const data = await fetchDocuments(catId, 100);
       setDocs(data);
       setLoading(false);
   };
 
+  const handleLoadMore = () => {
+      setVisibleCount(prev => prev + PAGE_SIZE);
+  };
+
+  // Lọc theo từ khóa tìm kiếm trước
   const filteredDocs = docs.filter(d => d.title.toLowerCase().includes(searchTerm.toLowerCase()));
+  
+  // Sau đó cắt danh sách để hiển thị theo phân trang
+  const visibleDocs = filteredDocs.slice(0, visibleCount);
+
   const canShare = currentUser && (currentUser.isAdmin || currentUser.isExpert);
 
   return (
@@ -75,15 +95,15 @@ export const DocumentList: React.FC = () => {
              <div className="relative mb-4">
                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                  <input 
-                    value={searchTerm} 
-                    onChange={e => setSearchTerm(e.target.value)} 
-                    placeholder="Tìm tài liệu..." 
-                    className="w-full pl-10 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-green-100 transition-all"
+                   value={searchTerm} 
+                   onChange={e => setSearchTerm(e.target.value)} 
+                   placeholder="Tìm tài liệu..." 
+                   className="w-full pl-10 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-green-100 transition-all"
                  />
              </div>
 
              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-                 <button onClick={() => handleFilter('all')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all ${activeCat === 'all' ? 'bg-green-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                 <button onClick={() => handleFilter('all')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all ${activeCat === 'all' ? 'bg-green-600 text-white shadow-md' : 'bg-gray-100 text-textGray hover:bg-gray-200'}`}>
                      Tất cả
                  </button>
                  {categories.map(cat => (
@@ -101,24 +121,39 @@ export const DocumentList: React.FC = () => {
            ) : filteredDocs.length === 0 ? (
                <div className="text-center py-20 text-gray-400 italic">Chưa có tài liệu nào phù hợp.</div>
            ) : (
-               <div className="grid md:grid-cols-2 gap-4">
-                   {filteredDocs.map(doc => (
-                       <Link to={`/documents/${doc.slug}`} key={doc.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all flex gap-4 items-start group active:scale-[0.98]">
-                           <div className={`w-16 h-16 rounded-xl flex items-center justify-center text-3xl shrink-0 group-hover:scale-105 transition-transform ${doc.isExternal ? 'bg-blue-50 text-blue-500' : 'bg-green-50'}`}>
-                               {doc.isExternal ? <LinkIcon /> : (doc.fileType === 'pdf' ? '📕' : doc.fileType === 'docx' ? '📝' : '📄')}
-                           </div>
-                           <div className="flex-1 min-w-0">
-                               <h3 className="font-bold text-gray-900 line-clamp-1 mb-1 group-hover:text-green-700 transition-colors">{doc.title}</h3>
-                               <p className="text-xs text-gray-500 line-clamp-2 mb-2">{doc.description}</p>
-                               <div className="flex items-center gap-4 text-xs text-gray-400 font-medium">
-                                   <span className="flex items-center gap-1"><Download size={12}/> {doc.downloads}</span>
-                                   <span className="flex items-center gap-1"><Star size={12} className="text-yellow-400 fill-yellow-400"/> {doc.rating.toFixed(1)}</span>
-                                   <span className="truncate max-w-[100px]">{doc.authorName}</span>
+               <>
+                   <div className="grid md:grid-cols-2 gap-4">
+                       {visibleDocs.map(doc => (
+                           <Link to={`/documents/${doc.slug}`} key={doc.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all flex gap-4 items-start group active:scale-[0.98]">
+                               <div className={`w-16 h-16 rounded-xl flex items-center justify-center text-3xl shrink-0 group-hover:scale-105 transition-transform ${doc.isExternal ? 'bg-blue-50 text-blue-500' : 'bg-green-50'}`}>
+                                   {doc.isExternal ? <LinkIcon /> : (doc.fileType === 'pdf' ? '📕' : doc.fileType === 'docx' ? '📝' : '📄')}
                                </div>
-                           </div>
-                       </Link>
-                   ))}
-               </div>
+                               <div className="flex-1 min-w-0">
+                                   <h3 className="font-bold text-gray-900 line-clamp-1 mb-1 group-hover:text-green-700 transition-colors">{doc.title}</h3>
+                                   <p className="text-xs text-gray-500 line-clamp-2 mb-2">{doc.description}</p>
+                                   <div className="flex items-center gap-4 text-xs text-gray-400 font-medium">
+                                       <span className="flex items-center gap-1"><Download size={12}/> {doc.downloads}</span>
+                                       <span className="flex items-center gap-1"><Star size={12} className="text-yellow-400 fill-yellow-400"/> {doc.rating.toFixed(1)}</span>
+                                       <span className="truncate max-w-[100px]">{doc.authorName}</span>
+                                   </div>
+                               </div>
+                               <div className="p-2 text-gray-300 group-hover:text-green-600 transition-colors"><ChevronRight size={18} /></div>
+                           </Link>
+                       ))}
+                   </div>
+
+                   {/* NÚT XEM THÊM (LOAD MORE) */}
+                   {visibleCount < filteredDocs.length && (
+                       <div className="flex justify-center mt-8">
+                           <button
+                               onClick={handleLoadMore}
+                               className="px-6 py-3 rounded-full bg-white border border-gray-200 text-sm font-bold text-textDark shadow-sm hover:bg-gray-50 active:scale-95 transition-all flex items-center gap-2"
+                           >
+                               Xem thêm tài liệu <ArrowDown size={16} />
+                           </button>
+                       </div>
+                   )}
+               </>
            )}
        </div>
     </div>
