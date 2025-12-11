@@ -1,21 +1,29 @@
 import React, { useEffect, useState } from 'react';
 // @ts-ignore
 import { useParams, useNavigate, Link } from 'react-router-dom';
-// Sửa lỗi: Đã thêm import các kiểu dữ liệu cần thiết: BlogPost, BlogComment
-import { BlogPost, BlogComment, User } from '../types'; 
-// Giả định hàm service đã được sửa: fetchBlogComments(postId: string, lastCommentId?: string)
-import { fetchPostBySlug, fetchRelatedPosts, fetchBlogComments, addBlogComment } from '../services/blog'; 
+// ĐÃ SỬA: Đã thêm import các kiểu dữ liệu cần thiết: BlogPost, BlogComment, BlogCategory
+import { BlogPost, BlogComment, User, BlogCategory } from '../types'; 
+import { fetchPostBySlug, fetchRelatedPosts, fetchBlogComments, addBlogComment, fetchBlogCategories } from '../services/blog'; 
 import { loginAnonymously } from '../services/auth';
-import { Loader2, ArrowLeft, Calendar, Share2, MessageCircle, Send, ExternalLink, ShieldCheck } from 'lucide-react';
+// ĐÃ THÊM: Search, X
+import { Loader2, ArrowLeft, Calendar, Share2, MessageCircle, Send, ExternalLink, ShieldCheck, Search, X } from 'lucide-react'; 
 import { AuthModal } from '../components/AuthModal';
 import { ShareModal } from '../components/ShareModal';
 
+// --- HẰM PHỤ (ĐÃ DI CHUYỂN VỊ TRÍ ĐỂ TRÁNH LỖI ROLLUP) ---
+const getYoutubeId = (url: string) => {
+	const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+	const match = url.match(regExp);
+	// Trả về ID hoặc null nếu không khớp
+	return (match && match[2].length === 11) ? match[2] : null;
+};
+
 // --- HẰNG SỐ PHÂN TRANG ---
-const PAGE_SIZE = 5; // Số lượng bình luận hiển thị ban đầu và mỗi lần tải thêm
+const PAGE_SIZE = 5; 
 
 // Khai báo lại interface BlogComment để sử dụng an toàn
 interface BlogCommentWithUI extends BlogComment {
-    // Không cần thêm isExpanded nếu không dùng tính năng "Xem thêm/Thu gọn"
+    // isExpanded?: boolean; 
 }
 
 export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }> = ({ currentUser, onOpenAuth }) => {
@@ -26,9 +34,14 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
 	const [comments, setComments] = useState<BlogCommentWithUI[]>([]);
 	const [loading, setLoading] = useState(true);
 	
-	// --- STATE MỚI CHO PHÂN TRANG ---
-	const [hasMore, setHasMore] = useState(false); // Còn bình luận để tải không?
-	const [isFetchingMore, setIsFetchingMore] = useState(false); // Đang tải thêm không?
+    // --- STATE ĐỂ HIỂN THỊ KHỐI TÌM KIẾM/DANH MỤC ---
+	const [categories, setCategories] = useState<BlogCategory[]>([]);
+	const [activeCat, setActiveCat] = useState<string>('all');
+	const [searchTerm, setSearchTerm] = useState('');
+	
+	// --- STATE PHÂN TRANG BÌNH LUẬN ---
+	const [hasMore, setHasMore] = useState(false); 
+	const [isFetchingMore, setIsFetchingMore] = useState(false); 
 
 	const [commentContent, setCommentContent] = useState('');
 	const [submittingComment, setSubmittingComment] = useState(false);
@@ -38,23 +51,25 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
 		if (slug) loadData(slug);
 	}, [slug]);
 
-	// --- HÀM TẢI DỮ LIỆU BAN ĐẦU (TẢI 5 BÌNH LUẬN ĐẦU TIÊN) ---
+	// --- HÀM TẢI DỮ LIỆU BAN ĐẦU (ĐÃ THÊM CATEGORIES) ---
 	const loadData = async (slug: string) => {
 		setLoading(true);
 		try {
-			const postData = await fetchPostBySlug(slug);
+			// Tải bài viết và danh mục cùng lúc
+			const [postData, catsData] = await Promise.all([
+				fetchPostBySlug(slug),
+				fetchBlogCategories() 
+			]);
+			
 			if (postData) {
-				
 				const related = await fetchRelatedPosts(postData.id, postData.categoryId);
-				
-				// Tải 5 bình luận đầu tiên
 				const initialComments = await fetchBlogComments(postData.id); 
 
 				setPost(postData);
 				setRelatedPosts(related);
 				setComments(initialComments as BlogCommentWithUI[]);
+				setCategories(catsData); // Cập nhật danh mục
 				
-				// Kiểm tra còn bình luận để tải nữa không
 				setHasMore(initialComments.length === PAGE_SIZE); 
 			}
 		} catch (error) {
@@ -63,21 +78,27 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
 		setLoading(false);
 	};
     
-	// --- HÀM TẢI THÊM BÌNH LUẬN ---
+	// --- HÀM XỬ LÝ CHUYỂN HƯỚNG KHI NHẤN DANH MỤC TRONG HEADER ---
+	const handleCategoryClick = (catId: string) => {
+		setActiveCat(catId);
+		// Chuyển hướng người dùng về trang Blog List chính với filter được chọn
+		// Sử dụng ?category= để trang BlogList xử lý lọc (logic này đã có trong BlogList)
+		navigate(`/blog?category=${catId}`); 
+	};
+	
+	// --- HÀM TẢI THÊM BÌNH LUẬN (GIỮ NGUYÊN LOGIC PHÂN TRANG) ---
 	const handleLoadMore = async () => {
 		if (!post || isFetchingMore || !hasMore) return;
 
 		setIsFetchingMore(true);
-		const lastComment = comments[comments.length - 1]; // Lấy bình luận cuối cùng đã có
+		const lastComment = comments[comments.length - 1]; 
 		
 		try {
-			// Sửa lỗi tiềm ẩn: Phải đảm bảo lastComment.id tồn tại trước khi dùng startAfter
             if (!lastComment || !lastComment.id) {
                 setHasMore(false);
                 return;
             }
             
-			// Tải 5 bình luận tiếp theo, bắt đầu sau bình luận cuối cùng
 			const nextComments = await fetchBlogComments(post.id, lastComment.id); 
 
 			setComments(prev => [
@@ -85,7 +106,6 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
 				...(nextComments as BlogCommentWithUI[])
 			]);
 
-			// Nếu số lượng tải được < PAGE_SIZE (5), tức là hết
 			setHasMore(nextComments.length === PAGE_SIZE); 
 		} catch (error) {
 			console.error("Lỗi khi tải thêm bình luận:", error);
@@ -96,7 +116,7 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
 	};
 
 
-	// --- HÀM GỬI BÌNH LUẬN (TẢI LẠI TRANG 1 VÀ RESET PHÂN TRANG) ---
+	// --- HÀM GỬI BÌNH LUẬN (GIỮ NGUYÊN LOGIC) ---
 	const handleSendComment = async () => {
 		if (!commentContent.trim() || !post) return;
 		
@@ -113,10 +133,9 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
 		setSubmittingComment(true);
 		await addBlogComment(user, post.id, commentContent);
 		
-		// Tải lại 5 bình luận đầu tiên (reset về trang 1)
 		const initialComments = await fetchBlogComments(post.id);
 		setComments(initialComments as BlogCommentWithUI[]);
-		setHasMore(initialComments.length === PAGE_SIZE); // Đặt lại trạng thái "còn nữa"
+		setHasMore(initialComments.length === PAGE_SIZE); 
 		
 		setCommentContent('');
 		setSubmittingComment(false);
@@ -138,6 +157,56 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
 					<Share2 size={20} />
 				</button>
 			</div>
+
+			{/* === KHỐI TÌM KIẾM & DANH MỤC (ĐÃ CHUYỂN VÀO VỊ TRÍ MỚI) === */}
+			<div className="px-4 py-6 bg-white border-b border-gray-100 shadow-sm z-20">
+				<div className="max-w-3xl mx-auto">
+					{/* Thanh Tìm kiếm (Sử dụng onKeyDown để chuyển hướng tìm kiếm) */}
+					<div className="relative mb-4">
+						<Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+						<input 
+							value={searchTerm} 
+							onChange={e => setSearchTerm(e.target.value)} 
+							placeholder="Tìm kiếm bài viết..." 
+							onKeyDown={(e) => { 
+								if (e.key === 'Enter' && searchTerm) {
+									navigate(`/blog?search=${searchTerm}`); 
+								}
+							}}
+							className="w-full pl-10 pr-10 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+						/>
+						{searchTerm && (
+							<button 
+								onClick={() => setSearchTerm('')}
+								className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+							>
+								<X size={16} />
+							</button>
+						)}
+					</div>
+					
+					{/* Categories */}
+					<div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+						<button 
+							onClick={() => handleCategoryClick('all')}
+							className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all ${activeCat === 'all' ? 'bg-textDark text-white shadow-md' : 'bg-gray-100 text-textGray hover:bg-gray-200'}`}
+						>
+							Tất cả
+						</button>
+						{categories.map(cat => (
+							<button 
+								key={cat.id}
+								onClick={() => handleCategoryClick(cat.id)}
+								className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 ${activeCat === cat.id ? 'bg-primary text-white shadow-md' : 'bg-white border border-gray-200 text-textGray hover:bg-gray-50'}`}
+							>
+								<span>{cat.iconEmoji}</span> {cat.name}
+							</button>
+						))}
+					</div>
+				</div>
+			</div>
+			{/* === KẾT THÚC KHỐI CHUYỂN === */}
+
 
 			{/* Content */}
 			<article className="max-w-3xl mx-auto bg-white min-h-screen shadow-sm md:my-6 md:rounded-[2rem] overflow-hidden">
@@ -233,16 +302,15 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
 					<MessageCircle /> Bình luận ({post?.commentCount || comments.length})
 				</h3>
 				
-				{/* === KHỐI MỚI: INPUT BÌNH LUẬN === */}
-				{/* Vị trí mới: Ngay dưới tiêu đề Bình luận */}
-				<div className="flex gap-2 mb-6"> {/* Thêm margin bottom để cách danh sách */}
-					<input 
+				{/* === KHỐI NHẬP BÌNH LUẬN (ĐÃ DI CHUYỂN) === */}
+				<div className="flex gap-2 mb-6"> 
+					<input 
 						value={commentContent}
 						onChange={e => setCommentContent(e.target.value)}
 						className="flex-1 bg-white border border-gray-200 rounded-xl px-4 py-3 outline-none focus:border-primary shadow-sm"
 						placeholder="Viết bình luận..."
 					/>
-					<button 
+					<button 
 						onClick={handleSendComment}
 						disabled={!commentContent.trim() || submittingComment}
 						className="bg-primary text-white p-3 rounded-xl shadow-lg active:scale-90 transition-transform disabled:opacity-50"
@@ -250,10 +318,10 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
 						{submittingComment ? <Loader2 className="animate-spin" /> : <Send />}
 					</button>
 				</div>
-                {/* === KẾT THÚC KHỐI MỚI === */}
+				{/* === KẾT THÚC KHỐI NHẬP BÌNH LUẬN === */}
 				
 				{/* Comment List */}
-				<div className="space-y-4"> {/* Đã loại bỏ mb-6 cũ */}
+				<div className="space-y-4"> 
 					{comments.map(c => (
 						<div key={c.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
 							<div className="flex items-center gap-2 mb-2">
@@ -296,10 +364,4 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
 			/>
 		</div>
 	);
-};
-
-const getYoutubeId = (url: string) => {
-	const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-	const match = url.match(regExp);
-	return (match && match[2].length === 11) ? match[2] : null;
 };
