@@ -139,7 +139,7 @@ export const Contact: React.FC = () => (
         </div>
         <div>
           <h5 className="font-bold text-textDark">Hotline</h5>
-          <a href="tel:19001000" className="text-primary hover:underline">1900 1000 (8h - 20h)</a>
+          <a href="tel:0912.434.666" className="text-primary hover:underline">0912.434.666 (8h - 20h)</a>
         </div>
       </div>
       
