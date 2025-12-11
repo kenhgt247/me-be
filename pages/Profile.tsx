@@ -1,5 +1,3 @@
-// File Profile.tsx (Đã hoàn chỉnh các logic)
-
 import React, { useState, useEffect } from 'react';
 import { User, Question, toSlug } from '../types';
 import { 
@@ -18,7 +16,8 @@ import { ShareModal } from '../components/ShareModal';
 interface ProfileProps {
   user: User;
   questions: Question[];
-  onLogout: () => void;
+  // Fix lỗi Đăng xuất: Hàm này phải trả về Promise để chúng ta await
+  onLogout: () => Promise<void> | void; 
   onOpenAuth: () => void;
 }
 
@@ -33,16 +32,17 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
   // Modal State
   const [showEditModal, setShowEditModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  
   const [editForm, setEditForm] = useState({ name: '', bio: '', avatar: '', username: '', coverUrl: '' });
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
 
-  // --- 1. LOGIC CHUYỂN HƯỚNG URL TỰ ĐỘNG ---
+  // --- 1. LOGIC XỬ LÝ LINK TRỐNG & CHUYỂN HƯỚNG ---
   useEffect(() => {
-    // Nếu vào /profile trống
     if (!userId) {
         if (user && !user.isGuest) {
+            // Tự động chuyển hướng sang Username hoặc ID của mình
             const slug = user.username || user.id;
             navigate(`/profile/${slug}`, { replace: true });
         } else if (user?.isGuest) {
@@ -61,7 +61,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
         setLoadingProfile(true);
         let foundId = '';
 
-        // A. Thử tìm theo ID (Nếu chuỗi dài > 20 ký tự)
+        // A. Thử tìm theo ID (nếu chuỗi dài > 20 ký tự)
         if (userId.length > 20) { 
             const docRef = doc(db, 'users', userId);
             const docSnap = await getDoc(docRef);
@@ -99,6 +99,8 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
     return () => { if (unsubscribe) unsubscribe(); };
   }, [userId]);
 
+  const isViewingSelf = user && profileData && user.id === profileData.id;
+
   // --- 3. LẮNG NGHE TRẠNG THÁI THEO DÕI ---
   useEffect(() => {
     if (user && !user.isGuest && profileData && user.id !== profileData.id) {
@@ -114,15 +116,13 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
     }
   }, [user.id, profileData?.id]);
 
-  // --- 4. TỰ ĐỘNG CHUYỂN LINK ID -> LINK USERNAME (CANONICAL) ---
+  // --- 4. TỰ ĐỘNG CHUYỂN LINK XẤU -> LINK ĐẸP (CANONICAL) ---
   useEffect(() => {
-    // Logic: Nếu profile có username, và URL hiện tại không khớp username
+    // Logic: Nếu profile có username, nhưng URL hiện tại không khớp username
     if (profileData && profileData.username && userId !== profileData.username) {
         navigate(`/profile/${profileData.username}`, { replace: true });
     }
   }, [profileData, userId, navigate]);
-
-  const isViewingSelf = user && profileData && user.id === profileData.id;
 
   // --- ACTIONS ---
   const handleFollowToggle = async () => {
@@ -197,7 +197,6 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
         });
         
         setShowEditModal(false);
-        // Logic chuyển hướng sẽ được xử lý bởi useEffect số 4
     } catch (error) {
         alert("Lỗi khi lưu hồ sơ.");
     } finally {
@@ -205,9 +204,21 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
     }
   };
 
-  const handleAuthAction = () => {
-    if (user.isGuest) onOpenAuth();
-    else { onLogout(); navigate('/'); }
+  // --- SỬA LOGIC ĐĂNG XUẤT (FIX ASYNC RACE CONDITION) ---
+  const handleAuthAction = async () => {
+    if (user.isGuest) {
+        onOpenAuth();
+    } else {
+        try {
+            // PHẢI AWAIT để chờ xóa token xong mới chuyển trang
+            await onLogout(); 
+            navigate('/');
+        } catch (error) {
+            console.error("Lỗi đăng xuất:", error);
+            // Xử lý báo lỗi nhẹ nếu đăng xuất thất bại
+            alert("Đăng xuất thất bại. Vui lòng thử lại hoặc xóa cache.");
+        }
+    }
   };
 
   const handleMessage = () => {
