@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { BlogPost, BlogCategory } from '../../types';
-// Đảm bảo bạn đã import toSlug từ file types hoặc utils
 import { toSlug } from '../../types'; 
 import { 
   fetchBlogCategories, createBlogCategory, updateBlogCategory, deleteBlogCategory,
@@ -8,7 +7,7 @@ import {
 } from '../../services/blog';
 import { generateBlogPost, generateBlogTitle } from '../../services/gemini';
 import { subscribeToAuthChanges } from '../../services/auth';
-import { Plus, Trash2, Edit2, X, Image as ImageIcon, Video, Link as LinkIcon, BookOpen, Layers, Sparkles, Loader2, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Edit2, X, Image as ImageIcon, Video, Link as LinkIcon, BookOpen, Layers, Sparkles, Loader2, RefreshCw, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 
 export const BlogAdmin: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -56,13 +55,21 @@ export const BlogAdmin: React.FC = () => {
 
   const loadData = async (user: any) => {
     setLoading(true);
-    const [cats, allPosts] = await Promise.all([
-      fetchBlogCategories(),
-      fetchAllPostsAdmin(user.isAdmin ? undefined : user.id)
-    ]);
-    setCategories(cats);
-    setPosts(allPosts);
-    setLoading(false);
+    try {
+        // Logic phân quyền: Admin thấy hết, Chuyên gia chỉ thấy bài của mình
+        const authorFilter = user.isAdmin ? undefined : user.id;
+        
+        const [cats, allPosts] = await Promise.all([
+            fetchBlogCategories(),
+            fetchAllPostsAdmin(authorFilter)
+        ]);
+        setCategories(cats);
+        setPosts(allPosts);
+    } catch (error) {
+        console.error("Lỗi tải dữ liệu:", error);
+    } finally {
+        setLoading(false);
+    }
   };
 
   // --- CATEGORY HANDLERS ---
@@ -74,7 +81,6 @@ export const BlogAdmin: React.FC = () => {
 
   const handleSaveCat = async () => {
     if (!catForm.name) return;
-    // Sử dụng toSlug chuẩn thay vì regex cũ
     const slug = toSlug(catForm.name);
     
     try {
@@ -99,19 +105,15 @@ export const BlogAdmin: React.FC = () => {
   };
 
   // --- POST HANDLERS ---
-  
-  // Xử lý khi nhập tiêu đề -> Tự động tạo Slug
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const newTitle = e.target.value;
       setPostForm(prev => ({
           ...prev,
           title: newTitle,
-          // Chỉ tự động tạo slug nếu đang tạo mới hoặc slug đang trống
           slug: (!editingPost || !prev.slug) ? toSlug(newTitle) : prev.slug
       }));
   };
 
-  // Hàm tạo lại slug thủ công
   const handleRegenerateSlug = () => {
       if (postForm.title) {
           setPostForm(prev => ({ ...prev, slug: toSlug(prev.title) }));
@@ -158,7 +160,7 @@ export const BlogAdmin: React.FC = () => {
               setPostForm(prev => ({ 
                   ...prev, 
                   title: newTitle,
-                  slug: toSlug(newTitle) // Tự động cập nhật slug theo tiêu đề AI
+                  slug: toSlug(newTitle)
               }));
           }
       } catch (e) {
@@ -191,7 +193,6 @@ export const BlogAdmin: React.FC = () => {
   const handleSavePost = async () => {
     if (!postForm.title || !currentUser) return;
     
-    // Đảm bảo luôn có slug chuẩn
     let slug = postForm.slug;
     if (!slug) {
         slug = toSlug(postForm.title);
@@ -199,7 +200,7 @@ export const BlogAdmin: React.FC = () => {
 
     const postData: any = {
       ...postForm,
-      slug, // Lưu slug chuẩn
+      slug,
       authorId: currentUser.id,
       authorName: currentUser.name,
       authorAvatar: currentUser.avatar,
@@ -212,6 +213,7 @@ export const BlogAdmin: React.FC = () => {
       await createBlogPost(postData);
     }
     setShowPostModal(false);
+    // Reload data với đúng user hiện tại
     loadData(currentUser);
   };
 
@@ -222,7 +224,7 @@ export const BlogAdmin: React.FC = () => {
   };
 
   if (!currentUser || (!currentUser.isAdmin && !currentUser.isExpert)) {
-      return <div className="p-10 text-center">Bạn không có quyền truy cập.</div>;
+      return <div className="p-10 text-center">Bạn không có quyền truy cập trang này.</div>;
   }
 
   return (
@@ -232,7 +234,9 @@ export const BlogAdmin: React.FC = () => {
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                <BookOpen className="text-blue-600" /> Quản trị Blog
             </h1>
-            <p className="text-gray-500 text-sm">Quản lý bài viết và danh mục kiến thức.</p>
+            <p className="text-gray-500 text-sm">
+                {currentUser.isAdmin ? 'Quản lý toàn bộ bài viết hệ thống.' : 'Quản lý các bài viết chuyên môn của bạn.'}
+            </p>
          </div>
          <div className="flex gap-2">
             {currentUser.isAdmin && (
@@ -247,7 +251,7 @@ export const BlogAdmin: React.FC = () => {
                 onClick={() => setActiveTab('posts')} 
                 className={`px-4 py-2 rounded-lg font-bold text-sm transition-all flex items-center gap-2 ${activeTab === 'posts' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}
             >
-                <BookOpen size={18} /> Bài viết
+                <FileText size={18} /> Bài viết
             </button>
          </div>
       </div>
@@ -294,52 +298,72 @@ export const BlogAdmin: React.FC = () => {
       {activeTab === 'posts' && (
           <div className="space-y-4">
               <div className="flex justify-end">
-                  <button onClick={handleCreatePost} className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg">
+                  <button onClick={handleCreatePost} className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg hover:bg-green-700 transition-colors">
                       <Plus size={18} /> Viết bài mới
                   </button>
               </div>
-              <div className="grid gap-4">
-                  {posts.map(post => (
-                      <div key={post.id} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 items-start md:items-center hover:shadow-md transition-all">
-                          <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center text-3xl shrink-0 overflow-hidden">
-                              {post.coverImageUrl ? <img src={post.coverImageUrl} className="w-full h-full object-cover" /> : post.iconEmoji}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                  <h3 className="font-bold text-gray-900 truncate">{post.title}</h3>
-                                  <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${post.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{post.status}</span>
+              
+              {loading ? (
+                  <div className="flex justify-center py-20 text-gray-400 gap-2 items-center">
+                      <Loader2 className="animate-spin" /> Đang tải bài viết...
+                  </div>
+              ) : posts.length === 0 ? (
+                  <div className="text-center py-16 bg-white rounded-xl border border-dashed border-gray-300">
+                      <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 text-3xl">📭</div>
+                      <h3 className="font-bold text-gray-800">Chưa có bài viết nào</h3>
+                      <p className="text-sm text-gray-500 mb-4">Hãy chia sẻ kiến thức chuyên môn của bạn ngay bây giờ!</p>
+                      <button onClick={handleCreatePost} className="text-blue-600 font-bold hover:underline">Bắt đầu viết ngay</button>
+                  </div>
+              ) : (
+                  <div className="grid gap-4 animate-fade-in">
+                      {posts.map(post => (
+                          <div key={post.id} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 items-start md:items-center hover:shadow-md transition-all">
+                              <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center text-3xl shrink-0 overflow-hidden border border-gray-100">
+                                  {post.coverImageUrl ? <img src={post.coverImageUrl} className="w-full h-full object-cover" /> : post.iconEmoji}
                               </div>
-                              <p className="text-xs text-gray-500 mb-1 line-clamp-1">{post.excerpt}</p>
-                              <div className="flex gap-3 text-[10px] text-gray-400">
-                                  <span>{new Date(post.createdAt).toLocaleDateString('vi-VN')}</span>
-                                  <span>• {post.authorName}</span>
-                                  <span>• {categories.find(c => c.id === post.categoryId)?.name || 'Chưa phân loại'}</span>
-                                  <span className="font-mono text-gray-300 ml-2">/{post.slug}</span>
+                              <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                      <h3 className="font-bold text-gray-900 truncate text-lg">{post.title}</h3>
+                                      {post.status === 'published' ? (
+                                          <span className="flex items-center gap-1 text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-green-100 text-green-700"><CheckCircle size={10}/> Public</span>
+                                      ) : (
+                                          <span className="flex items-center gap-1 text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-gray-100 text-gray-600"><AlertCircle size={10}/> Draft</span>
+                                      )}
+                                  </div>
+                                  <p className="text-xs text-gray-500 mb-1 line-clamp-1">{post.excerpt || 'Chưa có mô tả ngắn'}</p>
+                                  <div className="flex gap-3 text-[10px] text-gray-400 items-center">
+                                      <span className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-bold">
+                                          {categories.find(c => c.id === post.categoryId)?.name || 'Chưa phân loại'}
+                                      </span>
+                                      <span>{new Date(post.createdAt).toLocaleDateString('vi-VN')}</span>
+                                      {/* Hiển thị lượt xem cho chuyên gia thấy hiệu quả */}
+                                      <span className="flex items-center gap-1 text-gray-500"><Eye size={10}/> {post.views || 0} lượt xem</span>
+                                  </div>
+                              </div>
+                              <div className="flex gap-2 shrink-0 self-end md:self-center">
+                                  <button onClick={() => handleEditPost(post)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"><Edit2 size={18} /></button>
+                                  <button onClick={() => handleDeletePost(post.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={18} /></button>
                               </div>
                           </div>
-                          <div className="flex gap-2 shrink-0">
-                              <button onClick={() => handleEditPost(post)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg"><Edit2 size={18} /></button>
-                              <button onClick={() => handleDeletePost(post.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={18} /></button>
-                          </div>
-                      </div>
-                  ))}
-              </div>
+                      ))}
+                  </div>
+              )}
           </div>
       )}
 
       {/* CATEGORY MODAL */}
       {showCatModal && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-2xl w-full max-w-md p-6">
-                  <h3 className="font-bold text-lg mb-4">{editingCat ? 'Sửa danh mục' : 'Thêm danh mục'}</h3>
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl animate-pop-in">
+                  <h3 className="font-bold text-lg mb-4 text-gray-800">{editingCat ? 'Sửa danh mục' : 'Thêm danh mục'}</h3>
                   <div className="space-y-3">
-                      <input value={catForm.name} onChange={e => setCatForm({...catForm, name: e.target.value})} placeholder="Tên danh mục" className="w-full p-2 border rounded-lg" />
-                      <input value={catForm.iconEmoji} onChange={e => setCatForm({...catForm, iconEmoji: e.target.value})} placeholder="Emoji Icon" className="w-full p-2 border rounded-lg" />
-                      <input type="number" value={catForm.order} onChange={e => setCatForm({...catForm, order: Number(e.target.value)})} placeholder="Thứ tự" className="w-full p-2 border rounded-lg" />
+                      <input value={catForm.name} onChange={e => setCatForm({...catForm, name: e.target.value})} placeholder="Tên danh mục (VD: Sức khỏe)" className="w-full p-3 border rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-blue-100" />
+                      <input value={catForm.iconEmoji} onChange={e => setCatForm({...catForm, iconEmoji: e.target.value})} placeholder="Emoji Icon (VD: 💊)" className="w-full p-3 border rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-blue-100" />
+                      <input type="number" value={catForm.order} onChange={e => setCatForm({...catForm, order: Number(e.target.value)})} placeholder="Thứ tự hiển thị" className="w-full p-3 border rounded-xl bg-gray-50 focus:bg-white transition-colors outline-none focus:ring-2 focus:ring-blue-100" />
                   </div>
                   <div className="flex justify-end gap-2 mt-6">
-                      <button onClick={() => setShowCatModal(false)} className="px-4 py-2 text-gray-500 font-bold">Hủy</button>
-                      <button onClick={handleSaveCat} className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold">Lưu</button>
+                      <button onClick={() => setShowCatModal(false)} className="px-4 py-2 text-gray-500 font-bold hover:bg-gray-100 rounded-lg transition-colors">Hủy</button>
+                      <button onClick={handleSaveCat} className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200">Lưu</button>
                   </div>
               </div>
           </div>
@@ -347,26 +371,30 @@ export const BlogAdmin: React.FC = () => {
 
       {/* POST MODAL */}
       {showPostModal && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-pop-in">
                   <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                      <h3 className="font-bold text-lg">{editingPost ? 'Sửa bài viết' : 'Viết bài mới'}</h3>
-                      <button onClick={() => setShowPostModal(false)}><X size={24} /></button>
+                      <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
+                          {editingPost ? <Edit2 size={20} className="text-blue-500"/> : <Plus size={20} className="text-green-500"/>}
+                          {editingPost ? 'Sửa bài viết' : 'Viết bài mới'}
+                      </h3>
+                      <button onClick={() => setShowPostModal(false)} className="hover:bg-gray-200 p-1 rounded-full transition-colors"><X size={24} /></button>
                   </div>
-                  <div className="p-6 overflow-y-auto flex-1 space-y-4">
-                      <div className="grid md:grid-cols-2 gap-4">
+                  
+                  <div className="p-6 overflow-y-auto flex-1 space-y-5">
+                      <div className="grid md:grid-cols-2 gap-5">
                           <div className="relative">
                               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tiêu đề</label>
                               <input 
                                 value={postForm.title} 
-                                onChange={handleTitleChange} // Sử dụng hàm mới để auto update slug
+                                onChange={handleTitleChange} 
                                 placeholder="Tiêu đề bài viết" 
-                                className="w-full p-3 border rounded-xl font-bold text-lg pr-20" 
+                                className="w-full p-3 border rounded-xl font-bold text-lg pr-20 focus:ring-2 focus:ring-blue-100 outline-none" 
                               />
                               <button 
                                 onClick={handleAiTitle} 
                                 disabled={aiLoading.title}
-                                className="absolute right-2 top-8 p-1.5 bg-gradient-to-r from-purple-100 to-indigo-100 text-indigo-600 rounded-lg text-xs font-bold flex items-center gap-1 active:scale-95 transition-transform"
+                                className="absolute right-2 top-8 p-1.5 bg-gradient-to-r from-purple-100 to-indigo-100 text-indigo-600 rounded-lg text-xs font-bold flex items-center gap-1 active:scale-95 transition-transform border border-indigo-100"
                                 title="AI Gợi ý tiêu đề"
                               >
                                 {aiLoading.title ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} AI
@@ -375,14 +403,14 @@ export const BlogAdmin: React.FC = () => {
                           
                           <div>
                               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Danh mục</label>
-                              <select value={postForm.categoryId} onChange={e => setPostForm({...postForm, categoryId: e.target.value})} className="w-full p-3 border rounded-xl">
+                              <select value={postForm.categoryId} onChange={e => setPostForm({...postForm, categoryId: e.target.value})} className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-100">
                                   <option value="">-- Chọn danh mục --</option>
-                                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                  {categories.map(c => <option key={c.id} value={c.id}>{c.iconEmoji} {c.name}</option>)}
                               </select>
                           </div>
                       </div>
 
-                      {/* SLUG INPUT CẢI TIẾN */}
+                      {/* SLUG INPUT */}
                       <div>
                           <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Đường dẫn (Slug)</label>
                           <div className="flex gap-2">
@@ -390,11 +418,11 @@ export const BlogAdmin: React.FC = () => {
                                   value={postForm.slug} 
                                   onChange={e => setPostForm({...postForm, slug: e.target.value})} 
                                   placeholder="duong-dan-bai-viet-chuan-seo" 
-                                  className="w-full p-2 border rounded-xl text-sm font-mono text-gray-600 bg-gray-50" 
+                                  className="w-full p-2 border rounded-xl text-sm font-mono text-gray-600 bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-100" 
                               />
                               <button 
                                   onClick={handleRegenerateSlug}
-                                  className="p-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600"
+                                  className="p-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
                                   title="Tạo lại từ tiêu đề"
                               >
                                   <RefreshCw size={18} />
@@ -402,11 +430,16 @@ export const BlogAdmin: React.FC = () => {
                           </div>
                       </div>
 
-                      <textarea value={postForm.excerpt} onChange={e => setPostForm({...postForm, excerpt: e.target.value})} placeholder="Mô tả ngắn (Excerpt)" className="w-full p-3 border rounded-xl h-20" />
+                      <textarea 
+                        value={postForm.excerpt} 
+                        onChange={e => setPostForm({...postForm, excerpt: e.target.value})} 
+                        placeholder="Mô tả ngắn (Excerpt) hiển thị bên ngoài thẻ bài viết..." 
+                        className="w-full p-3 border rounded-xl h-24 resize-none focus:ring-2 focus:ring-blue-100 outline-none text-sm" 
+                      />
                       
                       <div className="relative">
                           <div className="flex justify-between items-center mb-1">
-                              <label className="text-xs font-bold text-gray-500 uppercase">Nội dung</label>
+                              <label className="text-xs font-bold text-gray-500 uppercase">Nội dung chi tiết</label>
                               <button 
                                 onClick={handleAiContent} 
                                 disabled={aiLoading.content}
@@ -416,48 +449,55 @@ export const BlogAdmin: React.FC = () => {
                                 {aiLoading.content ? 'AI đang viết...' : 'Viết bài với AI'}
                               </button>
                           </div>
-                          <textarea value={postForm.content} onChange={e => setPostForm({...postForm, content: e.target.value})} placeholder="Nội dung bài viết (Hỗ trợ HTML cơ bản)..." className="w-full p-4 border rounded-xl h-64 font-mono text-sm leading-relaxed" />
+                          <textarea 
+                            value={postForm.content} 
+                            onChange={e => setPostForm({...postForm, content: e.target.value})} 
+                            placeholder="Nội dung bài viết (Hỗ trợ HTML cơ bản hoặc Markdown)..." 
+                            className="w-full p-4 border rounded-xl h-80 font-mono text-sm leading-relaxed focus:ring-2 focus:ring-blue-100 outline-none" 
+                          />
                       </div>
                       
                       <div className="grid md:grid-cols-2 gap-4">
                           <div className="space-y-2">
                               <label className="text-xs font-bold text-gray-500 uppercase">Media</label>
-                              <div className="flex gap-2 items-center border rounded-xl p-2">
+                              <div className="flex gap-2 items-center border rounded-xl p-2 bg-white">
                                   <ImageIcon size={18} className="text-gray-400" />
                                   <input value={postForm.coverImageUrl} onChange={e => setPostForm({...postForm, coverImageUrl: e.target.value})} placeholder="Link ảnh bìa" className="flex-1 outline-none text-sm" />
                               </div>
-                              <div className="flex gap-2 items-center border rounded-xl p-2">
+                              <div className="flex gap-2 items-center border rounded-xl p-2 bg-white">
                                   <span className="text-lg">😀</span>
                                   <input value={postForm.iconEmoji} onChange={e => setPostForm({...postForm, iconEmoji: e.target.value})} placeholder="Emoji đại diện" className="flex-1 outline-none text-sm" />
                               </div>
                           </div>
                           <div className="space-y-2">
                               <label className="text-xs font-bold text-gray-500 uppercase">Liên kết nguồn</label>
-                              <div className="flex gap-2 items-center border rounded-xl p-2">
+                              <div className="flex gap-2 items-center border rounded-xl p-2 bg-white">
                                   <Video size={18} className="text-gray-400" />
                                   <input value={postForm.youtubeUrl} onChange={e => setPostForm({...postForm, youtubeUrl: e.target.value})} placeholder="Youtube URL" className="flex-1 outline-none text-sm" />
                               </div>
-                              <div className="flex gap-2 items-center border rounded-xl p-2">
+                              <div className="flex gap-2 items-center border rounded-xl p-2 bg-white">
                                   <LinkIcon size={18} className="text-gray-400" />
                                   <input value={postForm.sourceUrl} onChange={e => setPostForm({...postForm, sourceUrl: e.target.value})} placeholder="Link nguồn tham khảo" className="flex-1 outline-none text-sm" />
                               </div>
                           </div>
                       </div>
 
-                      <div className="flex items-center gap-4 border-t pt-4">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                              <input type="radio" name="status" checked={postForm.status === 'draft'} onChange={() => setPostForm({...postForm, status: 'draft'})} />
-                              <span className="text-sm font-medium">Bản nháp</span>
+                      <div className="flex items-center gap-6 border-t pt-4">
+                          <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 transition-colors">
+                              <input type="radio" name="status" checked={postForm.status === 'draft'} onChange={() => setPostForm({...postForm, status: 'draft'})} className="accent-gray-500 w-4 h-4"/>
+                              <span className="text-sm font-medium text-gray-600">Lưu nháp</span>
                           </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                              <input type="radio" name="status" checked={postForm.status === 'published'} onChange={() => setPostForm({...postForm, status: 'published'})} />
-                              <span className="text-sm font-bold text-green-600">Công khai</span>
+                          <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-green-50 transition-colors">
+                              <input type="radio" name="status" checked={postForm.status === 'published'} onChange={() => setPostForm({...postForm, status: 'published'})} className="accent-green-600 w-4 h-4"/>
+                              <span className="text-sm font-bold text-green-700">Công khai ngay</span>
                           </label>
                       </div>
                   </div>
                   <div className="p-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50">
-                      <button onClick={() => setShowPostModal(false)} className="px-6 py-2 text-gray-600 font-bold hover:bg-gray-200 rounded-xl">Hủy</button>
-                      <button onClick={handleSavePost} className="px-6 py-2 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700">Lưu bài viết</button>
+                      <button onClick={() => setShowPostModal(false)} className="px-6 py-2.5 text-gray-600 font-bold hover:bg-gray-200 rounded-xl transition-colors">Hủy</button>
+                      <button onClick={handleSavePost} className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+                          <Edit2 size={18} /> Lưu bài viết
+                      </button>
                   </div>
               </div>
           </div>
