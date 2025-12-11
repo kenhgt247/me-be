@@ -1,4 +1,3 @@
-
 import { 
   collection, getDocs, doc, updateDoc, query, orderBy, where, deleteDoc, getDoc, writeBatch 
 } from 'firebase/firestore';
@@ -24,6 +23,21 @@ export const updateUserRole = async (userId: string, updates: { isExpert?: boole
   if (!db) return;
   const ref = doc(db, 'users', userId);
   await updateDoc(ref, updates);
+};
+
+// --- USER INFO UPDATE ---
+
+export const updateUserInfo = async (userId: string, data: { name?: string; bio?: string; specialty?: string }) => {
+  if (!db) return;
+  try {
+    const userRef = doc(db, 'users', userId);
+    // Sử dụng updateDoc để chỉ cập nhật các trường được truyền vào
+    await updateDoc(userRef, data);
+    return true;
+  } catch (error) {
+    console.error("Lỗi khi update user info:", error);
+    throw error;
+  }
 };
 
 // --- EXPERT APPLICATIONS ---
@@ -63,8 +77,8 @@ export const processExpertApplication = async (appId: string, userId: string, st
     
     batch.update(userRef, updates);
   } else if (status === 'rejected') {
-     const userRef = doc(db, 'users', userId);
-     batch.update(userRef, { expertStatus: 'rejected' });
+      const userRef = doc(db, 'users', userId);
+      batch.update(userRef, { expertStatus: 'rejected' });
   }
 
   await batch.commit();
