@@ -1,5 +1,7 @@
+// File Profile.tsx (Đã hoàn chỉnh các logic)
+
 import React, { useState, useEffect } from 'react';
-import { User, Question } from '../types';
+import { User, Question, toSlug } from '../types';
 import { 
   Settings, ShieldCheck, MessageCircle, HelpCircle, Heart, Star, Briefcase, 
   Share2, Users, UserPlus, UserCheck, ArrowLeft, Loader2, LogIn, X, Save, 
@@ -31,23 +33,25 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
   // Modal State
   const [showEditModal, setShowEditModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
-  
   const [editForm, setEditForm] = useState({ name: '', bio: '', avatar: '', username: '', coverUrl: '' });
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
 
-  // --- 1. XỬ LÝ KHI VÀO TRANG TRỐNG (/profile) ---
+  // --- 1. LOGIC CHUYỂN HƯỚNG URL TỰ ĐỘNG ---
   useEffect(() => {
-    if (!userId && user && !user.isGuest) {
-        const slug = user.username || user.id;
-        navigate(`/profile/${slug}`, { replace: true });
-    } else if (!userId && user?.isGuest) {
-        setLoadingProfile(false);
+    // Nếu vào /profile trống
+    if (!userId) {
+        if (user && !user.isGuest) {
+            const slug = user.username || user.id;
+            navigate(`/profile/${slug}`, { replace: true });
+        } else if (user?.isGuest) {
+            setLoadingProfile(false); // Dừng loading để hiện Guest View
+        }
     }
   }, [userId, user, navigate]);
 
-  // --- 2. TẢI DỮ LIỆU PROFILE ---
+  // --- 2. TẢI DỮ LIỆU PROFILE (HỖ TRỢ ID & USERNAME) ---
   useEffect(() => {
     if (!userId) return;
     
@@ -57,12 +61,14 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
         setLoadingProfile(true);
         let foundId = '';
 
+        // A. Thử tìm theo ID (Nếu chuỗi dài > 20 ký tự)
         if (userId.length > 20) { 
             const docRef = doc(db, 'users', userId);
             const docSnap = await getDoc(docRef);
             if (docSnap.exists()) foundId = docSnap.id;
         }
 
+        // B. Nếu chưa thấy, tìm theo Username (Chuyển về chữ thường)
         if (!foundId) {
             const q = query(
                 collection(db, 'users'), 
@@ -93,16 +99,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
     return () => { if (unsubscribe) unsubscribe(); };
   }, [userId]);
 
-  const isViewingSelf = user && profileData && user.id === profileData.id;
-
-  // --- 3. AUTO REDIRECT ID → USERNAME ---
-  useEffect(() => {
-    if (isViewingSelf && profileData?.username && userId !== profileData.username) {
-        navigate(`/profile/${profileData.username}`, { replace: true });
-    }
-  }, [profileData, isViewingSelf, userId, navigate]);
-
-  // --- 4. LẮNG NGHE FOLLOW ---
+  // --- 3. LẮNG NGHE TRẠNG THÁI THEO DÕI ---
   useEffect(() => {
     if (user && !user.isGuest && profileData && user.id !== profileData.id) {
         const unsub = onSnapshot(doc(db, 'users', user.id), (docSnap) => {
@@ -117,6 +114,16 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
     }
   }, [user.id, profileData?.id]);
 
+  // --- 4. TỰ ĐỘNG CHUYỂN LINK ID -> LINK USERNAME (CANONICAL) ---
+  useEffect(() => {
+    // Logic: Nếu profile có username, và URL hiện tại không khớp username
+    if (profileData && profileData.username && userId !== profileData.username) {
+        navigate(`/profile/${profileData.username}`, { replace: true });
+    }
+  }, [profileData, userId, navigate]);
+
+  const isViewingSelf = user && profileData && user.id === profileData.id;
+
   // --- ACTIONS ---
   const handleFollowToggle = async () => {
     if (user.isGuest) return onOpenAuth();
@@ -125,7 +132,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
         if (isFollowing) await unfollowUser(user.id, profileData.id);
         else {
             await followUser(user.id, profileData);
-            await sendNotification(profileData.id, user, 'FOLLOW', 'đã theo dõi bạn.', `/profile/${user.username || user.id}`);
+            await sendNotification(profileData.id, user, 'FOLLOW', 'đã theo dõi bạn.', `/profile/${user.id}`);
         }
     } catch (e) { alert("Lỗi kết nối."); }
   };
@@ -166,7 +173,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
         let finalUsername = editForm.username.trim().toLowerCase(); 
         
         if (finalUsername && !/^[a-z0-9._]+$/.test(finalUsername)) {
-            alert("Tên định danh không hợp lệ");
+            alert("Tên định danh không hợp lệ (chỉ dùng chữ thường, số, dấu chấm (.) và gạch dưới (_)");
             setIsSaving(false);
             return;
         }
@@ -190,6 +197,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
         });
         
         setShowEditModal(false);
+        // Logic chuyển hướng sẽ được xử lý bởi useEffect số 4
     } catch (error) {
         alert("Lỗi khi lưu hồ sơ.");
     } finally {
@@ -202,14 +210,13 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
     else { onLogout(); navigate('/'); }
   };
 
-  // ✅ SỬA DUY NHẤT 1 DÒNG TẠI ĐÂY — ƯU TIÊN USERNAME
   const handleMessage = () => {
       if (user.isGuest) return onOpenAuth();
-      if (profileData) navigate(`/messages/${profileData.username || profileData.id}`);
+      if (profileData) navigate(`/messages/${profileData.id}`);
   };
 
-  // --- GUEST VIEW ---
-  if (user.isGuest && (!userId || (profileData && userId === profileData.id))) {
+  // --- RENDER VIEWS ---
+  if (user.isGuest && (!userId || userId === user.id)) {
       return (
           <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 text-center animate-fade-in pt-safe-top pb-24">
               <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -227,10 +234,12 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
   if (!profileData) return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#F7F7F5] p-4 text-center">
           <h2 className="text-xl font-bold text-gray-800 mb-2">Không tìm thấy người dùng</h2>
+          <p className="text-gray-500 mb-6">Đường dẫn có thể bị sai hoặc tài khoản đã bị xóa.</p>
           <button onClick={() => navigate('/')} className="bg-primary text-white px-6 py-2 rounded-xl font-bold">Về trang chủ</button>
       </div>
   );
 
+  // Stats
   const userQuestions = questions.filter(q => q.author.id === profileData.id);
   const userAnswersCount = questions.reduce((acc, q) => acc + q.answers.filter(a => a.author.id === profileData.id).length, 0);
   const reputationPoints = profileData.points || (userQuestions.length * 10) + (userAnswersCount * 20);
@@ -300,10 +309,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
                             </>
                         ) : (
                             <>
-                                <button 
-                                    onClick={handleFollowToggle} 
-                                    className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-bold text-sm shadow-sm transition-all flex items-center justify-center gap-2 ${isFollowing ? 'bg-white border border-gray-300 text-gray-700' : 'bg-primary text-white hover:bg-teal-600 shadow-teal-200'}`}
-                                >
+                                <button onClick={handleFollowToggle} className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-bold text-sm shadow-sm transition-all flex items-center justify-center gap-2 ${isFollowing ? 'bg-white border border-gray-300 text-gray-700' : 'bg-blue-600 text-white shadow-blue-200'}`}>
                                     {isFollowing ? <UserCheck size={18} /> : <UserPlus size={18} />}
                                     {isFollowing ? 'Đang theo dõi' : 'Theo dõi'}
                                 </button>
@@ -334,7 +340,6 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
             </button>
         </div>
 
-        {/* TAB CONTENT */}
         <div className="min-h-[300px]">
             {activeTab === 'overview' && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-fade-in">
@@ -379,6 +384,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
                 </div>
                 
                 <div className="p-6 space-y-5 overflow-y-auto custom-scrollbar">
+                    
                     {/* Ảnh bìa */}
                     <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-2 flex items-center gap-1"><ImageIcon size={14}/> Ảnh bìa</label>
