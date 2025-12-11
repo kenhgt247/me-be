@@ -1,7 +1,7 @@
-
 import React, { useEffect, useState } from 'react';
-import { User, Shield, ShieldOff, Ban, CheckCircle, Search, Filter, MoreVertical, ShieldCheck } from 'lucide-react';
-import { fetchAllUsers, updateUserRole } from '../../services/admin';
+import { User, Shield, ShieldOff, Ban, CheckCircle, Search, Filter, MoreVertical, ShieldCheck, Edit, X, Save } from 'lucide-react';
+// Đảm bảo bạn đã export updateUserInfo bên file admin.ts như bước trước mình hướng dẫn
+import { fetchAllUsers, updateUserRole, updateUserInfo } from '../../services/admin';
 import { User as UserType } from '../../types';
 
 export const UserManagement: React.FC = () => {
@@ -9,6 +9,11 @@ export const UserManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'expert' | 'admin' | 'banned'>('all');
+
+  // --- STATE QUẢN LÝ VIỆC SỬA ---
+  const [editingUser, setEditingUser] = useState<UserType | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', bio: '', specialty: '' });
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -33,6 +38,34 @@ export const UserManagement: React.FC = () => {
     loadUsers();
   };
 
+  // --- LOGIC SỬA (MỚI) ---
+  const handleEditClick = (user: UserType) => {
+    setEditingUser(user);
+    setEditForm({
+      name: user.name || '',
+      bio: user.bio || '',
+      specialty: user.specialty || ''
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingUser) return;
+    setIsSaving(true);
+    try {
+        await updateUserInfo(editingUser.id, {
+            name: editForm.name,
+            bio: editForm.bio,
+            specialty: editForm.specialty
+        });
+        await loadUsers(); // Tải lại danh sách sau khi lưu
+        setEditingUser(null); // Đóng modal
+    } catch (error) {
+        alert("Có lỗi xảy ra khi lưu thông tin!");
+    } finally {
+        setIsSaving(false);
+    }
+  };
+
   // Filter Logic
   const filteredUsers = users.filter(u => {
     const matchesSearch = u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -47,7 +80,7 @@ export const UserManagement: React.FC = () => {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
        {/* Actions Bar */}
        <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
           <div className="relative w-full md:w-96">
@@ -88,9 +121,9 @@ export const UserManagement: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-gray-100">
                  {loading ? (
-                    <tr><td colSpan={5} className="text-center py-10 text-gray-500">Đang tải...</td></tr>
+                   <tr><td colSpan={5} className="text-center py-10 text-gray-500">Đang tải...</td></tr>
                  ) : filteredUsers.length === 0 ? (
-                    <tr><td colSpan={5} className="text-center py-10 text-gray-500">Không tìm thấy người dùng</td></tr>
+                   <tr><td colSpan={5} className="text-center py-10 text-gray-500">Không tìm thấy người dùng</td></tr>
                  ) : (
                     filteredUsers.map(user => (
                        <tr key={user.id} className="hover:bg-gray-50/50 transition-colors">
@@ -126,6 +159,15 @@ export const UserManagement: React.FC = () => {
                           </td>
                           <td className="px-6 py-4 text-right">
                              <div className="flex items-center justify-end gap-2">
+                                {/* NÚT SỬA (MỚI) */}
+                                <button 
+                                  onClick={() => handleEditClick(user)}
+                                  className="p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                  title="Chỉnh sửa thông tin"
+                                >
+                                   <Edit size={18} />
+                                </button>
+
                                 <button 
                                   onClick={() => handleToggleAdmin(user)}
                                   className={`p-2 rounded-lg transition-colors ${user.isAdmin ? 'text-purple-600 bg-purple-50 hover:bg-purple-100' : 'text-gray-400 hover:text-purple-600 hover:bg-gray-100'}`}
@@ -149,6 +191,71 @@ export const UserManagement: React.FC = () => {
             </table>
           </div>
        </div>
+
+       {/* --- MODAL EDIT USER (POPUP) --- */}
+       {editingUser && (
+         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-pop-in">
+               <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+                  <h3 className="font-bold text-lg text-gray-800">Sửa thông tin</h3>
+                  <button onClick={() => setEditingUser(null)} className="text-gray-400 hover:text-gray-600">
+                     <X size={20} />
+                  </button>
+               </div>
+               
+               <div className="p-6 space-y-4">
+                  <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Tên hiển thị</label>
+                     <input 
+                        type="text" 
+                        value={editForm.name}
+                        onChange={e => setEditForm({...editForm, name: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                     />
+                  </div>
+                  
+                  <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Giới thiệu (Bio)</label>
+                     <textarea 
+                        rows={3}
+                        value={editForm.bio}
+                        onChange={e => setEditForm({...editForm, bio: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
+                     />
+                  </div>
+
+                  {editingUser.isExpert && (
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Chuyên môn (Chức danh)</label>
+                        <input 
+                           type="text" 
+                           value={editForm.specialty}
+                           onChange={e => setEditForm({...editForm, specialty: e.target.value})}
+                           placeholder="VD: Bác sĩ Nhi, Chuyên gia tâm lý..."
+                           className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                        />
+                     </div>
+                  )}
+               </div>
+
+               <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+                  <button 
+                     onClick={() => setEditingUser(null)}
+                     className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg"
+                  >
+                     Hủy
+                  </button>
+                  <button 
+                     onClick={handleSaveEdit}
+                     disabled={isSaving}
+                     className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-2 disabled:opacity-50"
+                  >
+                     {isSaving ? 'Đang lưu...' : <><Save size={16} /> Lưu thay đổi</>}
+                  </button>
+               </div>
+            </div>
+         </div>
+       )}
     </div>
   );
 };
