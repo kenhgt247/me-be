@@ -3,7 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Document, DocumentCategory, User } from '../types';
 import { fetchDocuments, fetchDocumentCategories } from '../services/documents';
-import { FileText, Download, Star, Filter, Loader2, Search, Link as LinkIcon, UploadCloud, ArrowDown } from 'lucide-react';
+// ĐÃ BỔ SUNG: ChevronRight vào dòng import dưới đây
+import { FileText, Download, Star, Loader2, Search, Link as LinkIcon, UploadCloud, ArrowDown, ChevronRight } from 'lucide-react';
 import { subscribeToAuthChanges } from '../services/auth';
 
 // Số lượng tài liệu hiển thị mỗi lần tải
