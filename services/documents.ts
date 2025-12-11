@@ -8,7 +8,7 @@ import { Document, DocumentCategory, DocumentReview, User } from '../types';
 const DOCS_COL = 'documents';
 const DOC_CATS_COL = 'documentCategories';
 const DOC_REVIEWS_COL = 'documentReviews';
-const PAGE_SIZE = 10; // Đặt kích thước trang cố định tại đây
+const PAGE_SIZE = 5; // Đặt kích thước trang cố định tại đây
 
 // --- CATEGORIES (GIỮ NGUYÊN) ---
 export const fetchDocumentCategories = async (): Promise<DocumentCategory[]> => {
