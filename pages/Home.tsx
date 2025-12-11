@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 // @ts-ignore
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Search, MessageCircle, Heart, ChevronDown, ChevronUp, HelpCircle, Clock, Flame, MessageSquareOff, ShieldCheck, ChevronRight, Sparkles, X, Filter, User as UserIcon, CornerDownRight, BookOpen, FileText, Download } from 'lucide-react';
 import { Question, User, toSlug, BlogPost, Document } from '../types';
 import { AdBanner } from '../components/AdBanner';
@@ -15,7 +15,7 @@ interface HomeProps {
 
 const PAGE_SIZE = 20;
 
-// Helper: Lấy link profile chuẩn (Ưu tiên Username nếu có)
+// --- THÊM HÀM NÀY ĐỂ FIX LỖI THIẾU HÀM ---
 const getProfileLink = (user: User) => {
     return `/profile/${user.username || user.id}`;
 };
@@ -72,6 +72,7 @@ const FBImageGrid: React.FC<{ images: string[] }> = ({ images }) => {
 };
 
 export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
+  const navigate = useNavigate(); // Thêm hook navigate
   const [activeCategory, setActiveCategory] = useState<string>('Tất cả');
   const [viewFilter, setViewFilter] = useState<'newest' | 'active' | 'unanswered'>('newest');
   const [searchQuery, setSearchQuery] = useState('');
@@ -95,7 +96,6 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
       return () => unsub();
   }, []);
 
-  // Mỗi khi bộ lọc / tìm kiếm / danh sách câu hỏi thay đổi -> reset về trang đầu
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
   }, [activeCategory, viewFilter, searchQuery, questions.length]);
@@ -154,6 +154,13 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
 
   const paginatedQuestions = displayQuestions.slice(0, visibleCount);
 
+  // Hàm xử lý click vào tên/avatar tác giả (Ngăn không cho mở bài viết)
+  const handleUserClick = (e: React.MouseEvent, user: User) => {
+      e.preventDefault(); // Chặn link cha
+      e.stopPropagation(); // Chặn sự kiện nổi bọt
+      navigate(getProfileLink(user));
+  };
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="px-4 md:px-0 sticky top-[68px] md:top-20 z-30 py-2 md:pt-0 -mx-4 md:mx-0 bg-[#F7F7F5]/95 md:bg-transparent backdrop-blur-sm transition-all">
@@ -179,7 +186,6 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
         </div>
       </div>
 
-      {/* --- PHẦN ĐÃ SỬA: Dùng getProfileLink để tạo link chuẩn username --- */}
       {searchQuery && matchingUsers.length > 0 && (
         <div className="pl-4 md:px-0 animate-slide-up">
            <div className="flex items-center gap-1 mb-2">
@@ -205,7 +211,6 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
 
       {!searchQuery && (
         <div className="px-4 md:px-0 space-y-4">
-            {/* EXPERT PROMO */}
             <div className="bg-gradient-to-br from-primary to-[#26A69A] rounded-3xl p-6 text-white shadow-xl shadow-primary/20 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
                 <div className="relative z-10 flex justify-between items-center">
@@ -216,13 +221,10 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
                             Đăng ký ngay <ChevronRight size={14} />
                         </Link>
                     </div>
-                    <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center text-3xl shadow-inner border border-white/10">
-                        👨‍⚕️
-                    </div>
+                    <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center text-3xl shadow-inner border border-white/10">👨‍⚕️</div>
                 </div>
             </div>
 
-            {/* EXPERT BLOGS BLOCK */}
             {blogPosts.length > 0 && (
                 <div className="space-y-3 pt-2">
                     <div className="flex justify-between items-center px-1">
@@ -232,7 +234,6 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
                         </div>
                         <Link to="/blog" className="text-xs font-bold text-blue-500 hover:underline">Xem tất cả</Link>
                     </div>
-                    
                     <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 pr-4 snap-x -mx-4 px-4 md:mx-0 md:px-0">
                         {blogPosts.map(post => (
                             <Link to={`/blog/${post.slug}`} key={post.id} className="snap-start flex-shrink-0 w-64 bg-white rounded-2xl p-3 border border-gray-100 shadow-sm hover:shadow-md transition-all active:scale-95 flex flex-col">
@@ -255,7 +256,6 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
                 </div>
             )}
 
-            {/* DOCUMENTS BLOCK */}
             {documents.length > 0 && (
                 <div className="space-y-3 pt-2">
                     <div className="flex justify-between items-center px-1">
@@ -265,7 +265,6 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
                         </div>
                         <Link to="/documents" className="text-xs font-bold text-green-500 hover:underline">Xem tất cả</Link>
                     </div>
-                    
                     <div className="space-y-3">
                         {documents.length > 0 && (
                             <>
@@ -358,13 +357,23 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
                     <div className="bg-white p-5 rounded-[1.5rem] shadow-[0_2px_15px_rgba(0,0,0,0.03)] border border-gray-100 active:scale-[0.98] transition-all relative overflow-hidden">
                         {q.answers.length === 0 && <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-orange-100 to-transparent rounded-bl-full -mr-8 -mt-8"></div>}
                         <div className="flex items-start justify-between mb-3 relative z-10">
+                        {/* PHẦN TÊN TÁC GIẢ ĐÃ ĐƯỢC SỬA */}
                         <div className="flex items-center gap-2">
-                            <img src={q.author.avatar} className="w-8 h-8 rounded-full border border-gray-100 object-cover" />
+                            {/* Dùng div onClick thay vì Link lồng Link để tránh lỗi */}
+                            <div 
+                                onClick={(e) => handleUserClick(e, q.author)}
+                                className="cursor-pointer"
+                            >
+                                <img src={q.author.avatar} className="w-8 h-8 rounded-full border border-gray-100 object-cover" />
+                            </div>
                             <div>
-                                <p className="text-xs font-bold text-textDark flex items-center gap-1">
+                                <div 
+                                    onClick={(e) => handleUserClick(e, q.author)}
+                                    className="text-xs font-bold text-textDark flex items-center gap-1 cursor-pointer hover:underline"
+                                >
                                     {q.author.name}
                                     {q.author.isExpert && <ShieldCheck size={10} className="text-blue-500" />}
-                                </p>
+                                </div>
                                 <p className="text-[10px] text-gray-400">{new Date(q.createdAt).toLocaleDateString('vi-VN')}</p>
                             </div>
                         </div>
