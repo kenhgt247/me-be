@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Sparkles, X, Image as ImageIcon, Loader2, ChevronDown, Check, 
   Tag, Baby, Heart, Utensils, Brain, BookOpen, Users, Stethoscope, Smile, Plus,
-  Link as LinkIcon, PenTool, Trash2, ArrowLeft
+  Link as LinkIcon, ArrowLeft, Send
 } from 'lucide-react';
 import { Question, User } from '../types';
 import { suggestTitles, generateQuestionContent } from '../services/gemini';
@@ -22,7 +22,6 @@ interface AskProps {
   onGoogleLogin: () => Promise<User>;
 }
 
-// Kiểu dữ liệu cho ảnh đính kèm
 interface Attachment {
     id: string;
     file: File;
@@ -33,21 +32,21 @@ interface Attachment {
 }
 
 const getCategoryIcon = (cat: string) => {
-  if (cat.includes("Mang thai")) return <Baby size={20} />;
-  if (cat.includes("Dinh dưỡng")) return <Utensils size={20} />;
-  if (cat.includes("Sức khỏe")) return <Stethoscope size={20} />;
-  if (cat.includes("0-1") || cat.includes("1-3")) return <Smile size={20} />;
-  if (cat.includes("Tâm lý")) return <Brain size={20} />;
-  if (cat.includes("Giáo dục")) return <BookOpen size={20} />;
-  if (cat.includes("Gia đình")) return <Users size={20} />;
-  return <Tag size={20} />;
+  if (cat.includes("Mang thai")) return <Baby size={18} />;
+  if (cat.includes("Dinh dưỡng")) return <Utensils size={18} />;
+  if (cat.includes("Sức khỏe")) return <Stethoscope size={18} />;
+  if (cat.includes("0-1") || cat.includes("1-3")) return <Smile size={18} />;
+  if (cat.includes("Tâm lý")) return <Brain size={18} />;
+  if (cat.includes("Giáo dục")) return <BookOpen size={18} />;
+  if (cat.includes("Gia đình")) return <Users size={18} />;
+  return <Tag size={18} />;
 };
 
 const getCategoryColor = (cat: string) => {
-  if (cat.includes("Mang thai")) return "bg-pink-100 text-pink-600";
-  if (cat.includes("Dinh dưỡng")) return "bg-green-100 text-green-600";
-  if (cat.includes("Sức khỏe")) return "bg-blue-100 text-blue-600";
-  return "bg-orange-100 text-orange-600";
+  if (cat.includes("Mang thai")) return "bg-pink-50 text-pink-600 border-pink-100";
+  if (cat.includes("Dinh dưỡng")) return "bg-green-50 text-green-600 border-green-100";
+  if (cat.includes("Sức khỏe")) return "bg-blue-50 text-blue-600 border-blue-100";
+  return "bg-orange-50 text-orange-600 border-orange-100";
 };
 
 const STICKER_PACKS = {
@@ -77,7 +76,6 @@ export const Ask: React.FC<AskProps> = ({
   const [isGeneratingContent, setIsGeneratingContent] = useState(false);
   const [customCategory, setCustomCategory] = useState('');
   
-  // State quản lý ảnh
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   
   const [showStickers, setShowStickers] = useState(false);
@@ -272,7 +270,7 @@ export const Ask: React.FC<AskProps> = ({
   const handleGuestContinue = async () => { setShowAuthModal(false); };
 
   return (
-    <div className="min-h-screen bg-[#F7F7F5] flex flex-col items-center animate-fade-in pb-safe-bottom">
+    <div className="min-h-screen bg-white flex flex-col animate-fade-in pb-safe-bottom">
       <AuthModal 
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
@@ -282,167 +280,178 @@ export const Ask: React.FC<AskProps> = ({
         onGuestContinue={handleGuestContinue}
       />
 
-      {/* --- HEADER: Gọn gàng hơn --- */}
-      <div className="w-full bg-white shadow-sm border-b border-gray-100 sticky top-0 z-30 pt-safe-top">
+      {/* --- HEADER --- */}
+      <div className="w-full bg-white/90 backdrop-blur-md sticky top-0 z-30 pt-safe-top border-b border-gray-50">
           <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
             <button onClick={() => navigate(-1)} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors text-gray-500">
                 <ArrowLeft size={24} />
             </button>
-            <span className="font-bold text-lg text-textDark">Tạo câu hỏi mới</span>
-            <button 
-                onClick={handleSubmit}
-                disabled={!title || !content || isSubmitting}
-                className="bg-primary text-white px-4 py-1.5 rounded-full font-bold text-sm shadow-md shadow-primary/20 disabled:opacity-50 active:scale-95 transition-transform"
-            >
-                {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : "Đăng"}
-            </button>
+            <span className="font-bold text-lg text-textDark">Đặt câu hỏi</span>
+            <div className="w-10"></div> {/* Spacer to center title */}
           </div>
       </div>
 
-      {/* --- MAIN EDITOR: Dạng trang giấy/Card --- */}
-      <div className="flex-1 w-full max-w-3xl px-0 md:px-4 py-4 md:py-6 overflow-y-auto">
-        <div className="bg-white md:rounded-3xl shadow-sm border border-gray-100 min-h-[80vh] md:min-h-auto relative flex flex-col">
-            
-            {/* User & Category Selection */}
-            <div className="px-5 pt-5 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <img src={currentUser.avatar} className="w-10 h-10 rounded-full border border-gray-100 object-cover" />
-                    <div>
-                        <div className="font-bold text-sm text-textDark">{currentUser.name}</div>
-                        <button 
-                            onClick={() => setShowCategorySheet(true)}
-                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all border ${getCategoryColor(category).replace('text-', 'border-').replace('bg-', 'bg-opacity-20 ')}`}
-                        >
-                            {getCategoryIcon(category)} {category} <ChevronDown size={12}/>
-                        </button>
-                    </div>
-                </div>
+      {/* --- MAIN EDITOR --- */}
+      <div className="flex-1 w-full max-w-3xl mx-auto px-4 py-4 overflow-y-auto pb-32">
+        
+        {/* User Info & Category */}
+        <div className="flex items-center gap-3 mb-6">
+            <img src={currentUser.avatar} className="w-11 h-11 rounded-full border border-gray-100 object-cover" />
+            <div>
+                <div className="font-bold text-sm text-textDark mb-0.5">{currentUser.name}</div>
+                {/* NÚT CHỌN CHỦ ĐỀ Ở ĐÂY CHO GỌN */}
+                <button 
+                    onClick={() => setShowCategorySheet(true)}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all border ${getCategoryColor(category)}`}
+                >
+                    {getCategoryIcon(category)} {category} <ChevronDown size={12}/>
+                </button>
+            </div>
+        </div>
+
+        {/* Content Area */}
+        <div className="space-y-5">
+            {/* Title */}
+            <div className="relative group">
+                <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Tiêu đề: Mẹ đang lo lắng điều gì?..."
+                    className="w-full text-xl md:text-2xl font-bold text-textDark placeholder-gray-300 border-none p-0 pr-20 focus:ring-0 bg-transparent leading-tight"
+                    autoFocus
+                />
+                <button 
+                    onClick={handleAiSuggest}
+                    disabled={isSuggesting}
+                    className="absolute right-0 top-1/2 -translate-y-1/2 text-xs font-bold text-orange-600 bg-orange-50 px-2.5 py-1.5 rounded-lg flex items-center gap-1 hover:bg-orange-100 transition-all border border-orange-100 active:scale-95"
+                >
+                    {isSuggesting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} Gợi ý
+                </button>
             </div>
 
-            {/* Content Area */}
-            <div className="p-5 flex-1 space-y-4">
-                {/* Title Input */}
-                <div className="relative">
-                    <input
-                        type="text"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        placeholder="Tiêu đề: Mẹ đang lo lắng điều gì?..."
-                        className="w-full text-2xl font-bold text-textDark placeholder-gray-300 border-none p-0 pr-20 focus:ring-0 bg-transparent leading-tight"
-                        autoFocus
-                    />
+            {/* Content */}
+            <div className="relative min-h-[150px]">
+                {title.length > 5 && !content && !isGeneratingContent && (
                     <button 
-                        onClick={handleAiSuggest}
-                        disabled={isSuggesting}
-                        className="absolute right-0 top-1/2 -translate-y-1/2 text-xs font-bold text-orange-600 bg-orange-50 px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-orange-100 transition-all border border-orange-100 active:scale-95"
+                        onClick={handleAiContent}
+                        className="absolute right-0 -top-2 text-xs font-bold text-purple-600 bg-purple-50 px-3 py-1.5 rounded-full flex items-center gap-1.5 hover:bg-purple-100 transition-all border border-purple-100 shadow-sm z-10 animate-pop-in"
                     >
-                        {isSuggesting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} Gợi ý
+                        <Sparkles size={14} /> AI Viết hộ
                     </button>
-                </div>
+                )}
 
-                {/* Content Input */}
-                <div className="relative min-h-[200px]">
-                    {/* AI Write Content Button */}
-                    {title.length > 5 && !content && !isGeneratingContent && (
-                        <button 
-                            onClick={handleAiContent}
-                            className="absolute right-0 -top-2 text-xs font-bold text-purple-600 bg-purple-50 px-3 py-1.5 rounded-full flex items-center gap-1.5 hover:bg-purple-100 transition-all border border-purple-100 shadow-sm z-10 animate-pop-in"
-                        >
-                            <Sparkles size={14} /> Viết nội dung hộ mẹ
-                        </button>
-                    )}
-
-                    {isGeneratingContent && (
-                        <div className="absolute inset-0 bg-white/90 z-20 flex items-center justify-center rounded-lg">
-                            <div className="flex items-center gap-2 text-purple-600 font-bold text-sm animate-pulse">
-                                <Loader2 size={18} className="animate-spin" /> AI đang suy nghĩ và viết bài...
-                            </div>
+                {isGeneratingContent && (
+                    <div className="absolute inset-0 bg-white/90 z-20 flex items-center justify-center rounded-lg">
+                        <div className="flex items-center gap-2 text-purple-600 font-bold text-sm animate-pulse">
+                            <Loader2 size={18} className="animate-spin" /> AI đang viết...
                         </div>
-                    )}
-
-                    <textarea
-                        ref={textareaRef}
-                        value={content}
-                        onChange={(e) => setContent(e.target.value)}
-                        placeholder="Mô tả chi tiết hơn để các chuyên gia tư vấn chính xác nhé (Triệu chứng, độ tuổi của bé, đã làm gì rồi...)"
-                        className="w-full text-lg text-textDark/90 placeholder-gray-400 border-none p-0 focus:ring-0 bg-transparent resize-none leading-relaxed h-full min-h-[200px]"
-                    />
-                </div>
-
-                {/* Image Previews */}
-                {attachments.length > 0 && (
-                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 pt-2">
-                        {attachments.map((att) => (
-                            <div key={att.id} className="relative aspect-square rounded-2xl overflow-hidden shadow-sm border border-gray-100 group bg-gray-50">
-                                <img src={att.preview} className={`w-full h-full object-cover transition-opacity ${att.uploading ? 'opacity-50' : 'opacity-100'}`} />
-                                {att.uploading && <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="animate-spin text-primary" size={20} /></div>}
-                                <button onClick={() => removeImage(att.id)} className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 backdrop-blur-sm active:scale-90 transition-transform"><X size={14} /></button>
-                            </div>
-                        ))}
                     </div>
                 )}
 
-                {/* AI Suggestions List */}
-                {showSuggestions && (
-                    <div className="bg-orange-50 rounded-2xl p-4 border border-orange-100 animate-pop-in">
-                        <div className="flex justify-between items-center mb-2">
-                            <h4 className="text-xs font-bold text-orange-700 uppercase">Gợi ý tiêu đề</h4>
-                            <button onClick={() => setShowSuggestions(false)}><X size={16} className="text-orange-400"/></button>
-                        </div>
-                        <div className="space-y-2">
-                            {suggestions.map((s, idx) => (
-                                <button key={idx} onClick={() => { setTitle(s); setShowSuggestions(false); }} className="w-full text-left p-2.5 bg-white rounded-xl text-sm font-medium text-textDark border border-orange-100 shadow-sm active:scale-[0.99] transition-transform hover:border-orange-300">{s}</button>
-                            ))}
-                        </div>
-                    </div>
-                )}
+                <textarea
+                    ref={textareaRef}
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder="Mô tả chi tiết để được tư vấn chính xác hơn..."
+                    className="w-full text-base md:text-lg text-textDark/90 placeholder-gray-400 border-none p-0 focus:ring-0 bg-transparent resize-none leading-relaxed h-full min-h-[150px]"
+                />
             </div>
 
-            {/* Toolbar (Sticky Bottom inside Card on Desktop, Sticky Bottom Screen on Mobile) */}
-            <div className="p-4 border-t border-gray-100 bg-gray-50/50 md:rounded-b-3xl flex items-center gap-2 overflow-x-auto no-scrollbar">
-                <label className="p-2.5 rounded-xl bg-white text-gray-500 hover:text-primary hover:bg-blue-50 transition-all cursor-pointer border border-gray-200 shadow-sm active:scale-95">
-                    <ImageIcon size={22} />
-                    <input type="file" accept="image/*" multiple onChange={handleImageChange} className="hidden" />
-                </label>
-                
-                <button 
-                   onClick={() => {setShowStickers(!showStickers); setShowLinkInput(false)}}
-                   className={`p-2.5 rounded-xl border transition-all shadow-sm active:scale-95 ${showStickers ? 'bg-yellow-100 text-yellow-600 border-yellow-200' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
-                >
-                   <Smile size={22} />
-                </button>
-
-                <button 
-                   onClick={() => {setShowLinkInput(!showLinkInput); setShowStickers(false)}}
-                   className={`p-2.5 rounded-xl border transition-all shadow-sm active:scale-95 ${showLinkInput ? 'bg-blue-100 text-blue-600 border-blue-200' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
-                >
-                   <LinkIcon size={22} />
-                </button>
-            </div>
-
-            {/* Sticker/Link Drawers */}
-            {showLinkInput && (
-                <div className="bg-gray-100 p-3 border-t border-gray-200 flex gap-2 animate-slide-up">
-                    <input type="url" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="Dán link vào đây..." className="flex-1 text-sm bg-white border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-primary" autoFocus />
-                    <button onClick={handleInsertLink} className="bg-primary text-white text-xs font-bold px-4 rounded-lg">Chèn</button>
-                </div>
-            )}
-            
-            {showStickers && (
-                <div className="h-48 overflow-y-auto bg-gray-50 border-t border-gray-200 p-4 animate-slide-up">
-                    {Object.entries(STICKER_PACKS).map(([category, emojis]) => (
-                        <div key={category} className="mb-4">
-                            <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-2">{category}</h4>
-                            <div className="grid grid-cols-8 gap-2">
-                                {emojis.map(emoji => (
-                                    <button key={emoji} onClick={() => handleInsertSticker(emoji)} className="text-2xl hover:scale-125 transition-transform p-1">{emoji}</button>
-                                ))}
-                            </div>
+            {/* Image Previews */}
+            {attachments.length > 0 && (
+                <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+                    {attachments.map((att) => (
+                        <div key={att.id} className="relative w-28 h-28 shrink-0 rounded-2xl overflow-hidden shadow-sm border border-gray-100 group bg-gray-50">
+                            <img src={att.preview} className={`w-full h-full object-cover transition-opacity ${att.uploading ? 'opacity-50' : 'opacity-100'}`} />
+                            {att.uploading && <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="animate-spin text-primary" size={20} /></div>}
+                            <button onClick={() => removeImage(att.id)} className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 backdrop-blur-sm active:scale-90 transition-transform"><X size={12} /></button>
                         </div>
                     ))}
                 </div>
             )}
+
+            {/* AI Suggestions List */}
+            {showSuggestions && (
+                <div className="bg-orange-50 rounded-2xl p-4 border border-orange-100 animate-pop-in">
+                    <div className="flex justify-between items-center mb-2">
+                        <h4 className="text-xs font-bold text-orange-700 uppercase">Gợi ý tiêu đề</h4>
+                        <button onClick={() => setShowSuggestions(false)}><X size={16} className="text-orange-400"/></button>
+                    </div>
+                    <div className="space-y-2">
+                        {suggestions.map((s, idx) => (
+                            <button key={idx} onClick={() => { setTitle(s); setShowSuggestions(false); }} className="w-full text-left p-2.5 bg-white rounded-xl text-sm font-medium text-textDark border border-orange-100 shadow-sm active:scale-[0.99] transition-transform hover:border-orange-300">{s}</button>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
+      </div>
+
+      {/* --- STICKY FOOTER TOOLBAR --- */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-3 pb-safe-bottom z-40 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
+          <div className="max-w-3xl mx-auto flex flex-col gap-3">
+              
+              {/* Extra Tools Drawers (Link/Sticker) */}
+              {showLinkInput && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-2 flex gap-2 animate-slide-up mb-2">
+                      <input type="url" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="Dán link vào đây..." className="flex-1 text-sm bg-white border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-primary" autoFocus />
+                      <button onClick={handleInsertLink} className="bg-primary text-white text-xs font-bold px-4 rounded-lg">Chèn</button>
+                      <button onClick={() => setShowLinkInput(false)} className="text-gray-400 p-1"><X size={18}/></button>
+                  </div>
+              )}
+              {showStickers && (
+                  <div className="h-40 overflow-y-auto bg-white border border-gray-100 rounded-xl p-3 animate-slide-up mb-2 shadow-sm">
+                      {Object.entries(STICKER_PACKS).map(([category, emojis]) => (
+                          <div key={category} className="mb-3">
+                              <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-2">{category}</h4>
+                              <div className="grid grid-cols-8 gap-2">
+                                  {emojis.map(emoji => (
+                                      <button key={emoji} onClick={() => handleInsertSticker(emoji)} className="text-2xl hover:scale-125 transition-transform p-1">{emoji}</button>
+                                  ))}
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+              )}
+
+              {/* MAIN ACTION ROW */}
+              <div className="flex items-center justify-between gap-4">
+                  {/* Left: Tools */}
+                  <div className="flex items-center gap-1">
+                      {/* Image Button */}
+                      <label className={`w-11 h-11 rounded-full flex items-center justify-center transition-all cursor-pointer active:scale-90 ${attachments.length >= 3 ? 'opacity-50 cursor-not-allowed bg-gray-100 text-gray-400' : 'bg-gray-50 text-green-600 hover:bg-green-50'}`}>
+                          <ImageIcon size={22} />
+                          <input type="file" accept="image/*" multiple onChange={handleImageChange} className="hidden" disabled={attachments.length >= 3} />
+                      </label>
+                      
+                      {/* Sticker Button */}
+                      <button 
+                         onClick={() => {setShowStickers(!showStickers); setShowLinkInput(false)}}
+                         className={`w-11 h-11 rounded-full flex items-center justify-center transition-all active:scale-90 ${showStickers ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}
+                      >
+                         <Smile size={22} />
+                      </button>
+
+                      {/* Link Button */}
+                      <button 
+                         onClick={() => {setShowLinkInput(!showLinkInput); setShowStickers(false)}}
+                         className={`w-11 h-11 rounded-full flex items-center justify-center transition-all active:scale-90 ${showLinkInput ? 'bg-blue-100 text-blue-600' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}
+                      >
+                         <LinkIcon size={22} />
+                      </button>
+                  </div>
+
+                  {/* Right: Submit Button */}
+                  <button 
+                     onClick={handleSubmit} 
+                     disabled={!title || !content || isSubmitting}
+                     className="flex-1 bg-primary text-white h-11 rounded-full font-bold text-[15px] shadow-lg shadow-primary/30 disabled:opacity-50 disabled:shadow-none transition-all active:scale-[0.98] flex items-center justify-center gap-2 hover:bg-[#25A99C]"
+                  >
+                     {isSubmitting ? <Loader2 size={20} className="animate-spin" /> : <>Đăng câu hỏi <Send size={18} /></>}
+                  </button>
+              </div>
+          </div>
       </div>
 
       {/* --- CATEGORY SHEET --- */}
