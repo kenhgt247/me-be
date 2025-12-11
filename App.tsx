@@ -17,7 +17,8 @@ import { AiChat } from './pages/AiChat';
 import { ExpertRegistration } from './pages/ExpertRegistration';
 import { BlogList } from './pages/BlogList';
 import { BlogDetail } from './pages/BlogDetail';
-import { About, Terms, Privacy, Contact } from './pages/StaticPages';
+// ĐÃ THÊM FAQ VÀO ĐÂY
+import { About, Terms, Privacy, Contact, FAQ } from './pages/StaticPages';
 import { DocumentList } from './pages/DocumentList';
 import { DocumentDetail } from './pages/DocumentDetail';
 
@@ -271,7 +272,9 @@ export default function App() {
         <Route path="/terms" element={<Layout><Terms /></Layout>} />
         <Route path="/privacy" element={<Layout><Privacy /></Layout>} />
         <Route path="/contact" element={<Layout><Contact /></Layout>} />
-        <Route path="/faq" element={<Layout><Contact /></Layout>} />
+        {/* ĐÃ SỬA LẠI DÒNG NÀY */}
+        <Route path="/faq" element={<Layout><FAQ /></Layout>} />
+        
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
