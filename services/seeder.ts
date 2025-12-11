@@ -165,10 +165,21 @@ const TOPIC_DATA = {
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 const getRandomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 
-// Hàm tạo Avatar ngẫu nhiên nhưng cố định theo seed để không bị đổi mỗi lần load
+// HÀM TẠO AVATAR MỚI (Đã sửa lỗi)
 const generateAvatar = (seed: string, gender: 'male' | 'female' = 'female') => {
-  const style = gender === 'male' ? 'micah' : 'personalities'; // Style khác nhau cho nam/nữ
-  return `https://api.dicebear.com/7.x/${style}/svg?seed=${seed}&backgroundColor=b6e3f4,c0aede,ffdfbf`;
+  // Mã hóa seed để tránh lỗi khi tên có dấu cách hoặc ký tự đặc biệt
+  const safeSeed = encodeURIComponent(seed);
+  
+  // Style 'avataaars' rất ổn định và chuyên nghiệp cho avatar người
+  // Style 'adventurer' dễ thương, hợp với các mẹ
+  const style = gender === 'male' ? 'avataaars' : 'adventurer'; 
+  
+  // Dùng API v9.x mới nhất
+  return `https://api.dicebear.com/9.x/${style}/svg?seed=${safeSeed}`;
+};
+
+// Nếu vẫn lỗi ảnh, bạn có thể dùng link dự phòng này (Avatar chữ cái tên):
+// return `https://ui-avatars.com/api/?name=${safeSeed}&background=random&color=fff&size=128`;
 };
 
 // --- CORE FUNCTIONS ---
