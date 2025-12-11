@@ -3,11 +3,10 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Document, DocumentCategory, User } from '../types';
 import { fetchDocuments, fetchDocumentCategories } from '../services/documents';
-// ĐÃ BỔ SUNG: ChevronRight vào dòng import dưới đây
-import { FileText, Download, Star, Loader2, Search, Link as LinkIcon, UploadCloud, ArrowDown, ChevronRight } from 'lucide-react';
+import { FileText, Download, Star, Filter, Loader2, Search, Link as LinkIcon, UploadCloud, ArrowDown, ChevronRight } from 'lucide-react';
 import { subscribeToAuthChanges } from '../services/auth';
 
-// Số lượng tài liệu hiển thị mỗi lần tải
+// Số lượng tài liệu hiển thị mỗi lần (9 là đẹp cho lưới 3 cột)
 const PAGE_SIZE = 9;
 
 export const DocumentList: React.FC = () => {
@@ -47,8 +46,7 @@ export const DocumentList: React.FC = () => {
   const handleFilter = async (catId: string) => {
       setActiveCat(catId);
       setLoading(true);
-      // Reset về trang đầu khi đổi danh mục
-      setVisibleCount(PAGE_SIZE);
+      setVisibleCount(PAGE_SIZE); // Reset về trang đầu
       
       const data = await fetchDocuments(catId, 100);
       setDocs(data);
@@ -59,10 +57,9 @@ export const DocumentList: React.FC = () => {
       setVisibleCount(prev => prev + PAGE_SIZE);
   };
 
-  // Lọc theo từ khóa tìm kiếm trước
   const filteredDocs = docs.filter(d => d.title.toLowerCase().includes(searchTerm.toLowerCase()));
   
-  // Sau đó cắt danh sách để hiển thị theo phân trang
+  // Cắt danh sách để hiển thị
   const visibleDocs = filteredDocs.slice(0, visibleCount);
 
   const canShare = currentUser && (currentUser.isAdmin || currentUser.isExpert);
@@ -71,7 +68,7 @@ export const DocumentList: React.FC = () => {
     <div className="min-h-screen bg-[#F7F7F5] pb-24 animate-fade-in pt-safe-top">
        {/* Header */}
        <div className="px-4 py-6 bg-white border-b border-gray-100 shadow-sm sticky top-[68px] md:top-20 z-30">
-          <div className="max-w-5xl mx-auto">
+          <div className="max-w-6xl mx-auto">
              <div className="flex justify-between items-start mb-4">
                  <div>
                      <h1 className="text-2xl font-bold text-textDark mb-1 flex items-center gap-2">
@@ -80,7 +77,6 @@ export const DocumentList: React.FC = () => {
                      <p className="text-sm text-gray-500">Kho tài liệu chọn lọc dành cho mẹ và bé.</p>
                  </div>
                  
-                 {/* Share Button for Experts/Admins */}
                  {canShare && (
                      <button 
                         onClick={() => navigate('/admin/documents')}
@@ -98,7 +94,7 @@ export const DocumentList: React.FC = () => {
                  <input 
                    value={searchTerm} 
                    onChange={e => setSearchTerm(e.target.value)} 
-                   placeholder="Tìm tài liệu..." 
+                   placeholder="Tìm kiếm tài liệu..." 
                    className="w-full pl-10 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-green-100 transition-all"
                  />
              </div>
@@ -116,39 +112,39 @@ export const DocumentList: React.FC = () => {
           </div>
        </div>
 
-       <div className="max-w-5xl mx-auto px-4 py-6">
+       <div className="max-w-6xl mx-auto px-4 py-6">
            {loading ? (
                <div className="flex justify-center py-20"><Loader2 className="animate-spin text-green-600" size={32} /></div>
            ) : filteredDocs.length === 0 ? (
                <div className="text-center py-20 text-gray-400 italic">Chưa có tài liệu nào phù hợp.</div>
            ) : (
                <>
-                   <div className="grid md:grid-cols-2 gap-4">
+                   {/* ĐÃ SỬA: Thêm lg:grid-cols-3 để hiện 3 cột trên Desktop */}
+                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                        {visibleDocs.map(doc => (
-                           <Link to={`/documents/${doc.slug}`} key={doc.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all flex gap-4 items-start group active:scale-[0.98]">
+                           <Link to={`/documents/${doc.slug}`} key={doc.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg transition-all flex gap-4 items-start group active:scale-[0.98] hover:-translate-y-1">
                                <div className={`w-16 h-16 rounded-xl flex items-center justify-center text-3xl shrink-0 group-hover:scale-105 transition-transform ${doc.isExternal ? 'bg-blue-50 text-blue-500' : 'bg-green-50'}`}>
                                    {doc.isExternal ? <LinkIcon /> : (doc.fileType === 'pdf' ? '📕' : doc.fileType === 'docx' ? '📝' : '📄')}
                                </div>
                                <div className="flex-1 min-w-0">
-                                   <h3 className="font-bold text-gray-900 line-clamp-1 mb-1 group-hover:text-green-700 transition-colors">{doc.title}</h3>
-                                   <p className="text-xs text-gray-500 line-clamp-2 mb-2">{doc.description}</p>
-                                   <div className="flex items-center gap-4 text-xs text-gray-400 font-medium">
-                                       <span className="flex items-center gap-1"><Download size={12}/> {doc.downloads}</span>
-                                       <span className="flex items-center gap-1"><Star size={12} className="text-yellow-400 fill-yellow-400"/> {doc.rating.toFixed(1)}</span>
-                                       <span className="truncate max-w-[100px]">{doc.authorName}</span>
+                                   <h3 className="font-bold text-gray-900 line-clamp-2 mb-1 group-hover:text-green-700 transition-colors leading-tight h-10">{doc.title}</h3>
+                                   <p className="text-xs text-gray-500 line-clamp-1 mb-2">{doc.description}</p>
+                                   <div className="flex items-center gap-3 text-xs text-gray-400 font-medium mt-auto">
+                                       <span className="flex items-center gap-1 bg-gray-50 px-1.5 py-0.5 rounded"><Download size={10}/> {doc.downloads}</span>
+                                       <span className="flex items-center gap-1 bg-yellow-50 text-yellow-600 px-1.5 py-0.5 rounded"><Star size={10} className="fill-yellow-500"/> {doc.rating.toFixed(1)}</span>
                                    </div>
                                </div>
-                               <div className="p-2 text-gray-300 group-hover:text-green-600 transition-colors"><ChevronRight size={18} /></div>
+                               <div className="self-center p-1 text-gray-300 group-hover:text-green-600 transition-colors"><ChevronRight size={20} /></div>
                            </Link>
                        ))}
                    </div>
 
-                   {/* NÚT XEM THÊM (LOAD MORE) */}
+                   {/* NÚT XEM THÊM */}
                    {visibleCount < filteredDocs.length && (
-                       <div className="flex justify-center mt-8">
+                       <div className="flex justify-center mt-10">
                            <button
                                onClick={handleLoadMore}
-                               className="px-6 py-3 rounded-full bg-white border border-gray-200 text-sm font-bold text-textDark shadow-sm hover:bg-gray-50 active:scale-95 transition-all flex items-center gap-2"
+                               className="px-8 py-3 rounded-full bg-white border border-gray-200 text-sm font-bold text-textDark shadow-sm hover:bg-green-50 hover:text-green-700 hover:border-green-200 active:scale-95 transition-all flex items-center gap-2"
                            >
                                Xem thêm tài liệu <ArrowDown size={16} />
                            </button>
