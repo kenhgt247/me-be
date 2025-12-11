@@ -1,16 +1,16 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 // @ts-ignore
 import { useNavigate } from 'react-router-dom';
 import { 
   Sparkles, X, Image as ImageIcon, Loader2, ChevronDown, Check, 
   Tag, Baby, Heart, Utensils, Brain, BookOpen, Users, Stethoscope, Smile, Plus,
-  Link as LinkIcon, PenTool
+  Link as LinkIcon, PenTool, Trash2
 } from 'lucide-react';
 import { Question, User } from '../types';
 import { suggestTitles, generateQuestionContent } from '../services/gemini';
 import { AuthModal } from '../components/AuthModal';
-import { uploadMultipleFiles } from '../services/storage';
+// ĐỔI IMPORT: Dùng uploadFile thay vì uploadMultipleFiles để upload từng cái
+import { uploadFile } from '../services/storage'; 
 import { loginAnonymously } from '../services/auth';
 
 interface AskProps {
@@ -23,7 +23,16 @@ interface AskProps {
   onGoogleLogin: () => Promise<User>;
 }
 
-// Map categories to icons for visual appeal
+// Kiểu dữ liệu cho ảnh đính kèm (Upload ngầm)
+interface Attachment {
+    id: string;
+    file: File;
+    preview: string;
+    url?: string;      // Link ảnh sau khi upload xong
+    uploading: boolean; // Trạng thái đang tải
+    error?: boolean;
+}
+
 const getCategoryIcon = (cat: string) => {
   if (cat.includes("Mang thai")) return <Baby size={24} />;
   if (cat.includes("Dinh dưỡng")) return <Utensils size={24} />;
@@ -42,7 +51,6 @@ const getCategoryColor = (cat: string) => {
   return "bg-orange-100 text-orange-600";
 };
 
-// Reuse Sticker Packs
 const STICKER_PACKS = {
   "Cảm xúc": ["😀", "😂", "🥰", "😎", "😭", "😡", "😱", "🥳", "😴", "🤔"],
   "Yêu thương": ["❤️", "🧡", "💛", "💚", "💙", "💜", "💖", "💝", "💋", "💌"],
@@ -69,27 +77,22 @@ export const Ask: React.FC<AskProps> = ({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isGeneratingContent, setIsGeneratingContent] = useState(false);
   
-  // Custom Category State
   const [customCategory, setCustomCategory] = useState('');
   
-  // Image State
-  const [selectedImages, setSelectedImages] = useState<File[]>([]);
-  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  // --- THAY ĐỔI: STATE QUẢN LÝ ẢNH ---
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  // ------------------------------------
   
-  // Tool States
   const [showStickers, setShowStickers] = useState(false);
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
 
-  // UI States
   const [showCategorySheet, setShowCategorySheet] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [loadingText, setLoadingText] = useState('');
-
+  
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -97,15 +100,16 @@ export const Ask: React.FC<AskProps> = ({
     }
   }, [content]);
   
+  // Cleanup preview URLs khi component unmount
   useEffect(() => {
     return () => {
-      previewUrls.forEach(url => URL.revokeObjectURL(url));
+      attachments.forEach(att => URL.revokeObjectURL(att.preview));
     };
-  }, [previewUrls]);
+  }, []); // Chỉ chạy khi unmount
 
   const handleAiSuggest = async () => {
-    if (title.length < 5) {
-      alert("Mẹ ơi, hãy viết một chút tiêu đề để AI hiểu ý mẹ nhé!");
+    if (title.length < 3) {
+      alert("Mẹ ơi, hãy viết vài từ khóa để AI hiểu ý mẹ nhé!");
       return;
     }
     setIsSuggesting(true);
@@ -117,44 +121,59 @@ export const Ask: React.FC<AskProps> = ({
 
   const handleAiContent = async () => {
     if (!title || title.length < 5) {
-      alert("Mẹ ơi, hãy nhập tiêu đề rõ ràng trước (ít nhất 5 ký tự) để AI hiểu ý mẹ và viết nội dung nhé!");
+      alert("Mẹ ơi, hãy nhập tiêu đề rõ ràng trước (ít nhất 5 ký tự) nhé!");
       return;
     }
-    
     if (content.length > 50) {
-        if (!confirm("Ô nội dung đang có dữ liệu. Mẹ có muốn AI viết đè lên không?")) return;
+        if (!confirm("AI sẽ viết đè lên nội dung hiện tại. Mẹ đồng ý không?")) return;
     }
-
     setIsGeneratingContent(true);
     const aiContent = await generateQuestionContent(title);
     setContent(aiContent);
     setIsGeneratingContent(false);
   };
 
+  // --- LOGIC UPLOAD ẢNH NGẦM (BACKGROUND UPLOAD) ---
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const filesArray = Array.from(e.target.files);
-      const totalImages = selectedImages.length + filesArray.length;
-      if (totalImages > 3) {
-        alert("Mẹ chỉ được đăng tối đa 3 ảnh thôi nhé!");
+      if (attachments.length + filesArray.length > 3) {
+        alert("Chỉ được đăng tối đa 3 ảnh thôi mẹ nhé!");
         return;
       }
-      const newImages = [...selectedImages, ...filesArray];
-      setSelectedImages(newImages);
-      const newPreviews = filesArray.map(file => URL.createObjectURL(file as Blob));
-      setPreviewUrls([...previewUrls, ...newPreviews]);
+
+      // 1. Tạo danh sách Attachment tạm thời để hiện Preview ngay
+      const newAttachments: Attachment[] = filesArray.map(file => ({
+          id: Math.random().toString(36).substr(2, 9),
+          file,
+          preview: URL.createObjectURL(file),
+          uploading: true // Đánh dấu là đang upload
+      }));
+
+      setAttachments(prev => [...prev, ...newAttachments]);
+
+      // 2. Thực hiện Upload từng file
+      newAttachments.forEach(async (att) => {
+          try {
+              const url = await uploadFile(att.file, 'question_images');
+              // Upload xong -> Cập nhật URL và tắt trạng thái uploading
+              setAttachments(prev => prev.map(p => 
+                  p.id === att.id ? { ...p, url, uploading: false } : p
+              ));
+          } catch (error) {
+              console.error("Upload failed", error);
+              alert("Lỗi tải ảnh. Vui lòng thử lại ảnh khác.");
+              // Xóa ảnh lỗi khỏi danh sách
+              setAttachments(prev => prev.filter(p => p.id !== att.id));
+          }
+      });
     }
   };
 
-  const removeImage = (index: number) => {
-    const newImages = [...selectedImages];
-    newImages.splice(index, 1);
-    setSelectedImages(newImages);
-    const newPreviews = [...previewUrls];
-    URL.revokeObjectURL(newPreviews[index]); 
-    newPreviews.splice(index, 1);
-    setPreviewUrls(newPreviews);
+  const removeImage = (id: string) => {
+    setAttachments(prev => prev.filter(att => att.id !== id));
   };
+  // ----------------------------------------------------
 
   const handleAddCustomCategory = () => {
     if (customCategory.trim()) {
@@ -171,16 +190,12 @@ export const Ask: React.FC<AskProps> = ({
         setContent(prev => prev + textToInsert);
         return;
     }
-    
     const start = input.selectionStart;
     const end = input.selectionEnd;
     const text = content;
     const before = text.substring(0, start);
     const after = text.substring(end, text.length);
-    
     setContent(before + textToInsert + after);
-    
-    // Restore focus and cursor position
     setTimeout(() => {
         input.focus();
         input.setSelectionRange(start + textToInsert.length, start + textToInsert.length);
@@ -188,34 +203,30 @@ export const Ask: React.FC<AskProps> = ({
   };
 
   const handleInsertLink = () => {
-    if (!linkUrl) {
-       setShowLinkInput(false);
-       return;
-    }
+    if (!linkUrl) { setShowLinkInput(false); return; }
     let safeUrl = linkUrl;
-    if (!safeUrl.startsWith('http')) {
-        safeUrl = `https://${safeUrl}`;
-    }
+    if (!safeUrl.startsWith('http')) safeUrl = `https://${safeUrl}`;
     insertAtCursor(` ${safeUrl} `);
     setLinkUrl('');
     setShowLinkInput(false);
   };
 
-  const handleInsertSticker = (sticker: string) => {
-    insertAtCursor(sticker);
-  };
+  const handleInsertSticker = (sticker: string) => { insertAtCursor(sticker); };
 
   const finalizeSubmission = async (user: User) => {
     if (!title || !content) return;
+
+    // Kiểm tra xem có ảnh nào đang upload dở không
+    if (attachments.some(a => a.uploading)) {
+        alert("Ảnh đang được tải lên, mẹ đợi một xíu cho xong nhé!");
+        return;
+    }
+
     setIsSubmitting(true);
-    setLoadingText('Đang đăng bài...');
 
     try {
-      let imageUrls: string[] = [];
-      if (selectedImages.length > 0) {
-        setLoadingText('Đang tải ảnh lên...');
-        imageUrls = await uploadMultipleFiles(selectedImages, 'question_images');
-      }
+      // Lấy danh sách URL từ các ảnh đã upload xong
+      const imageUrls = attachments.map(a => a.url).filter((url): url is string => !!url);
 
       const newQuestion: Question = {
         id: Date.now().toString(),
@@ -247,11 +258,9 @@ export const Ask: React.FC<AskProps> = ({
 
   const handleSubmit = async () => {
     if (!title || !content) return;
-
     if (currentUser.isGuest) {
         try {
             setIsSubmitting(true);
-            setLoadingText('Đang xác thực...');
             const anonymousUser = await loginAnonymously();
             await finalizeSubmission(anonymousUser);
         } catch (error: any) {
@@ -280,7 +289,7 @@ export const Ask: React.FC<AskProps> = ({
         onGuestContinue={handleGuestContinue}
       />
 
-      {/* --- 1. HEADER --- */}
+      {/* HEADER */}
       <header className="px-4 py-3 border-b border-gray-100 flex justify-between items-center bg-white/80 backdrop-blur-md pt-safe-top z-10">
         <button onClick={() => navigate(-1)} className="w-10 h-10 -ml-2 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors text-gray-500">
           <X size={24} />
@@ -289,10 +298,9 @@ export const Ask: React.FC<AskProps> = ({
         <div className="w-10"></div> 
       </header>
 
-      {/* --- 2. MAIN CONTENT AREA --- */}
+      {/* CONTENT */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-5 pb-40" onClick={() => setShowStickers(false)}>
         
-        {/* User Info */}
         <div className="flex items-center gap-3 mb-6 animate-fade-in">
            <img src={currentUser.avatar} className="w-10 h-10 rounded-full border border-gray-100 object-cover" />
            <div className="flex flex-col">
@@ -301,25 +309,32 @@ export const Ask: React.FC<AskProps> = ({
            </div>
         </div>
 
-        {/* INPUTS */}
-        <div className="space-y-4">
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Tiêu đề: Mẹ đang băn khoăn điều gì?..."
-            className="w-full text-xl font-bold text-textDark placeholder-gray-300 border-none p-0 focus:ring-0 bg-transparent leading-tight"
-            autoFocus
-          />
+        <div className="space-y-6">
+          <div className="relative">
+             <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Tiêu đề: Mẹ đang băn khoăn điều gì?..."
+                className="w-full text-xl font-bold text-textDark placeholder-gray-300 border-none p-0 pr-24 focus:ring-0 bg-transparent leading-tight"
+                autoFocus
+             />
+             <button 
+               onClick={handleAiSuggest}
+               disabled={isSuggesting}
+               className="absolute right-0 top-1/2 -translate-y-1/2 text-[10px] font-bold text-orange-600 bg-orange-50 px-2.5 py-1.5 rounded-lg flex items-center gap-1 hover:bg-orange-100 transition-all border border-orange-100 active:scale-95"
+             >
+                {isSuggesting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} Gợi ý
+             </button>
+          </div>
           
           <div className="relative">
-              {/* AI Auto-Write Button */}
               {title.length > 5 && !content && !isGeneratingContent && (
                   <button 
                     onClick={handleAiContent}
                     className="absolute right-0 -top-8 text-xs font-bold text-purple-600 bg-purple-50 px-3 py-1.5 rounded-full flex items-center gap-1.5 hover:bg-purple-100 transition-all border border-purple-100 shadow-sm animate-pop-in z-20"
                   >
-                      <Sparkles size={14} /> AI Viết hộ nội dung
+                      <Sparkles size={14} /> AI Viết nội dung
                   </button>
               )}
               
@@ -341,22 +356,32 @@ export const Ask: React.FC<AskProps> = ({
           </div>
         </div>
 
-        {/* Image Preview Grid */}
-        {previewUrls.length > 0 && (
+        {/* IMAGE PREVIEW WITH UPLOAD STATUS */}
+        {attachments.length > 0 && (
           <div className="grid grid-cols-3 gap-3 mt-6 animate-fade-in">
-            {previewUrls.map((url, index) => (
-              <div key={index} className="relative aspect-square rounded-2xl overflow-hidden shadow-sm border border-gray-100 group">
-                <img src={url} className="w-full h-full object-cover" />
+            {attachments.map((att) => (
+              <div key={att.id} className="relative aspect-square rounded-2xl overflow-hidden shadow-sm border border-gray-100 group bg-gray-50">
+                <img src={att.preview} className={`w-full h-full object-cover transition-opacity ${att.uploading ? 'opacity-50' : 'opacity-100'}`} />
+                
+                {/* Loading Indicator */}
+                {att.uploading && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <Loader2 className="animate-spin text-primary" size={24} />
+                    </div>
+                )}
+
                 <button
-                  onClick={() => removeImage(index)}
+                  onClick={() => removeImage(att.id)}
                   className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 backdrop-blur-sm active:scale-90 transition-transform"
                 >
                   <X size={14} />
                 </button>
               </div>
             ))}
-            {previewUrls.length < 3 && (
-                <label className="aspect-square rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400 bg-gray-50 active:bg-gray-100 transition-colors cursor-pointer">
+            
+            {/* Nút thêm ảnh (chỉ hiện khi chưa đủ 3 ảnh) */}
+            {attachments.length < 3 && (
+                <label className="aspect-square rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400 bg-gray-50 active:bg-gray-100 transition-colors cursor-pointer hover:border-primary/50 hover:text-primary">
                     <ImageIcon size={24} />
                     <span className="text-xs font-bold mt-1">Thêm ảnh</span>
                     <input type="file" accept="image/*" multiple onChange={handleImageChange} className="hidden" />
@@ -365,22 +390,22 @@ export const Ask: React.FC<AskProps> = ({
           </div>
         )}
 
-        {/* AI Suggestions Panel */}
+        {/* AI Suggestions */}
         {showSuggestions && (
           <div className="mt-6 bg-orange-50 rounded-2xl p-4 border border-orange-100 animate-pop-in">
-             <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                    <div className="p-1.5 bg-orange-100 rounded-lg text-orange-500"><Sparkles size={16} fill="currentColor" /></div>
                    <span className="text-sm font-bold text-orange-700">Gợi ý tiêu đề hay</span>
                 </div>
                 <button onClick={() => setShowSuggestions(false)} className="text-gray-400 hover:text-gray-600"><X size={16}/></button>
-             </div>
-             
-             {isSuggesting ? (
+              </div>
+              
+              {isSuggesting ? (
                 <div className="flex items-center gap-2 text-sm text-orange-600 py-2">
                    <Loader2 size={16} className="animate-spin" /> Đang suy nghĩ...
                 </div>
-             ) : (
+              ) : (
                 <div className="space-y-2">
                    {suggestions.map((s, idx) => (
                       <button 
@@ -392,109 +417,89 @@ export const Ask: React.FC<AskProps> = ({
                       </button>
                    ))}
                 </div>
-             )}
+              )}
           </div>
         )}
       </div>
 
-      {/* --- 3. BOTTOM CONTROL CENTER (Sticky) --- */}
+      {/* BOTTOM BAR */}
       <div className="border-t border-gray-100 bg-white px-5 py-4 pb-safe-bottom shadow-[0_-10px_40px_rgba(0,0,0,0.06)] z-20 flex flex-col gap-4">
-         
-         {/* Link Input Popover */}
-         {showLinkInput && (
-             <div className="bg-gray-50 border border-gray-200 rounded-xl p-2 flex gap-2 animate-slide-up">
-                 <input 
+          
+          {showLinkInput && (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-2 flex gap-2 animate-slide-up">
+                  <input 
                     type="url" 
                     value={linkUrl}
                     onChange={(e) => setLinkUrl(e.target.value)}
                     placeholder="Dán đường link vào đây..."
                     className="flex-1 text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-primary"
                     autoFocus
-                 />
-                 <button onClick={handleInsertLink} className="bg-primary text-white text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap">Chèn link</button>
-                 <button onClick={() => setShowLinkInput(false)} className="text-gray-400 p-1"><X size={18}/></button>
+                  />
+                  <button onClick={handleInsertLink} className="bg-primary text-white text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap">Chèn</button>
+                  <button onClick={() => setShowLinkInput(false)} className="text-gray-400 p-1"><X size={18}/></button>
+              </div>
+          )}
+
+          <div className="flex items-center justify-between">
+             <div className="flex items-center gap-2 md:gap-3 overflow-x-auto no-scrollbar">
+                <button 
+                   onClick={() => setShowCategorySheet(true)}
+                   className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-xl text-textDark text-sm font-bold border border-gray-100 active:scale-95 transition-transform whitespace-nowrap"
+                >
+                   {getCategoryIcon(category)}
+                   <span className="max-w-[80px] truncate">{category}</span>
+                   <ChevronDown size={14} className="text-gray-400" />
+                </button>
+
+                {/* IMAGE BUTTON - CHỈ HIỆN KHI CHƯA ĐỦ 3 ẢNH */}
+                {attachments.length < 3 && (
+                    <label className="p-2 rounded-xl bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-primary transition-colors active:scale-90 cursor-pointer border border-gray-100">
+                       <ImageIcon size={20} />
+                       <input type="file" accept="image/*" multiple onChange={handleImageChange} className="hidden" />
+                    </label>
+                )}
+                
+                <button 
+                   onClick={() => {setShowStickers(!showStickers); setShowLinkInput(false)}}
+                   className={`p-2 rounded-xl border transition-colors active:scale-90 ${showStickers ? 'bg-yellow-100 text-yellow-600 border-yellow-200' : 'bg-gray-50 text-gray-500 border-gray-100'}`}
+                >
+                   <Smile size={20} />
+                </button>
+
+                <button 
+                   onClick={() => {setShowLinkInput(!showLinkInput); setShowStickers(false)}}
+                   className={`p-2 rounded-xl border transition-colors active:scale-90 ${showLinkInput ? 'bg-blue-100 text-blue-600 border-blue-200' : 'bg-gray-50 text-gray-500 border-gray-100'}`}
+                >
+                   <LinkIcon size={20} />
+                </button>
              </div>
-         )}
+          </div>
 
-         {/* Tools Row */}
-         <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 md:gap-3 overflow-x-auto no-scrollbar">
-               {/* Category Selector */}
-               <button 
-                  onClick={() => setShowCategorySheet(true)}
-                  className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-xl text-textDark text-sm font-bold border border-gray-100 active:scale-95 transition-transform whitespace-nowrap"
-               >
-                  {getCategoryIcon(category)}
-                  <span className="max-w-[80px] truncate">{category}</span>
-                  <ChevronDown size={14} className="text-gray-400" />
-               </button>
+          {showStickers && (
+             <div className="h-48 overflow-y-auto bg-gray-50 border border-gray-100 rounded-xl p-4 animate-slide-up shadow-inner">
+                 {Object.entries(STICKER_PACKS).map(([category, emojis]) => (
+                     <div key={category} className="mb-4">
+                         <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-2 tracking-wider sticky top-0 bg-gray-50 py-1 z-10">{category}</h4>
+                         <div className="grid grid-cols-6 md:grid-cols-10 gap-2">
+                             {emojis.map(emoji => (
+                                 <button key={emoji} onClick={() => handleInsertSticker(emoji)} className="text-2xl hover:scale-125 transition-transform active:scale-90 p-1">{emoji}</button>
+                             ))}
+                         </div>
+                     </div>
+                 ))}
+             </div>
+          )}
 
-               {/* Image Button */}
-               <label className="p-2 rounded-xl bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-primary transition-colors active:scale-90 cursor-pointer border border-gray-100">
-                  <ImageIcon size={20} />
-                  <input type="file" accept="image/*" multiple onChange={handleImageChange} className="hidden" />
-               </label>
-               
-               {/* Sticker Button */}
-               <button 
-                  onClick={() => {setShowStickers(!showStickers); setShowLinkInput(false)}}
-                  className={`p-2 rounded-xl border transition-colors active:scale-90 ${showStickers ? 'bg-yellow-100 text-yellow-600 border-yellow-200' : 'bg-gray-50 text-gray-500 border-gray-100'}`}
-               >
-                  <Smile size={20} />
-               </button>
-
-               {/* Link Button */}
-               <button 
-                  onClick={() => {setShowLinkInput(!showLinkInput); setShowStickers(false)}}
-                  className={`p-2 rounded-xl border transition-colors active:scale-90 ${showLinkInput ? 'bg-blue-100 text-blue-600 border-blue-200' : 'bg-gray-50 text-gray-500 border-gray-100'}`}
-               >
-                  <LinkIcon size={20} />
-               </button>
-            </div>
-
-            {/* AI Magic Button (Suggest Title) */}
-            <button 
-               onClick={handleAiSuggest}
-               className="p-2 rounded-xl bg-gradient-to-r from-orange-100 to-pink-100 text-orange-600 active:scale-95 transition-transform border border-orange-200 shrink-0 flex items-center gap-1"
-               title="AI Gợi ý tiêu đề"
-            >
-               <PenTool size={18} />
-            </button>
-         </div>
-
-         {/* Sticker Drawer */}
-         {showStickers && (
-            <div className="h-48 overflow-y-auto bg-gray-50 border border-gray-100 rounded-xl p-4 animate-slide-up shadow-inner">
-                {Object.entries(STICKER_PACKS).map(([category, emojis]) => (
-                    <div key={category} className="mb-4">
-                        <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-2 tracking-wider sticky top-0 bg-gray-50 py-1 z-10">{category}</h4>
-                        <div className="grid grid-cols-6 md:grid-cols-10 gap-2">
-                            {emojis.map(emoji => (
-                                <button 
-                                    key={emoji} 
-                                    onClick={() => handleInsertSticker(emoji)}
-                                    className="text-2xl hover:scale-125 transition-transform active:scale-90 p-1"
-                                >
-                                    {emoji}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                ))}
-            </div>
-         )}
-
-         {/* BIG POST BUTTON */}
-         <button 
-            onClick={handleSubmit} 
-            disabled={!title || !content || isSubmitting}
-            className="w-full bg-gradient-to-r from-primary to-[#26A69A] text-white py-3.5 rounded-2xl font-bold text-[16px] shadow-lg shadow-primary/30 disabled:opacity-50 disabled:shadow-none transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-         >
-            {isSubmitting ? <Loader2 size={20} className="animate-spin" /> : "Đăng câu hỏi ngay"}
-         </button>
+          <button 
+             onClick={handleSubmit} 
+             disabled={!title || !content || isSubmitting}
+             className="w-full bg-gradient-to-r from-primary to-[#26A69A] text-white py-3.5 rounded-2xl font-bold text-[16px] shadow-lg shadow-primary/30 disabled:opacity-50 disabled:shadow-none transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+          >
+             {isSubmitting ? <Loader2 size={20} className="animate-spin" /> : "Đăng câu hỏi ngay"}
+          </button>
       </div>
 
-      {/* --- 4. CATEGORY BOTTOM SHEET --- */}
+      {/* CATEGORY SHEET */}
       {showCategorySheet && (
         <div className="fixed inset-0 z-[60] flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-fade-in" onClick={() => setShowCategorySheet(false)}></div>
@@ -502,13 +507,12 @@ export const Ask: React.FC<AskProps> = ({
             <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6"></div>
             <h3 className="font-bold text-lg text-textDark mb-4 text-center">Chọn chủ đề</h3>
             
-            {/* Custom Category Input */}
             <div className="flex gap-2 mb-6">
                 <input 
                   type="text" 
                   value={customCategory}
                   onChange={(e) => setCustomCategory(e.target.value)}
-                  placeholder="Nhập chủ đề mới (nếu không có sẵn)..."
+                  placeholder="Nhập chủ đề mới..."
                   className="flex-1 p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none text-sm"
                 />
                 <button 
@@ -527,10 +531,7 @@ export const Ask: React.FC<AskProps> = ({
                   onClick={() => { setCategory(cat); setShowCategorySheet(false); }}
                   className={`
                     p-4 rounded-2xl border text-left transition-all active:scale-[0.98] flex items-center gap-3
-                    ${category === cat 
-                      ? 'border-primary bg-primary/5 shadow-inner' 
-                      : 'border-gray-100 bg-white shadow-sm'
-                    }
+                    ${category === cat ? 'border-primary bg-primary/5 shadow-inner' : 'border-gray-100 bg-white shadow-sm'}
                   `}
                 >
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${getCategoryColor(cat)}`}>
@@ -545,14 +546,6 @@ export const Ask: React.FC<AskProps> = ({
             </div>
           </div>
         </div>
-      )}
-
-      {/* Loading Overlay */}
-      {isSubmitting && (
-         <div className="absolute inset-0 z-[70] bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center animate-fade-in">
-             <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
-             <p className="font-bold text-primary animate-pulse">{loadingText}</p>
-         </div>
       )}
     </div>
   );
