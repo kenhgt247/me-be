@@ -63,7 +63,7 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
 		setLoading(false);
 	};
     
-    // --- HÀM TẢI THÊM BÌNH LUẬN ---
+	// --- HÀM TẢI THÊM BÌNH LUẬN ---
 	const handleLoadMore = async () => {
 		if (!post || isFetchingMore || !hasMore) return;
 
@@ -233,8 +233,27 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
 					<MessageCircle /> Bình luận ({post?.commentCount || comments.length})
 				</h3>
 				
+				{/* === KHỐI MỚI: INPUT BÌNH LUẬN === */}
+				{/* Vị trí mới: Ngay dưới tiêu đề Bình luận */}
+				<div className="flex gap-2 mb-6"> {/* Thêm margin bottom để cách danh sách */}
+					<input 
+						value={commentContent}
+						onChange={e => setCommentContent(e.target.value)}
+						className="flex-1 bg-white border border-gray-200 rounded-xl px-4 py-3 outline-none focus:border-primary shadow-sm"
+						placeholder="Viết bình luận..."
+					/>
+					<button 
+						onClick={handleSendComment}
+						disabled={!commentContent.trim() || submittingComment}
+						className="bg-primary text-white p-3 rounded-xl shadow-lg active:scale-90 transition-transform disabled:opacity-50"
+					>
+						{submittingComment ? <Loader2 className="animate-spin" /> : <Send />}
+					</button>
+				</div>
+                {/* === KẾT THÚC KHỐI MỚI === */}
+				
 				{/* Comment List */}
-				<div className="space-y-4 mb-6">
+				<div className="space-y-4"> {/* Đã loại bỏ mb-6 cũ */}
 					{comments.map(c => (
 						<div key={c.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
 							<div className="flex items-center gap-2 mb-2">
@@ -265,23 +284,6 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
 							</button>
 						</div>
 					)}
-				</div>
-
-				{/* Input */}
-				<div className="flex gap-2">
-					<input 
-						value={commentContent}
-						onChange={e => setCommentContent(e.target.value)}
-						className="flex-1 bg-white border border-gray-200 rounded-xl px-4 py-3 outline-none focus:border-primary shadow-sm"
-						placeholder="Viết bình luận..."
-					/>
-					<button 
-						onClick={handleSendComment}
-						disabled={!commentContent.trim() || submittingComment}
-						className="bg-primary text-white p-3 rounded-xl shadow-lg active:scale-90 transition-transform disabled:opacity-50"
-					>
-						{submittingComment ? <Loader2 className="animate-spin" /> : <Send />}
-					</button>
 				</div>
 			</div>
 
