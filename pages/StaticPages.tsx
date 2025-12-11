@@ -1,7 +1,8 @@
 import React from 'react';
-import { ArrowLeft, Mail, MapPin, Phone, Shield, Users, FileText, Heart } from 'lucide-react';
+// Đã thêm HelpCircle vào đây
+import { ArrowLeft, Mail, MapPin, Phone, Shield, Users, FileText, Heart, HelpCircle } from 'lucide-react';
 // @ts-ignore
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 const PageContainer: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode }> = ({ title, icon, children }) => {
   const navigate = useNavigate();
@@ -150,6 +151,58 @@ export const Contact: React.FC = () => (
           <h5 className="font-bold text-textDark">Văn phòng</h5>
           <p className="text-textGray m-0">Tầng 12, Tòa nhà Asking, Quận 1, TP.HCM</p>
         </div>
+      </div>
+    </div>
+  </PageContainer>
+);
+
+// --- PHẦN MỚI THÊM: CÂU HỎI THƯỜNG GẶP (FAQ) ---
+export const FAQ: React.FC = () => (
+  <PageContainer title="Câu hỏi thường gặp" icon={<HelpCircle size={24} />}>
+    <div className="space-y-6">
+      <div className="border-b border-gray-100 pb-4">
+        <h4 className="text-lg font-bold text-textDark mb-2 flex items-center gap-2">
+          <span className="text-primary">Q.</span> Asking.vn có hoàn toàn miễn phí không?
+        </h4>
+        <p className="text-textGray pl-6">
+          Có. Asking.vn là nền tảng cộng đồng hoàn toàn miễn phí dành cho các mẹ bỉm sữa để chia sẻ kiến thức và kết nối.
+        </p>
+      </div>
+
+      <div className="border-b border-gray-100 pb-4">
+        <h4 className="text-lg font-bold text-textDark mb-2 flex items-center gap-2">
+          <span className="text-primary">Q.</span> Làm thế nào để tôi nhận biết đâu là Chuyên gia thật?
+        </h4>
+        <p className="text-textGray pl-6">
+          Các tài khoản Chuyên gia (Bác sĩ, Dược sĩ, Chuyên gia dinh dưỡng...) trên Asking.vn đều phải trải qua quy trình xác minh bằng cấp nghiêm ngặt. Khi được duyệt, họ sẽ có huy hiệu <span className="inline-flex items-center bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded text-xs font-bold mx-1">Chuyên gia</span> hoặc tích xanh bên cạnh tên.
+        </p>
+      </div>
+
+      <div className="border-b border-gray-100 pb-4">
+        <h4 className="text-lg font-bold text-textDark mb-2 flex items-center gap-2">
+          <span className="text-primary">Q.</span> Tôi có thể xóa câu hỏi đã đăng không?
+        </h4>
+        <p className="text-textGray pl-6">
+          Có. Bạn có thể xóa câu hỏi của mình bằng cách vào trang chi tiết câu hỏi, bấm vào dấu 3 chấm góc phải và chọn "Xóa câu hỏi". Tuy nhiên, nếu câu hỏi đã có nhiều câu trả lời hữu ích, chúng tôi khuyến khích bạn giữ lại để giúp ích cho các mẹ khác.
+        </p>
+      </div>
+
+      <div className="border-b border-gray-100 pb-4">
+        <h4 className="text-lg font-bold text-textDark mb-2 flex items-center gap-2">
+          <span className="text-primary">Q.</span> Làm sao để báo cáo nội dung không phù hợp?
+        </h4>
+        <p className="text-textGray pl-6">
+          Asking.vn đề cao môi trường văn minh. Nếu thấy nội dung spam, quảng cáo rác hoặc ngôn từ thiếu văn hóa, bạn hãy bấm vào nút <strong>Báo cáo</strong> (hình lá cờ) ở mỗi bài viết. Đội ngũ admin sẽ xử lý trong vòng 24h.
+        </p>
+      </div>
+
+      <div>
+        <h4 className="text-lg font-bold text-textDark mb-2 flex items-center gap-2">
+          <span className="text-primary">Q.</span> Tôi muốn đăng ký làm Chuyên gia thì phải làm sao?
+        </h4>
+        <p className="text-textGray pl-6">
+          Rất hoan nghênh bạn! Hãy truy cập trang <Link to="/expert-register" className="text-primary hover:underline font-bold">Đăng ký Chuyên gia</Link>, điền thông tin và tải lên ảnh chụp bằng cấp/chứng chỉ hành nghề. Chúng tôi sẽ liên hệ lại sớm nhất.
+        </p>
       </div>
     </div>
   </PageContainer>
