@@ -15,8 +15,9 @@ interface HomeProps {
 
 const PAGE_SIZE = 20;
 
-// --- THÊM HÀM NÀY ĐỂ FIX LỖI THIẾU HÀM ---
+// --- 1. HÀM LẤY LINK CHUẨN (Ưu tiên Username) ---
 const getProfileLink = (user: User) => {
+    // Nếu có username thì dùng /profile/username, không thì dùng /profile/id
     return `/profile/${user.username || user.id}`;
 };
 
@@ -84,7 +85,6 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
   useEffect(() => {
       const unsub = subscribeToAdConfig(config => setAdFrequency(config.frequency));
       
-      // Load recent blogs & documents
       Promise.all([
           fetchPublishedPosts('all', 4),
           fetchDocuments('all', 4)
@@ -154,10 +154,10 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
 
   const paginatedQuestions = displayQuestions.slice(0, visibleCount);
 
-  // Hàm xử lý click vào tên/avatar tác giả (Ngăn không cho mở bài viết)
+  // --- HÀM XỬ LÝ CLICK AVATAR (Tránh xung đột link bài viết) ---
   const handleUserClick = (e: React.MouseEvent, user: User) => {
-      e.preventDefault(); // Chặn link cha
-      e.stopPropagation(); // Chặn sự kiện nổi bọt
+      e.preventDefault(); 
+      e.stopPropagation();
       navigate(getProfileLink(user));
   };
 
@@ -186,6 +186,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
         </div>
       </div>
 
+      {/* --- KẾT QUẢ TÌM KIẾM NGƯỜI DÙNG (ĐÃ SỬA LINK) --- */}
       {searchQuery && matchingUsers.length > 0 && (
         <div className="pl-4 md:px-0 animate-slide-up">
            <div className="flex items-center gap-1 mb-2">
@@ -194,6 +195,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
            </div>
            <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 pr-4 snap-x">
               {matchingUsers.map(user => (
+                  // SỬA: Dùng getProfileLink để tạo link đẹp
                   <Link to={getProfileLink(user)} key={user.id} className="snap-start flex-shrink-0 bg-white p-3 pr-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-3 min-w-[160px] active:scale-95 transition-transform">
                       <div className="relative">
                         <img src={user.avatar} className="w-10 h-10 rounded-full object-cover border border-gray-100" />
@@ -357,20 +359,13 @@ export const Home: React.FC<HomeProps> = ({ questions, categories }) => {
                     <div className="bg-white p-5 rounded-[1.5rem] shadow-[0_2px_15px_rgba(0,0,0,0.03)] border border-gray-100 active:scale-[0.98] transition-all relative overflow-hidden">
                         {q.answers.length === 0 && <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-orange-100 to-transparent rounded-bl-full -mr-8 -mt-8"></div>}
                         <div className="flex items-start justify-between mb-3 relative z-10">
-                        {/* PHẦN TÊN TÁC GIẢ ĐÃ ĐƯỢC SỬA */}
+                        {/* --- SỬA AVATAR TRONG FEED: THÊM SỰ KIỆN CLICK --- */}
                         <div className="flex items-center gap-2">
-                            {/* Dùng div onClick thay vì Link lồng Link để tránh lỗi */}
-                            <div 
-                                onClick={(e) => handleUserClick(e, q.author)}
-                                className="cursor-pointer"
-                            >
+                            <div onClick={(e) => handleUserClick(e, q.author)} className="cursor-pointer hover:opacity-80 transition-opacity">
                                 <img src={q.author.avatar} className="w-8 h-8 rounded-full border border-gray-100 object-cover" />
                             </div>
                             <div>
-                                <div 
-                                    onClick={(e) => handleUserClick(e, q.author)}
-                                    className="text-xs font-bold text-textDark flex items-center gap-1 cursor-pointer hover:underline"
-                                >
+                                <div onClick={(e) => handleUserClick(e, q.author)} className="text-xs font-bold text-textDark flex items-center gap-1 cursor-pointer hover:text-primary transition-colors">
                                     {q.author.name}
                                     {q.author.isExpert && <ShieldCheck size={10} className="text-blue-500" />}
                                 </div>
