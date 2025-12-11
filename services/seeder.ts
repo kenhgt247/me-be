@@ -143,14 +143,16 @@ const TOPIC_DATA: Record<string, any[]> = {
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 const getRandomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 
-// --- ĐÃ SỬA LẠI HÀM AVATAR TẠI ĐÂY ---
+// --- HÀM TẠO AVATAR (Đã sửa lỗi URL & Encoding) ---
 const generateAvatar = (seed: string, gender: 'male' | 'female' = 'female') => {
+  // Mã hóa seed để tránh lỗi URL (ví dụ tên có dấu cách)
   const safeSeed = encodeURIComponent(seed);
-  // Style 'avataaars' rất ổn định cho avatar người
+  
+  // Style 'avataaars' rất ổn định và chuyên nghiệp
   // Style 'adventurer' dễ thương, hợp với các mẹ
   const style = gender === 'male' ? 'avataaars' : 'adventurer'; 
   
-  // Dùng API DiceBear v9.x mới nhất
+  // Dùng API v9.x mới nhất của DiceBear
   return `https://api.dicebear.com/9.x/${style}/svg?seed=${safeSeed}`;
 };
 
@@ -169,7 +171,7 @@ export const generateFakeUsers = async (count: number, onLog: (msg: string) => v
     const user: User = {
       id: uid,
       name: expert.name,
-      avatar: generateAvatar(expert.seed, 'female'), // Giả sử chuyên gia là nữ
+      avatar: generateAvatar(expert.seed, 'female'), 
       email: `contact.${expert.seed.toLowerCase()}@asking.vn`,
       isExpert: true,
       expertStatus: 'approved',
@@ -192,7 +194,7 @@ export const generateFakeUsers = async (count: number, onLog: (msg: string) => v
   for (let i = 0; i < count; i++) {
     const uid = `fake_user_${Date.now()}_${i}`;
     const nameSeed = getRandomItem(MOM_NAMES);
-    const fullName = `${nameSeed} ${getRandomInt(10, 99)}`; // Ví dụ: Mẹ Bắp 89
+    const fullName = `${nameSeed} ${getRandomInt(10, 99)}`; 
     
     const user: User = {
       id: uid,
@@ -226,7 +228,7 @@ export const generateFakeUsers = async (count: number, onLog: (msg: string) => v
     await batch.commit();
   }
   
-  onLog(`🎉 Đã tạo xong ${users.length} user (bao gồm ${EXPERT_PROFILES.length} chuyên gia).`);
+  onLog(`🎉 Đã tạo xong ${users.length} user.`);
   return users;
 };
 
@@ -250,7 +252,6 @@ export const generateFakeContent = async (
   let opCount = 0;
   let qCountTotal = 0;
 
-  // Lặp qua danh mục có sẵn trong types, map với dữ liệu
   const availableCategories = Object.keys(TOPIC_DATA);
 
   for (const category of availableCategories) {
@@ -360,16 +361,4 @@ export const clearFakeData = async (onLog: (msg: string) => void) => {
   const uSnap = await getDocs(uQuery);
   
   const uChunks = [];
-  for (let i = 0; i < uSnap.docs.length; i += batchSize) {
-      uChunks.push(uSnap.docs.slice(i, i + batchSize));
-  }
-
-  for (const chunk of uChunks) {
-      const batch = writeBatch(db);
-      chunk.forEach(doc => batch.delete(doc.ref));
-      await batch.commit();
-      onLog(`   - Đã xóa ${chunk.length} user.`);
-  }
-
-  onLog("✨ Đã dọn dẹp sạch sẽ dữ liệu giả!");
-};
+  for (let i = 0; i < uSnap.docs.length; i += batchSize
