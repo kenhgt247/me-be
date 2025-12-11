@@ -192,7 +192,7 @@ export const FAQ: React.FC = () => (
           <span className="text-primary">Q.</span> Làm sao để báo cáo nội dung không phù hợp?
         </h4>
         <p className="text-textGray pl-6">
-          Asking.vn đề cao môi trường văn minh. Nếu thấy nội dung spam, quảng cáo rác hoặc ngôn từ thiếu văn hóa, bạn hãy bấm vào nút <strong>Báo cáo</strong> (hình lá cờ) ở mỗi bài viết. Đội ngũ admin sẽ xử lý trong vòng 24h.
+          Asking.vn đề cao môi trường văn minh. Nếu thấy nội dung spam, quảng cáo rác hoặc ngôn từ thiếu văn hóa, bạn hãy bấm vào dấu 3 chấm góc phải và chọn <strong>Báo cáo</strong> (hình lá cờ) ở mỗi bài viết hoặc câu trả lời. Đội ngũ admin sẽ xử lý trong vòng 24h.
         </p>
       </div>
 
