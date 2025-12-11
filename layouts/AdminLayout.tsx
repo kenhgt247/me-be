@@ -78,7 +78,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ currentUser, onLogout 
 			>
 				<div className="h-16 flex items-center px-6 border-b border-gray-100">
 					<Link to="/" className="flex items-center gap-2 text-xl font-black text-gray-800 tracking-tight hover:opacity-80">
-						<span className="bg-blue-600 text-white p-1 rounded-md text-sm">A</span> Admin
+						<span className="bg-blue-600 text-white p-1 rounded-md text-sm">A</span>sking
 					</Link>
 					<button onClick={() => setSidebarOpen(false)} className="md:hidden ml-auto text-gray-500 hover:text-gray-900 p-2 rounded-full">
 						<X size={24} />
