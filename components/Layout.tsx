@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 // @ts-ignore
 import { Link, useLocation } from 'react-router-dom';
-// ĐÃ THÊM CÁC ICON MỚI VÀO ĐÂY (MapPin, Phone, Mail, ShieldCheck, Heart...)
-import { Home, Plus, Gamepad2, Facebook, Instagram, Youtube, User as UserIcon, Bell, MessageCircle, Bot, MapPin, Phone, Mail, ShieldCheck, Heart } from 'lucide-react';
+import { Home, Plus, Gamepad2, Facebook, Instagram, Youtube, User as UserIcon, Bell, MessageCircle, Bot, MapPin, Phone, Mail, ShieldCheck, Heart, Info } from 'lucide-react';
 import { subscribeToNotifications, subscribeToChats, updateUserStatus } from '../services/db';
 import { auth } from '../firebaseConfig';
 
@@ -173,14 +172,13 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         </div>
       )}
 
-      {/* --- DESKTOP FOOTER (MỚI - CHUYÊN NGHIỆP) --- */}
+      {/* --- DESKTOP FOOTER (ĐÃ SỬA PHẦN BETA) --- */}
       {!hideBottomBar && !isNotificationPage && !isExpertReg && !isAiChat && !isQuestionDetail && !isGameZone && (
         <footer className="bg-white border-t border-gray-200 pt-16 pb-8 text-sm hidden md:block mt-10">
           <div className="max-w-6xl mx-auto px-4">
-            {/* GRID 4 CỘT */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
               
-              {/* Cột 1: Thông tin thương hiệu */}
+              {/* Cột 1 */}
               <div className="space-y-4">
                 <Link to="/" className="text-2xl font-bold text-primary flex items-center gap-2">
                   <span className="bg-gradient-to-tr from-primary to-secondary p-1.5 rounded-xl text-white shadow-sm text-lg">👶</span>
@@ -205,7 +203,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 </div>
               </div>
 
-              {/* Cột 2: Về chúng tôi */}
+              {/* Cột 2 */}
               <div>
                 <h4 className="font-bold text-gray-900 text-base mb-5">Về Asking.vn</h4>
                 <ul className="space-y-3 text-gray-500">
@@ -216,7 +214,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 </ul>
               </div>
 
-              {/* Cột 3: Hỗ trợ & Chính sách */}
+              {/* Cột 3 */}
               <div>
                 <h4 className="font-bold text-gray-900 text-base mb-5">Hỗ trợ & Chính sách</h4>
                 <ul className="space-y-3 text-gray-500">
@@ -227,7 +225,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 </ul>
               </div>
 
-              {/* Cột 4: Kết nối */}
+              {/* Cột 4 - ĐÃ SỬA: THÔNG BÁO BETA */}
               <div>
                 <h4 className="font-bold text-gray-900 text-base mb-5">Kết nối với chúng tôi</h4>
                 <div className="flex gap-3 mb-8">
@@ -236,16 +234,24 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                   <SocialIcon color="text-red-600 bg-red-50 hover:bg-red-100" icon={<Youtube size={18} />} />
                 </div>
                 
-                <h4 className="font-bold text-gray-900 text-base mb-3">Chứng nhận</h4>
-                <div className="flex gap-2 opacity-80 grayscale hover:grayscale-0 transition-all cursor-pointer">
-                   <img src="https://webmedia.com.vn/images/2021/09/logo-da-thong-bao-bo-cong-thuong-mau-xanh.png" className="h-10 object-contain" alt="BCT" />
+                <h4 className="font-bold text-gray-900 text-base mb-3">Phiên bản</h4>
+                <div className="bg-yellow-50 border border-yellow-100 rounded-xl p-3 shadow-sm">
+                   <div className="flex items-center gap-2 mb-1">
+                      <span className="relative flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-yellow-500"></span>
+                      </span>
+                      <span className="font-bold text-yellow-800 text-xs uppercase tracking-wide">Beta Testing</span>
+                   </div>
+                   <p className="text-[11px] text-yellow-800/80 leading-relaxed">
+                      Mạng xã hội đang hoạt động thử nghiệm và chờ giấy phép chính thức.
+                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Bottom Bar */}
             <div className="border-t border-gray-100 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-gray-400">
-              <p>© 2024 Asking.vn - Bản quyền thuộc về Công ty TNHH Asking Việt Nam.</p>
+              <p>© 2024 Asking.vn - Bản quyền thuộc về Asking Việt Nam.</p>
               <div className="flex items-center gap-1">
                 Made with <Heart size={12} className="text-red-500 fill-red-500" /> by Asking Team
               </div>
