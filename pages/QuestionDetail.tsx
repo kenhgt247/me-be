@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 // @ts-ignore
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
@@ -6,11 +5,11 @@ import {
   ArrowLeft, Heart, MessageCircle, ShieldCheck, 
   Sparkles, Loader2, Send, MoreVertical, Trash2, Edit2, 
   Share2, Image as ImageIcon, X, Smile, Link as LinkIcon,
-  ThumbsUp, CheckCircle2, Eye, Bookmark, Filter, LogIn, AtSign, Paperclip
+  ThumbsUp, CheckCircle2, Eye, Bookmark, Filter, LogIn, AtSign, Paperclip, Flag
 } from 'lucide-react';
 import { Question, Answer, User, getIdFromSlug } from '../types';
 import { generateDraftAnswer } from '../services/gemini';
-import { toggleQuestionLikeDb, toggleSaveQuestion, toggleAnswerUseful } from '../services/db';
+import { toggleQuestionLikeDb, toggleSaveQuestion, toggleAnswerUseful, sendReport } from '../services/db';
 import { ShareModal } from '../components/ShareModal';
 import { loginAnonymously } from '../services/auth';
 import { uploadFile } from '../services/storage';
@@ -101,23 +100,18 @@ const FBImageGridDetail: React.FC<{ images: string[]; onImageClick: (url: string
   );
 };
 
-// IMPROVED RICH TEXT RENDERER TO SUPPORT IMAGES
 const RichTextRenderer: React.FC<{ content: string }> = ({ content }) => {
-  // 1. Check for Big Emoji (Only emojis, short length)
   const isBigEmoji = /^(\p{Extended_Pictographic}|\p{Emoji_Presentation}|\s)+$/u.test(content) && [...content].length <= 5;
   if (isBigEmoji) {
       return <div className="text-5xl md:text-6xl py-2 animate-pop-in">{content}</div>;
   }
 
-  // 2. Split content by Image Markdown: ![alt](url)
-  // This regex captures the whole image tag
   const imageRegex = /(!\[.*?\]\(https?:\/\/[^\s)]+\))/g;
   const parts = content.split(imageRegex);
 
   return (
     <div className="text-[15px] text-textDark leading-relaxed whitespace-pre-wrap break-words">
       {parts.map((part, i) => {
-        // Check if part is an image markdown
         const imgMatch = part.match(/!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/);
         if (imgMatch) {
            return (
@@ -132,7 +126,6 @@ const RichTextRenderer: React.FC<{ content: string }> = ({ content }) => {
            );
         }
 
-        // Process Links and Mentions in text parts
         const subRegex = /((?:https?:\/\/[^\s]+)|(?:@[\w\p{L}]+))/gu;
         const subParts = part.split(subRegex);
         
@@ -158,7 +151,37 @@ const RichTextRenderer: React.FC<{ content: string }> = ({ content }) => {
   );
 };
 
-// --- MAIN COMPONENT ---
+const ReportModal: React.FC<{ isOpen: boolean; onClose: () => void; onSubmit: (reason: string) => void }> = ({ isOpen, onClose, onSubmit }) => {
+    const [reason, setReason] = useState('');
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl animate-pop-in">
+                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <Flag className="text-red-500" size={20} /> Báo cáo vi phạm
+                </h3>
+                <p className="text-sm text-gray-500 mb-4">Vui lòng cho chúng tôi biết lý do bạn báo cáo nội dung này.</p>
+                <textarea 
+                    className="w-full p-3 border border-gray-200 rounded-xl mb-4 text-sm focus:border-red-500 outline-none"
+                    rows={4}
+                    placeholder="Nhập lý do (ví dụ: Spam, Từ ngữ thô tục...)"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                />
+                <div className="flex justify-end gap-2">
+                    <button onClick={onClose} className="px-4 py-2 text-gray-600 font-bold hover:bg-gray-100 rounded-lg">Hủy</button>
+                    <button 
+                        onClick={() => onSubmit(reason)} 
+                        disabled={!reason.trim()}
+                        className="px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 disabled:opacity-50"
+                    >
+                        Gửi báo cáo
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 export default function QuestionDetail({ 
   questions, 
@@ -180,7 +203,6 @@ export default function QuestionDetail({
   const questionId = getIdFromSlug(slug);
   const question = questions.find(q => q.id === questionId);
   
-  // --- STATE ---
   const [newAnswer, setNewAnswer] = useState('');
   const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -188,16 +210,13 @@ export default function QuestionDetail({
   const [sortOption, setSortOption] = useState<'best' | 'newest' | 'oldest'>('best');
   const [isSaved, setIsSaved] = useState(false);
   
-  // Tool States
   const [showStickers, setShowStickers] = useState(false);
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   
-  // Mention States
   const [showMentions, setShowMentions] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
 
-  // UI States
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [isEditingQuestion, setIsEditingQuestion] = useState(false);
   const [editQTitle, setEditQTitle] = useState('');
@@ -206,6 +225,9 @@ export default function QuestionDetail({
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [answerImage, setAnswerImage] = useState<string | null>(null);
+
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportTarget, setReportTarget] = useState<{ id: string, type: 'question' | 'answer' } | null>(null);
   
   const menuRef = useRef<HTMLDivElement>(null);
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
@@ -294,7 +316,7 @@ export default function QuestionDetail({
           const user = await ensureAuth();
           await toggleAnswerUseful(question.id, ans.id, user.id);
       } catch (e) {
-          // ignore, ensureAuth handles auth modal
+          // ignore
       }
   };
 
@@ -321,7 +343,7 @@ export default function QuestionDetail({
         }
     } finally {
         setUploadingImage(false);
-        if (e.target) e.target.value = ''; // Reset file input
+        if (e.target) e.target.value = ''; 
     }
   };
 
@@ -414,6 +436,32 @@ export default function QuestionDetail({
     setIsGeneratingDraft(false);
   };
 
+  const handleReport = (id: string, type: 'question' | 'answer') => {
+      setReportTarget({ id, type });
+      setShowReportModal(true);
+      setActiveMenuId(null);
+  };
+
+  const submitReport = async (reason: string) => {
+      if (!reportTarget) return;
+      try {
+          let user = currentUser;
+          if (user.isGuest) {
+             try { user = await loginAnonymously(); }
+             catch { onOpenAuth(); return; }
+          }
+          await sendReport(reportTarget.id, reportTarget.type, reason, user.id);
+          alert("Đã gửi báo cáo. Cảm ơn bạn đã đóng góp!");
+          setShowReportModal(false);
+      } catch (e) {
+          alert("Lỗi gửi báo cáo.");
+      }
+  };
+
+  const toggleMenu = (id: string, e: React.MouseEvent) => { e.stopPropagation(); setActiveMenuId(activeMenuId === id ? null : id); };
+  const startEditQuestion = () => { setIsEditingQuestion(true); setEditQTitle(question.title); setEditQContent(question.content); setActiveMenuId(null); };
+  const saveQuestionEdit = () => { onEditQuestion(question.id, editQTitle, editQContent); setIsEditingQuestion(false); };
+
   const sortedAnswers = [...question.answers].sort((a, b) => {
       if (a.isBestAnswer && !b.isBestAnswer) return -1;
       if (!a.isBestAnswer && b.isBestAnswer) return 1;
@@ -423,10 +471,6 @@ export default function QuestionDetail({
       if (!a.isExpertVerified && b.isExpertVerified) return 1;
       return b.likes - a.likes; 
   });
-
-  const toggleMenu = (id: string, e: React.MouseEvent) => { e.stopPropagation(); setActiveMenuId(activeMenuId === id ? null : id); };
-  const startEditQuestion = () => { setIsEditingQuestion(true); setEditQTitle(question.title); setEditQContent(question.content); setActiveMenuId(null); };
-  const saveQuestionEdit = () => { onEditQuestion(question.id, editQTitle, editQContent); setIsEditingQuestion(false); };
   
   const getTagColor = (cat: string) => {
      if (cat.includes('Mang thai')) return 'bg-pink-100 text-pink-700';
@@ -449,23 +493,29 @@ export default function QuestionDetail({
              <button onClick={() => setShowShareModal(true)} className="p-2 hover:bg-gray-50 rounded-full text-blue-600">
                  <Share2 size={20} />
              </button>
-             {(isOwner || isAdmin) && (
-                <div className="relative">
-                    <button onClick={(e) => toggleMenu('q_menu', e)} className="p-2 hover:bg-gray-50 rounded-full text-gray-600">
-                        <MoreVertical size={20} />
-                    </button>
-                    {activeMenuId === 'q_menu' && (
-                        <div ref={menuRef} className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-gray-100 w-44 overflow-hidden z-30 animate-pop-in">
-                            <button onClick={startEditQuestion} className="w-full text-left px-4 py-3 text-sm font-medium hover:bg-gray-50 flex items-center gap-2 text-textDark">
-                                <Edit2 size={16} /> Chỉnh sửa
-                            </button>
-                            <button onClick={() => onDeleteQuestion(question.id)} className="w-full text-left px-4 py-3 text-sm font-medium hover:bg-red-50 text-red-600 flex items-center gap-2">
-                                <Trash2 size={16} /> Xóa câu hỏi
-                            </button>
-                        </div>
-                    )}
-                </div>
-             )}
+             
+             <div className="relative">
+                <button onClick={(e) => toggleMenu('q_menu', e)} className="p-2 hover:bg-gray-50 rounded-full text-gray-600">
+                    <MoreVertical size={20} />
+                </button>
+                {activeMenuId === 'q_menu' && (
+                    <div ref={menuRef} className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-gray-100 w-48 overflow-hidden z-30 animate-pop-in">
+                        {(isOwner || isAdmin) && (
+                            <>
+                                <button onClick={startEditQuestion} className="w-full text-left px-4 py-3 text-sm font-medium hover:bg-gray-50 flex items-center gap-2 text-textDark">
+                                    <Edit2 size={16} /> Chỉnh sửa
+                                </button>
+                                <button onClick={() => onDeleteQuestion(question.id)} className="w-full text-left px-4 py-3 text-sm font-medium hover:bg-red-50 text-red-600 flex items-center gap-2">
+                                    <Trash2 size={16} /> Xóa câu hỏi
+                                </button>
+                            </>
+                        )}
+                        <button onClick={() => handleReport(question.id, 'question')} className="w-full text-left px-4 py-3 text-sm font-medium hover:bg-red-50 text-red-600 flex items-center gap-2 border-t border-gray-50">
+                            <Flag size={16} /> Báo cáo vi phạm
+                        </button>
+                    </div>
+                )}
+            </div>
          </div>
       </div>
 
@@ -564,10 +614,10 @@ export default function QuestionDetail({
                             <div className="flex justify-between items-start mb-3">
                                 <div className="flex items-center gap-3">
                                     <RouterLink to={`/profile/${ans.author.id}`}>
-                                    <div className="relative">
-                                        <img src={ans.author.avatar} className="w-10 h-10 rounded-full object-cover border border-gray-100 bg-gray-50" />
-                                        {ans.author.isExpert && <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white rounded-full p-0.5 border-2 border-white"><ShieldCheck size={10} /></div>}
-                                    </div>
+                                       <div className="relative">
+                                         <img src={ans.author.avatar} className="w-10 h-10 rounded-full object-cover border border-gray-100 bg-gray-50" />
+                                         {ans.author.isExpert && <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white rounded-full p-0.5 border-2 border-white"><ShieldCheck size={10} /></div>}
+                                       </div>
                                     </RouterLink>
                                     <div>
                                         <div className="flex items-center gap-1.5">
@@ -585,36 +635,41 @@ export default function QuestionDetail({
                                             <Sparkles size={18} />
                                         </button>
                                     )}
-                                    {(isAnsOwner || isAdmin) && (
+                                    <div className="relative">
                                         <button onClick={(e) => toggleMenu(ans.id, e)} className="text-gray-400 p-1 hover:bg-gray-50 rounded-full">
                                             <MoreVertical size={18} />
                                         </button>
-                                    )}
-                                </div>
-                                
-                                {activeMenuId === ans.id && (
-                                    <div ref={menuRef} className="absolute right-6 mt-6 bg-white rounded-xl shadow-lg border border-gray-100 w-32 overflow-hidden z-20 animate-pop-in">
-                                        <button onClick={() => onDeleteAnswer(question.id, ans.id)} className="w-full text-left px-4 py-3 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2">
-                                            <Trash2 size={14} /> Xóa
-                                        </button>
+                                        
+                                        {activeMenuId === ans.id && (
+                                            <div ref={menuRef} className="absolute right-0 mt-2 bg-white rounded-xl shadow-lg border border-gray-100 w-40 overflow-hidden z-20 animate-pop-in">
+                                                {(isAnsOwner || isAdmin) && (
+                                                    <button onClick={() => onDeleteAnswer(question.id, ans.id)} className="w-full text-left px-4 py-3 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2">
+                                                        <Trash2 size={14} /> Xóa
+                                                    </button>
+                                                )}
+                                                <button onClick={() => handleReport(ans.id, 'answer')} className="w-full text-left px-4 py-3 text-xs font-bold text-gray-600 hover:bg-gray-50 flex items-center gap-2 border-t border-gray-50">
+                                                    <Flag size={14} /> Báo cáo
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
-                                )}
+                                </div>
                             </div>
-
+                            
                             <div className="mb-3 pl-1">
-                                <div className="flex flex-wrap gap-2 mb-2">
-                                    {isBest && (
+                                 <div className="flex flex-wrap gap-2 mb-2">
+                                     {isBest && (
                                         <div className="inline-flex items-center gap-1 bg-gradient-to-r from-yellow-400 to-yellow-500 text-white px-3 py-1 rounded-full text-[11px] font-bold shadow-sm">
                                             <CheckCircle2 size={12} /> Câu trả lời hay nhất
                                         </div>
-                                    )}
-                                    {isVerified && (
+                                     )}
+                                     {isVerified && (
                                         <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 px-3 py-1 rounded-full text-[11px] font-bold border border-green-100">
                                             <ShieldCheck size={12} /> Đã xác thực y khoa
                                         </span>
-                                    )}
-                                </div>
-                                <RichTextRenderer content={ans.content} />
+                                     )}
+                                 </div>
+                                 <RichTextRenderer content={ans.content} />
                             </div>
 
                             <div className="flex items-center gap-4 border-t border-gray-50 pt-3 mt-2">
@@ -770,6 +825,12 @@ export default function QuestionDetail({
         onClose={() => setShowShareModal(false)}
         url={window.location.href}
         title={question.title}
+      />
+
+      <ReportModal 
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        onSubmit={submitReport}
       />
     </div>
   );
