@@ -1,16 +1,15 @@
 import React, { useEffect, useState } from 'react';
 // @ts-ignore
 import { useParams, useNavigate, Link } from 'react-router-dom';
-// ĐÃ SỬA: Đã thêm import các kiểu dữ liệu cần thiết: BlogPost, BlogComment, BlogCategory
+// ĐÃ SỬA: Đảm bảo import các kiểu dữ liệu cần thiết: BlogPost, BlogComment, BlogCategory
 import { BlogPost, BlogComment, User, BlogCategory } from '../types'; 
 import { fetchPostBySlug, fetchRelatedPosts, fetchBlogComments, addBlogComment, fetchBlogCategories } from '../services/blog'; 
 import { loginAnonymously } from '../services/auth';
-// ĐÃ THÊM: Search, X
 import { Loader2, ArrowLeft, Calendar, Share2, MessageCircle, Send, ExternalLink, ShieldCheck, Search, X } from 'lucide-react'; 
 import { AuthModal } from '../components/AuthModal';
 import { ShareModal } from '../components/ShareModal';
 
-// --- HẰM PHỤ (ĐÃ DI CHUYỂN VỊ TRÍ ĐỂ TRÁNH LỖI ROLLUP) ---
+// --- HÀM PHỤ (ĐÃ DI CHUYỂN LÊN TRƯỚC COMPONENT ĐỂ TRÁNH LỖI ROLLUP) ---
 const getYoutubeId = (url: string) => {
 	const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
 	const match = url.match(regExp);
@@ -82,7 +81,6 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
 	const handleCategoryClick = (catId: string) => {
 		setActiveCat(catId);
 		// Chuyển hướng người dùng về trang Blog List chính với filter được chọn
-		// Sử dụng ?category= để trang BlogList xử lý lọc (logic này đã có trong BlogList)
 		navigate(`/blog?category=${catId}`); 
 	};
 	
