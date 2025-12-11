@@ -10,7 +10,7 @@ interface AdminLayoutProps {
 }
 
 export const AdminLayout: React.FC<AdminLayoutProps> = ({ currentUser, onLogout }) => {
-	// Khởi tạo isSidebarOpen là false trên di động
+	// Khởi tạo isSidebarOpen là false trên di động, sử dụng window.innerWidth
 	const [isSidebarOpen, setSidebarOpen] = React.useState(window.innerWidth >= 768); 
 	const location = useLocation();
 	const navigate = useNavigate();
@@ -57,7 +57,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ currentUser, onLogout 
 		}
 	};
 	
-	// Khắc phục lỗi sidebar mở/đóng trên di động
+	// Khắc phục lỗi sidebar mở/đóng trên di động (sử dụng useEffect)
 	React.useEffect(() => {
 		const handleResize = () => {
 			if (window.innerWidth >= 768) {
@@ -78,8 +78,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ currentUser, onLogout 
 			>
 				<div className="h-16 flex items-center px-6 border-b border-gray-100">
 					<Link to="/" className="flex items-center gap-2 text-xl font-black text-gray-800 tracking-tight hover:opacity-80">
-						<span className="bg-blue-600 text-white p-1 rounded-md text-sm">A</span>sking
+						<span className="bg-blue-600 text-white p-1 rounded-md text-sm">A</span>dmin
 					</Link>
+					{/* Nút đóng sidebar trên mobile */}
 					<button onClick={() => setSidebarOpen(false)} className="md:hidden ml-auto text-gray-500 hover:text-gray-900 p-2 rounded-full">
 						<X size={24} />
 					</button>
@@ -92,7 +93,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ currentUser, onLogout 
 							<Link 
 								key={item.path} 
 								to={item.path}
-								onClick={handleLinkClick} {/* <-- Xử lý đóng sidebar khi điều hướng */}
+								onClick={handleLinkClick} 
 								className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
 									isActive 
 									? 'bg-blue-50 text-blue-700' 
