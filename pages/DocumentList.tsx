@@ -10,10 +10,12 @@ import {
   ExternalLink, Sparkles 
 } from 'lucide-react';
 import { subscribeToAuthChanges } from '../services/auth';
+// --- THÊM IMPORT COMPONENT ---
+import { ExpertPromoBox } from '../components/ExpertPromoBox';
 
 const PAGE_SIZE = 9;
 
-// --- COMPONENT: SKELETON LOADER (Đã thêm Dark Mode) ---
+// --- COMPONENT: SKELETON LOADER ---
 const DocSkeleton = () => (
   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
     {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -96,7 +98,6 @@ export const DocumentList: React.FC = () => {
   const canShare = currentUser && (currentUser.isAdmin || currentUser.isExpert);
 
   return (
-    // THAY ĐỔI: bg-[#F7F7F5] -> dark:bg-dark-bg
     <div className="min-h-screen bg-[#F7F7F5] dark:bg-dark-bg pb-24 animate-fade-in pt-safe-top transition-colors duration-300">
        
        {/* --- HEADER (BO TRÒN MỀM MẠI) --- */}
@@ -128,7 +129,7 @@ export const DocumentList: React.FC = () => {
                  
                  {/* Dòng 2: Tìm kiếm & Danh mục */}
                  <div className="flex flex-col md:flex-row gap-4 items-start md:items-center pb-2">
-                     {/* Search - Bo tròn mềm mại */}
+                     {/* Search */}
                      <div className="relative w-full md:w-auto md:flex-1 max-w-md group shrink-0">
                          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-green-600 transition-colors" size={20} />
                          <input 
@@ -176,7 +177,14 @@ export const DocumentList: React.FC = () => {
                    <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Thử tìm kiếm với từ khóa khác xem sao mẹ nhé.</p>
                </div>
            ) : (
-               <>
+               <>  
+                   {/* --- KHỐI ĐĂNG KÝ CHUYÊN GIA --- */}
+                   {!currentUser?.isExpert && (
+                      <div className="mb-8 animate-slide-up">
+                          <ExpertPromoBox />
+                      </div>
+                   )}
+
                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 animate-slide-up">
                        {visibleDocs.map((doc, index) => {
                            // --- LOGIC QUẢNG CÁO NATIVE ---
