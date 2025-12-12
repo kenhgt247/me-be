@@ -335,7 +335,12 @@ export const DocumentDetail: React.FC<{ currentUser: User; onOpenAuth: () => voi
                     {/* --- SIDEBAR (RIGHT - 4) --- */}
                     <aside className="lg:col-span-4 space-y-6">
                          <div className="sticky top-24 space-y-6">
-                            
+                            {/* --- KHỐI ĐĂNG KÝ CHUYÊN GIA --- */}
+                    {!currentUser?.isExpert && (
+                        <div className="animate-slide-up">
+                            <ExpertPromoBox />
+                        </div>
+                    )}
                              {/* 1. NATIVE AD (CẤU HÌNH TỪ ADMIN) */}
                              {adConfig?.isEnabled && adConfig.documentAd && (
                                  <div className="bg-white dark:bg-dark-card p-4 rounded-[1.5rem] border border-gray-200 dark:border-dark-border shadow-sm">
