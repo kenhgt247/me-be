@@ -167,7 +167,16 @@ export interface AdConfig {
   customTargetUrl?: string;
   frequency: number;
 }
-
+// THÊM KHỐI NÀY:
+  sidebarAd?: {
+    enabled: boolean;
+    title: string;
+    description: string;
+    buttonText: string;
+    link: string;
+    gradient: string;
+  };
+}
 // --- BLOG MODULE TYPES ---
 export interface BlogCategory {
   id: string;
