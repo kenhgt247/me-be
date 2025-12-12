@@ -5,9 +5,10 @@ import {
   ArrowLeft, Heart, MessageCircle, ShieldCheck, 
   Sparkles, Loader2, Send, MoreVertical, Trash2, Edit2, 
   Share2, Image as ImageIcon, X, Smile, 
-  ThumbsUp, CheckCircle2, Eye, Bookmark, Filter, LogIn, AtSign, Paperclip, Flag, ExternalLink, Info
+  ThumbsUp, CheckCircle2, Eye, Bookmark, Filter, LogIn, AtSign, Paperclip, Flag, ExternalLink, Info,
+  TrendingUp // Đã thêm icon TrendingUp
 } from 'lucide-react';
-import { Question, Answer, User, getIdFromSlug, AdConfig } from '../types';
+import { Question, Answer, User, getIdFromSlug, AdConfig, toSlug } from '../types';
 import { generateDraftAnswer } from '../services/gemini';
 import { toggleQuestionLikeDb, toggleSaveQuestion, toggleAnswerUseful, sendReport } from '../services/db';
 import { getAdConfig } from '../services/ads';
@@ -99,8 +100,7 @@ const RichTextRenderer: React.FC<{ content: string }> = ({ content }) => {
   );
 };
 
-// --- NATIVE AD COMPONENT (NEW) ---
-// Component hiển thị quảng cáo tùy chỉnh
+// --- NATIVE AD COMPONENT ---
 const QuestionDetailAd = ({ config }: { config: NonNullable<AdConfig['questionDetailAd']> }) => {
     if (!config || !config.enabled) return null;
     return (
@@ -160,7 +160,6 @@ export default function QuestionDetail({
 }: DetailProps) {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  
   const questionId = getIdFromSlug(slug);
   const question = questions.find(q => q.id === questionId);
   
@@ -203,6 +202,15 @@ export default function QuestionDetail({
       };
       loadAds();
   }, []);
+
+  // Filter Trending Questions (exclude current question)
+  const trendingQuestions = useMemo(() => {
+    if (!questions || !question) return [];
+    return questions
+        .filter(q => q.id !== question.id) // Loại bỏ câu hỏi hiện tại
+        .sort((a, b) => ((b.views || 0) + (b.likes || 0)) - ((a.views || 0) + (a.likes || 0))) // Sort theo tương tác
+        .slice(0, 5); // Lấy Top 5
+  }, [questions, question]);
 
   const participants = useMemo(() => { if (!question) return []; const usersMap = new Map<string, User>(); usersMap.set(question.author.id, question.author); question.answers.forEach(a => usersMap.set(a.author.id, a.author)); if (currentUser && !currentUser.isGuest) usersMap.delete(currentUser.id); return Array.from(usersMap.values()); }, [question, currentUser]);
   const filteredParticipants = useMemo(() => { if (!mentionQuery) return participants; return participants.filter(p => p.name.toLowerCase().includes(mentionQuery.toLowerCase())); }, [participants, mentionQuery]);
@@ -455,7 +463,36 @@ export default function QuestionDetail({
               <aside className="hidden lg:block lg:col-span-4 space-y-6">
                   <div className="sticky top-24 space-y-6">
                       
-                      {/* DESKTOP AD */}
+                      {/* 1. TRENDING QUESTIONS SECTION (MỚI THÊM) */}
+                      {trendingQuestions.length > 0 && (
+                          <div className="bg-white p-5 rounded-[1.5rem] border border-gray-200 shadow-sm">
+                               <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                  <span className="bg-orange-100 text-orange-600 p-1.5 rounded-lg"><TrendingUp size={18} /></span>
+                                  Đáng quan tâm
+                              </h3>
+                              <div className="flex flex-col gap-4">
+                                  {trendingQuestions.map((q, idx) => (
+                                      <RouterLink to={`/question/${toSlug(q.title, q.id)}`} key={q.id} className="group flex gap-3 items-start">
+                                           <span className={`text-xl font-black leading-none mt-0.5 ${
+                                              idx === 0 ? 'text-orange-500' : 
+                                              idx === 1 ? 'text-blue-500' : 
+                                              idx === 2 ? 'text-green-500' : 'text-gray-300'
+                                          }`}>0{idx + 1}</span>
+                                          <div className="flex-1 min-w-0">
+                                              <h4 className="font-bold text-sm text-gray-700 leading-snug group-hover:text-blue-600 transition-colors line-clamp-2">{q.title}</h4>
+                                              <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-1">
+                                                  <span>{q.answers.length} trả lời</span>
+                                                  <span>•</span>
+                                                  <span>{q.views} xem</span>
+                                              </div>
+                                          </div>
+                                      </RouterLink>
+                                  ))}
+                              </div>
+                          </div>
+                      )}
+
+                      {/* 2. DESKTOP AD */}
                       {adConfig?.isEnabled && adConfig.questionDetailAd && (
                           <div className="bg-white p-4 rounded-[1.5rem] border border-gray-200 shadow-sm">
                               <h4 className="text-xs font-bold text-gray-400 uppercase mb-3 tracking-wider flex items-center gap-1"><Info size={12}/> Gợi ý cho bạn</h4>
@@ -463,7 +500,7 @@ export default function QuestionDetail({
                           </div>
                       )}
 
-                      {/* GUIDELINES BOX */}
+                      {/* 3. GUIDELINES BOX */}
                       <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-5 rounded-[1.5rem] border border-blue-100">
                           <h4 className="font-bold text-blue-800 mb-3 flex items-center gap-2 text-sm"><ShieldCheck size={16}/> Lưu ý cộng đồng</h4>
                           <ul className="text-xs text-blue-700 space-y-2 list-disc pl-4 leading-relaxed font-medium">
