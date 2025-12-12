@@ -123,81 +123,92 @@ export const BlogList: React.FC = () => {
     // THAY ĐỔI: bg-[#F7F7F5] -> dark:bg-dark-bg
     <div className="min-h-screen bg-[#F7F7F5] dark:bg-dark-bg pb-24 animate-fade-in pt-safe-top transition-colors duration-300">
       
-      {/* --- HEADER --- */}
-      <div className="bg-white dark:bg-dark-card border-b border-gray-100 dark:border-dark-border shadow-sm sticky top-[68px] md:top-20 z-30 transition-all">
-         <div className="h-1 w-full bg-gradient-to-r from-primary via-blue-400 to-purple-500"></div>
-         
-         <div className="max-w-5xl mx-auto px-4 py-4">
-            <div className="flex justify-between items-center mb-4">
-                <div>
-                    <h1 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white flex items-center gap-2 tracking-tight">
-                        <BookOpen className="text-primary fill-primary/10" strokeWidth={2.5} /> 
-                        Góc Chuyên Gia
-                    </h1>
-                </div>
+      {/* --- HEADER (ĐÃ BO TRÒN MỀM MẠI) --- */}
+      <div className="sticky top-0 z-30 pointer-events-none"> 
+         {/* Container chính của Header - Thêm rounded-b-[2rem] và shadow */}
+         <div className="bg-white dark:bg-dark-card border-b border-gray-100 dark:border-dark-border shadow-sm dark:shadow-none rounded-b-[2rem] pointer-events-auto transition-all duration-300 relative overflow-hidden">
+             
+             {/* Gradient Line trang trí */}
+             <div className="h-1 w-full bg-gradient-to-r from-primary via-blue-400 to-purple-500 absolute top-0 left-0"></div>
+             
+             {/* Nội dung Header */}
+             <div className="max-w-5xl mx-auto px-4 py-4 pt-safe-top"> {/* Thêm pt-safe-top ở đây nếu cần thiết cho mobile */}
                 
-                {isExpertOrAdmin && (
-                    <button 
-                        onClick={() => navigate('/admin/blog')}
-                        className="bg-gray-900 dark:bg-slate-700 text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg active:scale-95 transition-transform hover:bg-gray-800 dark:hover:bg-slate-600"
-                    >
-                        <PenTool size={16} /> <span className="hidden md:inline">Viết bài</span>
-                    </button>
-                )}
-            </div>
-
-            <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
-                {/* Search */}
-                <div className="relative w-full md:w-auto md:flex-1 max-w-md group shrink-0">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary transition-colors" size={18} />
-                    <input 
-                      value={searchTerm} 
-                      onChange={e => setSearchTerm(e.target.value)} 
-                      placeholder="Tìm kiếm kiến thức..." 
-                      className="w-full pl-10 pr-10 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium text-sm text-textDark dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
-                    />
-                    {searchTerm && (
-                        <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
-                            <X size={14} />
+                {/* Dòng 1: Tiêu đề & Nút Admin */}
+                <div className="flex justify-between items-center mb-4 mt-2"> {/* mt-2 để cách thanh gradient một chút */}
+                    <div>
+                        <h1 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white flex items-center gap-2 tracking-tight">
+                            <BookOpen className="text-primary fill-primary/10" strokeWidth={2.5} /> 
+                            Góc Chuyên Gia
+                        </h1>
+                    </div>
+                    
+                    {isExpertOrAdmin && (
+                        <button 
+                            onClick={() => navigate('/admin/blog')}
+                            className="bg-gray-900 dark:bg-slate-700 text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg active:scale-95 transition-transform hover:bg-gray-800 dark:hover:bg-slate-600"
+                        >
+                            <PenTool size={16} /> <span className="hidden md:inline">Viết bài</span>
                         </button>
                     )}
                 </div>
 
-                {/* Categories */}
-                <div className="flex-1 w-full min-w-0 relative group/scroll">
-                    <button 
-                        onClick={() => scrollCategory('left')}
-                        className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white/90 dark:bg-slate-700/90 backdrop-blur-sm shadow-md rounded-full items-center justify-center text-gray-600 dark:text-white hover:text-primary border border-gray-100 dark:border-slate-600 opacity-0 group-hover/scroll:opacity-100 transition-all active:scale-90 disabled:opacity-0"
-                    >
-                        <ChevronLeft size={20} />
-                    </button>
-
-                    <div ref={scrollRef} className="flex gap-2 overflow-x-auto no-scrollbar pb-1 scroll-smooth px-1">
-                        <button 
-                            onClick={() => handleFilter('all')}
-                            className={`flex-shrink-0 px-5 py-2.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${activeCat === 'all' ? 'bg-gray-900 dark:bg-primary text-white border-gray-900 dark:border-primary shadow-md' : 'bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-slate-700 hover:border-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700'}`}
-                        >
-                            Tất cả
-                        </button>
-                        {categories.map(cat => (
-                            <button 
-                                key={cat.id}
-                                onClick={() => handleFilter(cat.id)}
-                                className={`flex-shrink-0 px-4 py-2.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border flex items-center gap-1.5 ${activeCat === cat.id ? 'bg-white dark:bg-dark-card text-primary border-primary shadow-sm ring-2 ring-primary/10' : 'bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-slate-700 hover:border-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700'}`}
-                            >
-                                <span className="text-sm">{cat.iconEmoji}</span> {cat.name}
+                {/* Dòng 2: Tìm kiếm & Danh mục */}
+                <div className="flex flex-col md:flex-row gap-4 items-start md:items-center pb-2">
+                    {/* Search - Bo tròn full (rounded-full) hoặc (rounded-2xl) */}
+                    <div className="relative w-full md:w-auto md:flex-1 max-w-md group shrink-0">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary transition-colors" size={20} />
+                        <input 
+                          value={searchTerm} 
+                          onChange={e => setSearchTerm(e.target.value)} 
+                          placeholder="Tìm kiếm kiến thức..." 
+                          // Sửa rounded-xl thành rounded-2xl cho mềm hơn
+                          className="w-full pl-12 pr-10 py-3 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium text-sm text-textDark dark:text-white placeholder-gray-400 dark:placeholder-gray-500 shadow-inner"
+                        />
+                        {searchTerm && (
+                            <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                                <X size={16} />
                             </button>
-                        ))}
+                        )}
                     </div>
 
-                    <button 
-                        onClick={() => scrollCategory('right')}
-                        className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white/90 dark:bg-slate-700/90 backdrop-blur-sm shadow-md rounded-full items-center justify-center text-gray-600 dark:text-white hover:text-primary border border-gray-100 dark:border-slate-600 opacity-0 group-hover/scroll:opacity-100 transition-all active:scale-90"
-                    >
-                        <ChevronRight size={20} />
-                    </button>
+                    {/* Categories - Buttons */}
+                    <div className="flex-1 w-full min-w-0 relative group/scroll">
+                        <button 
+                            onClick={() => scrollCategory('left')}
+                            className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white/90 dark:bg-slate-700/90 backdrop-blur-sm shadow-md rounded-full items-center justify-center text-gray-600 dark:text-white hover:text-primary border border-gray-100 dark:border-slate-600 opacity-0 group-hover/scroll:opacity-100 transition-all active:scale-90 disabled:opacity-0"
+                        >
+                            <ChevronLeft size={20} />
+                        </button>
+
+                        <div ref={scrollRef} className="flex gap-2 overflow-x-auto no-scrollbar pb-1 scroll-smooth px-1">
+                            <button 
+                                onClick={() => handleFilter('all')}
+                                // Sửa rounded-full cho tất cả nút category
+                                className={`flex-shrink-0 px-5 py-2.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${activeCat === 'all' ? 'bg-gray-900 dark:bg-primary text-white border-gray-900 dark:border-primary shadow-md' : 'bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-slate-700 hover:border-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700'}`}
+                            >
+                                Tất cả
+                            </button>
+                            {categories.map(cat => (
+                                <button 
+                                    key={cat.id}
+                                    onClick={() => handleFilter(cat.id)}
+                                    className={`flex-shrink-0 px-4 py-2.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border flex items-center gap-1.5 ${activeCat === cat.id ? 'bg-white dark:bg-dark-card text-primary border-primary shadow-sm ring-2 ring-primary/10' : 'bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-slate-700 hover:border-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700'}`}
+                                >
+                                    <span className="text-sm">{cat.iconEmoji}</span> {cat.name}
+                                </button>
+                            ))}
+                        </div>
+
+                        <button 
+                            onClick={() => scrollCategory('right')}
+                            className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white/90 dark:bg-slate-700/90 backdrop-blur-sm shadow-md rounded-full items-center justify-center text-gray-600 dark:text-white hover:text-primary border border-gray-100 dark:border-slate-600 opacity-0 group-hover/scroll:opacity-100 transition-all active:scale-90"
+                        >
+                            <ChevronRight size={20} />
+                        </button>
+                    </div>
                 </div>
-            </div>
+             </div>
          </div>
       </div>
 
@@ -258,7 +269,7 @@ export const BlogList: React.FC = () => {
                                  <Link 
                                     to={`/blog/${post.slug}`} 
                                     key={post.id} 
-                                    className="snap-start flex-shrink-0 w-72 bg-white dark:bg-dark-card rounded-2xl p-3 border border-gray-100 dark:border-dark-border shadow-sm dark:shadow-none hover:shadow-md transition-all active:scale-95 group relative overflow-hidden"
+                                    className="snap-start flex-shrink-0 w-72 bg-white dark:bg-dark-card rounded-[1.5rem] p-3 border border-gray-100 dark:border-dark-border shadow-sm dark:shadow-none hover:shadow-md transition-all active:scale-95 group relative overflow-hidden"
                                  >
                                     <div className="absolute top-0 right-0 bg-gray-900/10 dark:bg-white/5 text-gray-900 dark:text-white font-black text-[4rem] leading-none -mt-2 -mr-2 opacity-10 select-none pointer-events-none group-hover:scale-110 transition-transform">
                                         {index + 1}
