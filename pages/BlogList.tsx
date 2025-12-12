@@ -9,7 +9,8 @@ import {
   Loader2, BookOpen, Clock, PenTool, Search, X, ArrowDown, 
   Sparkles, AlertCircle, ChevronLeft, ChevronRight, Flame, Eye, ExternalLink 
 } from 'lucide-react';
-
+// IMPORT COMPONENT MỚI
+import { ExpertPromoBox } from '../components/ExpertPromoBox';
 const PAGE_SIZE = 8; 
 
 // --- COMPONENT: SKELETON LOADER (Đã thêm Dark Mode) ---
