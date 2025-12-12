@@ -57,10 +57,10 @@ const STICKER_PACKS = {
   "Đồ ăn": ["🍎", "🍌", "🍉", "🍓", "🥕", "🌽", "🍕", "🍔", "🍦", "🍪"]
 };
 
-export const Ask: React.FC<AskProps> = ({
-  onAddQuestion,
-  currentUser,
-  categories,
+export const Ask: React.FC<AskProps> = ({ 
+  onAddQuestion, 
+  currentUser, 
+  categories, 
   onAddCategory,
   onLogin,
   onRegister,
@@ -122,11 +122,12 @@ export const Ask: React.FC<AskProps> = ({
 
   const handleAiContent = async () => {
     if (title.length < 5) {
-      alert("Mẹ nhập tiêu đề rõ hơn một chút để AI viết chính xác nhé ❤️");
+      alert("Mẹ nhập tiêu đề rõ hơn để AI viết chính xác nhé ❤️");
       return;
     }
-    if (content.length > 50 && !confirm("AI sẽ viết lại nội dung hiện tại. Mẹ đồng ý nhé?")) return;
-
+    if (content.length > 50) {
+      if (!confirm("AI sẽ viết lại nội dung hiện tại. Mẹ đồng ý không?")) return;
+    }
     setIsGeneratingContent(true);
     try {
       const aiContent = await generateQuestionContent(title);
@@ -140,15 +141,14 @@ export const Ask: React.FC<AskProps> = ({
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
-
-    const files = Array.from(e.target.files);
-    if (attachments.length + files.length > 3) {
-      alert("Mỗi câu hỏi tối đa 3 ảnh thôi mẹ nhé 📸");
+    const filesArray = Array.from(e.target.files);
+    if (attachments.length + filesArray.length > 3) {
+      alert("Mỗi câu hỏi chỉ tối đa 3 ảnh thôi mẹ nhé 📸");
       return;
     }
 
-    const newAttachments: Attachment[] = files.map(file => ({
-      id: Math.random().toString(36).slice(2),
+    const newAttachments: Attachment[] = filesArray.map(file => ({
+      id: Math.random().toString(36).substr(2, 9),
       file,
       preview: URL.createObjectURL(file),
       uploading: true
@@ -164,21 +164,59 @@ export const Ask: React.FC<AskProps> = ({
         );
       } catch {
         setAttachments(prev => prev.filter(p => p.id !== att.id));
-        alert("Tải ảnh lỗi rồi mẹ ơi 😥");
+        alert("Tải ảnh bị lỗi rồi mẹ ơi 😥");
       }
     });
   };
+
+  const removeImage = (id: string) => {
+    setAttachments(prev => prev.filter(att => att.id !== id));
+  };
+
+  const handleAddCustomCategory = () => {
+    if (customCategory.trim()) {
+      onAddCategory(customCategory.trim());
+      setCategory(customCategory.trim());
+      setCustomCategory('');
+      setShowCategorySheet(false);
+    }
+  };
+
+  const insertAtCursor = (textToInsert: string) => {
+    const input = textareaRef.current;
+    if (!input) {
+      setContent(prev => prev + textToInsert);
+      return;
+    }
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    const text = content;
+    setContent(text.substring(0, start) + textToInsert + text.substring(end));
+    setTimeout(() => {
+      input.focus();
+      input.setSelectionRange(start + textToInsert.length, start + textToInsert.length);
+    }, 0);
+  };
+
+  const handleInsertLink = () => {
+    if (!linkUrl) { setShowLinkInput(false); return; }
+    let safeUrl = linkUrl;
+    if (!safeUrl.startsWith('http')) safeUrl = `https://${safeUrl}`;
+    insertAtCursor(` ${safeUrl} `);
+    setLinkUrl('');
+    setShowLinkInput(false);
+  };
+
+  const handleInsertSticker = (sticker: string) => insertAtCursor(sticker);
 
   const finalizeSubmission = async (user: User) => {
     if (attachments.some(a => a.uploading)) {
       alert("Ảnh đang tải, mẹ đợi xíu nhé ⏳");
       return;
     }
-
     setIsSubmitting(true);
     try {
-      const images = attachments.map(a => a.url).filter(Boolean) as string[];
-
+      const imageUrls = attachments.map(a => a.url).filter(Boolean) as string[];
       await onAddQuestion({
         id: Date.now().toString(),
         title,
@@ -189,9 +227,8 @@ export const Ask: React.FC<AskProps> = ({
         likes: 0,
         views: 0,
         createdAt: new Date().toISOString(),
-        images
+        images: imageUrls
       });
-
       alert("🎉 Câu hỏi đã được đăng! Mẹ chờ tư vấn nhé 💕");
       navigate('/');
     } catch {
@@ -203,7 +240,6 @@ export const Ask: React.FC<AskProps> = ({
 
   const handleSubmit = async () => {
     if (!title || !content) return;
-
     if (currentUser.isGuest) {
       const guest = await loginAnonymously();
       finalizeSubmission(guest);
@@ -213,7 +249,7 @@ export const Ask: React.FC<AskProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col pb-safe-bottom">
+    <div className="min-h-screen bg-white flex flex-col animate-fade-in pb-safe-bottom">
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
@@ -224,23 +260,23 @@ export const Ask: React.FC<AskProps> = ({
       />
 
       {/* HEADER */}
-      <div className="sticky top-0 bg-white/90 backdrop-blur-md border-b z-30">
+      <div className="w-full bg-white/90 backdrop-blur-md sticky top-0 z-30 pt-safe-top border-b">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
           <button onClick={() => navigate(-1)} className="p-2">
             <ArrowLeft size={24} />
           </button>
-          <span className="font-bold">Đặt câu hỏi</span>
-          <div className="w-8" />
+          <span className="font-bold text-lg">Đặt câu hỏi</span>
+          <div className="w-10" />
         </div>
       </div>
 
       {/* MAIN */}
-      <div className="flex-1 max-w-3xl mx-auto px-4 py-5 space-y-6 pb-32">
+      <div className="flex-1 max-w-3xl mx-auto px-4 py-4 pb-32 space-y-5">
         <input
           value={title}
           onChange={e => setTitle(e.target.value)}
-          placeholder="Mẹ đang băn khoăn điều gì?"
-          className="w-full text-2xl font-bold outline-none"
+          placeholder="Tiêu đề: Mẹ đang băn khoăn điều gì?"
+          className="w-full text-xl font-bold outline-none"
         />
         <p className="text-xs text-gray-400">
           Tiêu đề rõ ràng giúp mẹ nhận được nhiều tư vấn hơn ❤️
@@ -250,9 +286,12 @@ export const Ask: React.FC<AskProps> = ({
           ref={textareaRef}
           value={content}
           onChange={e => setContent(e.target.value)}
-          placeholder="Mô tả chi tiết để chuyên gia và các mẹ hiểu rõ hơn nhé..."
+          placeholder="Mô tả chi tiết để được tư vấn chính xác hơn..."
           className="w-full resize-none outline-none text-base"
         />
+        <p className="text-xs text-gray-400">
+          Mẹ mô tả càng chi tiết, chuyên gia tư vấn càng chính xác 🌸
+        </p>
 
         {content.length > 100 && (
           <p className="text-xs text-green-600">✔ Nội dung đã khá đầy đủ rồi mẹ ơi</p>
@@ -260,25 +299,23 @@ export const Ask: React.FC<AskProps> = ({
       </div>
 
       {/* FOOTER */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t px-4 py-3">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t px-4 py-3 pb-safe-bottom">
         <div className="max-w-3xl mx-auto flex gap-3">
-          <label className="w-11 h-11 bg-gray-50 rounded-full flex items-center justify-center">
+          <label className="w-11 h-11 rounded-full bg-gray-50 flex items-center justify-center">
             <ImageIcon />
             <input type="file" hidden multiple onChange={handleImageChange} />
           </label>
-
           <button
-            disabled={!title || !content || isSubmitting}
             onClick={handleSubmit}
-            className="flex-1 bg-primary text-white rounded-full font-bold"
+            disabled={!title || !content || isSubmitting}
+            className="flex-1 bg-primary text-white rounded-full font-bold flex items-center justify-center gap-2"
           >
-            {isSubmitting ? "Đang đăng..." : "Đăng câu hỏi"}
+            {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : <>Đăng câu hỏi <Send size={16} /></>}
           </button>
         </div>
-
         {(!title || !content) && (
           <p className="text-xs text-gray-400 text-center mt-1">
-            Mẹ nhập tiêu đề và nội dung để đăng nhé 🌸
+            Mẹ nhập tiêu đề và nội dung để đăng nhé 🌷
           </p>
         )}
       </div>
