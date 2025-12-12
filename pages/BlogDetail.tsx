@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 // @ts-ignore
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { BlogPost, BlogComment, User, BlogCategory } from '../types';
-import { fetchPostBySlug, fetchRelatedPosts, fetchBlogComments, addBlogComment, fetchBlogCategories } from '../services/blog';
+import { BlogPost, BlogComment, User } from '../types';
+import { fetchPostBySlug, fetchRelatedPosts, fetchBlogComments, addBlogComment, fetchPublishedPosts } from '../services/blog';
 import { loginAnonymously } from '../services/auth';
 import { 
   Loader2, ArrowLeft, Calendar, Share2, MessageCircle, Send, 
-  ExternalLink, ShieldCheck, Heart, ChevronDown, ChevronRight, Eye, Home, Clock 
+  ExternalLink, ShieldCheck, ChevronRight, Eye, Home, Clock, 
+  TrendingUp, Megaphone, Star 
 } from 'lucide-react';
 import { AuthModal } from '../components/AuthModal';
 import { ShareModal } from '../components/ShareModal';
@@ -36,8 +37,8 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
   
   // Data State
   const [post, setPost] = useState<BlogPost | null>(null);
-  const [categoryName, setCategoryName] = useState<string>('Kiến thức'); // State lưu tên danh mục
   const [relatedPosts, setRelatedPosts] = useState<BlogPost[]>([]);
+  const [mostViewedPosts, setMostViewedPosts] = useState<BlogPost[]>([]); // State mới cho bài xem nhiều
   const [comments, setComments] = useState<BlogCommentWithUI[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -63,17 +64,17 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
       const postData = await fetchPostBySlug(slug);
       
       if (postData) {
-        // Lấy danh sách category để tìm tên
-        const categories = await fetchBlogCategories();
-        const cat = categories.find(c => c.id === postData.categoryId);
-        if (cat) setCategoryName(cat.name); // Cập nhật tên danh mục thật
-
-        const related = await fetchRelatedPosts(postData.id, postData.categoryId);
-        const initialComments = await fetchBlogComments(postData.id); 
+        // Fetch dữ liệu song song
+        const [related, initialComments, trending] = await Promise.all([
+            fetchRelatedPosts(postData.id, postData.categoryId),
+            fetchBlogComments(postData.id),
+            fetchPublishedPosts('all', 5) // Giả lập lấy bài xem nhiều (lấy 5 bài mới nhất)
+        ]);
 
         setPost(postData);
         setRelatedPosts(related);
         setComments(initialComments as BlogCommentWithUI[]);
+        setMostViewedPosts(trending); // Set bài xem nhiều
         setHasMore(initialComments.length === PAGE_SIZE); 
       }
     } catch (error) {
@@ -143,10 +144,9 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
   return (
     <div className="min-h-screen bg-white animate-fade-in pb-32">
       
-      {/* 1. STICKY HEADER */}
+      {/* HEADER */}
       <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b border-gray-50 transition-all">
-        {/* Mở rộng header ra theo width mới */}
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
             <button onClick={() => navigate('/blog')} className="p-2 -ml-2 hover:bg-gray-50 rounded-full text-gray-500 transition-colors">
                 <ArrowLeft size={24} />
             </button>
@@ -158,62 +158,127 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
         </div>
       </div>
 
-      {/* 2. ARTICLE CONTAINER - ĐÃ MỞ RỘNG */}
-      {/* Thay max-w-[720px] thành max-w-6xl để rộng gần hết màn hình */}
-      <article className="max-w-6xl mx-auto px-4 md:px-8 pt-8 md:pt-12">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 pt-8">
         
-        {/* HEADER SECTION */}
-        <header className="mb-10 border-b border-gray-100 pb-10">
-            {/* Breadcrumb Navigation */}
-            <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500 mb-6 font-medium">
-                <Link to="/" className="hover:text-black flex items-center gap-1"><Home size={14}/> Trang chủ</Link>
-                <ChevronRight size={14} className="text-gray-300" />
-                <Link to="/blog" className="hover:text-black">Blog</Link>
-                <ChevronRight size={14} className="text-gray-300" />
-                <span className="text-blue-600 bg-blue-50 px-3 py-1 rounded-md font-bold">
-                    {categoryName}
-                </span>
-            </div>
+        {/* LAYOUT GRID: SIDEBAR TRÁI - CONTENT PHẢI */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
 
-            {/* Title */}
-            <h1 className="text-3xl md:text-5xl lg:text-6xl font-black text-gray-900 mb-8 leading-tight tracking-tight">
-                {post.title}
-            </h1>
+            {/* --- LEFT SIDEBAR (Sticky on Desktop) --- */}
+            <aside className="lg:col-span-4 order-2 lg:order-1 space-y-8">
+                <div className="sticky top-24 space-y-8">
+                    
+                    {/* 1. MOST VIEWED (Bài viết xem nhiều) */}
+                    {mostViewedPosts.length > 0 && (
+                        <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
+                            <h3 className="font-bold text-lg text-gray-900 mb-6 flex items-center gap-2">
+                                <span className="bg-orange-100 text-orange-600 p-1.5 rounded-lg"><TrendingUp size={18} /></span>
+                                Đọc nhiều nhất
+                            </h3>
+                            <div className="flex flex-col gap-5">
+                                {mostViewedPosts.map((p, index) => (
+                                    <Link to={`/blog/${p.slug}`} key={p.id} className="group flex gap-4 items-start">
+                                        <span className={`text-2xl font-black leading-none mt-1 ${
+                                            index === 0 ? 'text-orange-500' : 
+                                            index === 1 ? 'text-blue-500' : 
+                                            index === 2 ? 'text-green-500' : 'text-gray-200'
+                                        }`}>
+                                            0{index + 1}
+                                        </span>
+                                        <div className="flex-1">
+                                            <h4 className="font-bold text-sm text-gray-900 leading-snug group-hover:text-primary transition-colors mb-1 line-clamp-2">
+                                                {p.title}
+                                            </h4>
+                                            <span className="text-xs text-gray-400 flex items-center gap-1">
+                                                <Eye size={10} /> {p.views || 100 + index * 50} lượt xem
+                                            </span>
+                                        </div>
+                                    </Link>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
-            {/* Meta Info */}
-            <div className="flex flex-col md:flex-row items-start md:items-center gap-6 text-sm text-gray-500">
-                <div className="flex items-center gap-3">
-                    <img src={post.authorAvatar || "https://cdn-icons-png.flaticon.com/512/3177/3177440.png"} className="w-10 h-10 rounded-full object-cover border border-gray-100" alt="Author" />
-                    <div>
-                        <p className="font-bold text-gray-900 flex items-center gap-1">
-                            {post.authorName} {post.authorIsExpert && <ShieldCheck size={14} className="text-blue-500" />}
-                        </p>
+                    {/* 2. AD BANNER (Quảng cáo) */}
+                    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 p-6 text-white shadow-lg text-center">
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-white opacity-10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2"></div>
+                        <div className="relative z-10 flex flex-col items-center">
+                            <span className="bg-white/20 text-[10px] font-bold px-2 py-0.5 rounded uppercase mb-3 border border-white/20">Quảng cáo</span>
+                            <Megaphone size={32} className="mb-3 animate-bounce" />
+                            <h4 className="font-bold text-lg mb-1">Khóa học Ăn dặm</h4>
+                            <p className="text-xs text-indigo-100 mb-4">Giúp bé ăn ngon, mẹ nhàn tênh chỉ sau 7 ngày.</p>
+                            <button className="bg-white text-indigo-600 px-6 py-2 rounded-full text-xs font-bold hover:bg-indigo-50 transition-colors w-full">
+                                Xem ngay
+                            </button>
+                        </div>
                     </div>
-                </div>
-                
-                <div className="hidden md:block w-px h-6 bg-gray-200"></div>
-                
-                <div className="flex items-center gap-4 flex-wrap">
-                    <span className="flex items-center gap-1.5"><Calendar size={14} /> {new Date(post.createdAt).toLocaleDateString('vi-VN')}</span>
-                    <span className="flex items-center gap-1.5"><Eye size={14} /> {post.views || 0} lượt xem</span>
-                    <span className="flex items-center gap-1.5"><Clock size={14} /> {calculateReadingTime(post.content)} phút đọc</span>
-                </div>
-            </div>
-        </header>
 
-        {/* COVER IMAGE - Full Width trong container */}
-        {post.coverImageUrl && (
-            <div className="w-full aspect-video md:aspect-[2.5/1] rounded-3xl overflow-hidden mb-12 shadow-sm bg-gray-100">
-                <img src={post.coverImageUrl} className="w-full h-full object-cover" alt={post.title} />
-            </div>
-        )}
+                    {/* 3. RELATED POSTS (Bài liên quan) */}
+                    {relatedPosts.length > 0 && (
+                        <div className="bg-gray-50/50 rounded-3xl p-6 border border-gray-100">
+                             <h3 className="font-bold text-lg text-gray-900 mb-6 flex items-center gap-2">
+                                <span className="w-1 h-5 bg-blue-600 rounded-full"></span> Có thể mẹ quan tâm
+                            </h3>
+                            <div className="flex flex-col gap-4">
+                                {relatedPosts.map(p => (
+                                    <Link to={`/blog/${p.slug}`} key={p.id} className="group flex gap-3 items-center bg-white p-2 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all">
+                                        <div className="w-16 h-16 rounded-lg bg-gray-100 overflow-hidden shrink-0">
+                                            {p.coverImageUrl ? (
+                                                <img src={p.coverImageUrl} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center text-xl">{p.iconEmoji}</div>
+                                            )}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <h4 className="font-bold text-xs text-gray-900 leading-snug group-hover:text-blue-600 transition-colors line-clamp-2 mb-1">{p.title}</h4>
+                                            <span className="text-[10px] text-gray-400">{new Date(p.createdAt).toLocaleDateString('vi-VN')}</span>
+                                        </div>
+                                    </Link>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
-        {/* --- CONTENT BODY --- */}
-        {/* Layout 2 cột: Nội dung chính (Trái) - Sidebar (Phải) trên màn hình lớn */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-            
-            {/* Cột Nội dung chính (Chiếm 8/12 phần = 2/3 màn hình) */}
-            <div className="lg:col-span-8">
+                </div>
+            </aside>
+
+            {/* --- MAIN CONTENT (RIGHT) --- */}
+            <main className="lg:col-span-8 order-1 lg:order-2">
+                
+                {/* BREADCRUMBS */}
+                <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500 mb-6 font-medium">
+                    <Link to="/" className="hover:text-black flex items-center gap-1"><Home size={14}/> Trang chủ</Link>
+                    <ChevronRight size={14} className="text-gray-300" />
+                    <Link to="/blog" className="hover:text-black">Blog</Link>
+                    <ChevronRight size={14} className="text-gray-300" />
+                    <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md font-bold text-xs uppercase tracking-wide">
+                        {post.categoryId || 'Kiến thức'}
+                    </span>
+                </div>
+
+                {/* TITLE & META */}
+                <h1 className="text-3xl md:text-5xl font-black text-gray-900 mb-6 leading-tight tracking-tight">
+                    {post.title}
+                </h1>
+                
+                <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 mb-8 pb-8 border-b border-gray-100">
+                    <div className="flex items-center gap-2">
+                        <img src={post.authorAvatar || "https://cdn-icons-png.flaticon.com/512/3177/3177440.png"} className="w-8 h-8 rounded-full object-cover" />
+                        <span className="font-bold text-gray-900">{post.authorName}</span>
+                    </div>
+                    <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+                    <span className="flex items-center gap-1"><Calendar size={14}/> {new Date(post.createdAt).toLocaleDateString('vi-VN')}</span>
+                    <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+                    <span className="flex items-center gap-1"><Clock size={14}/> {calculateReadingTime(post.content)} phút đọc</span>
+                </div>
+
+                {/* COVER IMAGE */}
+                {post.coverImageUrl && (
+                    <div className="w-full aspect-video rounded-3xl overflow-hidden mb-10 shadow-sm bg-gray-100">
+                        <img src={post.coverImageUrl} className="w-full h-full object-cover" alt={post.title} />
+                    </div>
+                )}
+
+                {/* CONTENT BODY */}
                 <div className="text-gray-800 text-lg leading-relaxed md:text-xl md:leading-[1.9]
                     [&>p]:mb-8 [&>p]:text-justify
                     [&>h2]:text-3xl [&>h2]:font-bold [&>h2]:text-gray-900 [&>h2]:mt-12 [&>h2]:mb-6 
@@ -241,28 +306,27 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
 
                     <div dangerouslySetInnerHTML={{ __html: post.content }} />
                 </div>
-            
-                {/* Source & Share */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-8 border-t border-gray-100 mt-12">
-                    {post.sourceUrl ? (
+
+                {/* SOURCE & SHARE */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-8 border-t border-b border-gray-100 mt-8 mb-12">
+                     {post.sourceUrl ? (
                         <a href={post.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-base font-bold text-gray-500 hover:text-blue-600 transition-colors">
                             <ExternalLink size={18} /> Nguồn tham khảo
                         </a>
                     ) : <span></span>}
                     
-                    <button onClick={() => setShowShare(true)} className="inline-flex items-center gap-2 text-base font-bold text-gray-900 hover:text-blue-600 transition-colors bg-gray-50 px-4 py-2 rounded-full">
+                    <button onClick={() => setShowShare(true)} className="inline-flex items-center gap-2 text-base font-bold text-gray-900 hover:text-blue-600 transition-colors bg-gray-50 px-5 py-2.5 rounded-full">
                         <Share2 size={18} /> Chia sẻ bài viết
                     </button>
                 </div>
 
-                {/* COMMENTS SECTION (Đặt ngay dưới bài viết ở cột chính) */}
-                <div className="mt-12 bg-gray-50/50 rounded-3xl p-6 md:p-8 border border-gray-100">
+                {/* COMMENT SECTION */}
+                <div className="bg-gray-50/50 rounded-[2rem] p-6 md:p-10 border border-gray-100">
                      <h3 className="font-bold text-2xl text-gray-900 mb-8 flex items-center gap-3">
                         Bình luận <span className="text-base font-medium text-gray-500 bg-white px-3 py-1 rounded-full border border-gray-200">{post.commentCount || comments.length}</span>
                     </h3>
 
-                    {/* Input */}
-                    <div className="bg-white p-2 rounded-3xl border border-gray-200 shadow-sm focus-within:ring-2 focus-within:ring-blue-500/10 focus-within:border-blue-500 transition-all mb-8">
+                    <div className="bg-white p-2 rounded-3xl border border-gray-200 shadow-sm focus-within:ring-2 focus-within:ring-blue-500/10 focus-within:border-blue-500 transition-all mb-10">
                         <textarea 
                             value={commentContent}
                             onChange={e => setCommentContent(e.target.value)}
@@ -283,11 +347,10 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
                         </div>
                     </div>
 
-                    {/* Comment List */}
                     <div className="space-y-6">
                         {comments.map(c => (
                             <div key={c.id} className="flex gap-4 animate-fade-in">
-                                <img src={c.authorAvatar} className="w-10 h-10 rounded-full bg-gray-200 object-cover border border-white shadow-sm shrink-0" alt="avatar" />
+                                <img src={c.authorAvatar} className="w-10 h-10 rounded-full bg-gray-200 object-cover border border-white shadow-sm shrink-0" />
                                 <div className="flex-1">
                                     <div className="bg-white p-4 rounded-2xl rounded-tl-none border border-gray-100 shadow-sm">
                                         <div className="flex items-center justify-between mb-2">
@@ -299,53 +362,19 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
                                 </div>
                             </div>
                         ))}
-                         {hasMore && (
+                        {hasMore && (
                             <button onClick={handleLoadMore} disabled={isFetchingMore} className="w-full py-3 mt-4 text-sm font-bold text-gray-500 hover:bg-white hover:shadow-sm rounded-xl transition-all">
                                 {isFetchingMore ? <Loader2 className="animate-spin mx-auto" size={20} /> : "Xem thêm bình luận"}
                             </button>
                         )}
+                        {comments.length === 0 && <p className="text-center text-gray-400 italic">Chưa có bình luận nào.</p>}
                     </div>
                 </div>
-            </div>
 
-            {/* Cột Sidebar bên phải (Chiếm 4/12 phần - Chỉ hiện trên màn hình lớn) */}
-            <div className="lg:col-span-4 space-y-8">
-                {/* Sticky Wrapper để sidebar trượt theo khi đọc */}
-                <div className="sticky top-24">
-                     {/* Related Posts */}
-                    {relatedPosts.length > 0 && (
-                        <div className="bg-gray-50 rounded-3xl p-6 border border-gray-100">
-                            <h3 className="font-bold text-lg text-gray-900 mb-6 flex items-center gap-2">
-                                <span className="w-1 h-5 bg-blue-600 rounded-full"></span> Bài viết liên quan
-                            </h3>
-                            <div className="flex flex-col gap-5">
-                                {relatedPosts.map(p => (
-                                    <Link to={`/blog/${p.slug}`} key={p.id} className="group cursor-pointer">
-                                        <div className="flex gap-4 items-start">
-                                            <div className="w-20 h-20 rounded-xl bg-gray-200 overflow-hidden shrink-0">
-                                                {p.coverImageUrl ? (
-                                                    <img src={p.coverImageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
-                                                ) : (
-                                                    <div className="w-full h-full flex items-center justify-center text-2xl bg-white">{p.iconEmoji}</div>
-                                                )}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <h4 className="font-bold text-sm text-gray-900 leading-snug group-hover:text-blue-600 transition-colors mb-1 line-clamp-2">{p.title}</h4>
-                                                <span className="text-xs text-gray-400">{new Date(p.createdAt).toLocaleDateString('vi-VN')}</span>
-                                            </div>
-                                        </div>
-                                    </Link>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
-
+            </main>
         </div>
-
-      </article>
-
+      </div>
+      
       <ShareModal 
         isOpen={showShare}
         onClose={() => setShowShare(false)}
