@@ -92,7 +92,7 @@ Truy cập `http://localhost:5173` để xem kết quả.
   * [ ] Tối ưu hóa SEO (Next.js migration?).
   * [ ] Phát triển Mobile App (React Native) dùng chung logic.
   * [ ] Tích hợp Chuyên gia xác thực (Verified Badge).
-  * [ ] Dark Mode.
+  * [ ] Dark Mode.( đã cập nhật hôm nay )
 
 -----
 
