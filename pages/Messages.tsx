@@ -50,24 +50,26 @@ export const Messages: React.FC<MessagesProps> = ({ currentUser }) => {
     };
 
     if (!currentUser || currentUser.isGuest) return (
-        <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center animate-fade-in pt-safe-top">
+        <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center animate-fade-in pt-safe-top bg-[#F7F7F5] dark:bg-dark-bg transition-colors">
              <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center mb-6 text-primary">
                 <MessageCircle size={40} />
              </div>
-             <h2 className="text-2xl font-bold text-textDark mb-3">Tin nhắn</h2>
-             <p className="text-textGray mb-6">Vui lòng đăng nhập để xem tin nhắn.</p>
+             <h2 className="text-2xl font-bold text-textDark dark:text-white mb-3">Tin nhắn</h2>
+             <p className="text-textGray dark:text-gray-400 mb-6">Vui lòng đăng nhập để xem tin nhắn.</p>
         </div>
     );
 
     return (
-        <div className="min-h-screen bg-[#F7F7F5] pb-24 animate-fade-in">
+        // THAY ĐỔI: bg-[#F7F7F5] -> dark:bg-dark-bg
+        <div className="min-h-screen bg-[#F7F7F5] dark:bg-dark-bg pb-24 animate-fade-in transition-colors duration-300">
+            
             {/* Header */}
-            <div className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-100 px-4 py-3 pt-safe-top">
+            <div className="sticky top-0 z-40 bg-white/90 dark:bg-dark-card/90 backdrop-blur-md border-b border-gray-100 dark:border-dark-border px-4 py-3 pt-safe-top transition-colors">
                 <div className="flex justify-between items-center mb-3">
-                    <h1 className="text-2xl font-bold text-textDark">Tin nhắn</h1>
+                    <h1 className="text-2xl font-bold text-textDark dark:text-white">Tin nhắn</h1>
                     <button 
                         onClick={() => setShowNewChatModal(true)}
-                        className="bg-primary/10 text-primary p-2 rounded-full hover:bg-primary/20 active:scale-95 transition-all"
+                        className="bg-primary/10 dark:bg-primary/20 text-primary p-2 rounded-full hover:bg-primary/20 dark:hover:bg-primary/30 active:scale-95 transition-all"
                     >
                         <Plus size={20} />
                     </button>
@@ -78,24 +80,24 @@ export const Messages: React.FC<MessagesProps> = ({ currentUser }) => {
                     <input 
                         type="text" 
                         placeholder="Tìm kiếm cuộc trò chuyện..." 
-                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none transition-all text-sm"
+                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:border-primary dark:focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none transition-all text-sm text-textDark dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
                     />
                 </div>
             </div>
 
             <div className="p-2 space-y-1">
                 {loading ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                    <div className="flex flex-col items-center justify-center py-20 text-gray-400 dark:text-gray-500">
                         <Loader2 className="animate-spin mb-2" size={24} />
                         <span className="text-sm">Đang tải tin nhắn...</span>
                     </div>
                 ) : chats.length === 0 ? (
                      <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
-                        <div className="w-20 h-20 bg-blue-50 text-blue-400 rounded-full flex items-center justify-center mb-4">
+                        <div className="w-20 h-20 bg-blue-50 dark:bg-slate-800 text-blue-400 rounded-full flex items-center justify-center mb-4">
                             <MessageCircle size={32} />
                         </div>
-                        <h3 className="font-bold text-textDark text-lg">Chưa có tin nhắn</h3>
-                        <p className="text-textGray text-sm mb-6 max-w-xs">Kết nối với các chuyên gia hoặc mẹ khác để trao đổi kinh nghiệm.</p>
+                        <h3 className="font-bold text-textDark dark:text-white text-lg">Chưa có tin nhắn</h3>
+                        <p className="text-textGray dark:text-gray-400 text-sm mb-6 max-w-xs">Kết nối với các chuyên gia hoặc mẹ khác để trao đổi kinh nghiệm.</p>
                         <button onClick={() => setShowNewChatModal(true)} className="bg-primary text-white font-bold px-6 py-2.5 rounded-full shadow-lg shadow-primary/30 active:scale-95 transition-transform text-sm">
                             Bắt đầu trò chuyện
                         </button>
@@ -113,18 +115,18 @@ export const Messages: React.FC<MessagesProps> = ({ currentUser }) => {
                             <Link 
                                 to={`/messages/${other.id}`} 
                                 key={chat.id}
-                                className="flex items-center gap-3 p-3 rounded-2xl bg-white border border-transparent hover:border-gray-100 active:scale-[0.99] transition-all"
+                                className="flex items-center gap-3 p-3 rounded-2xl bg-white dark:bg-dark-card border border-transparent hover:border-gray-100 dark:hover:border-slate-700 active:scale-[0.99] transition-all"
                             >
                                 <div className="relative shrink-0">
-                                    <img src={other.avatar} alt={other.name} className="w-14 h-14 rounded-full object-cover border border-gray-100" />
-                                    {isExpert && <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white p-0.5 rounded-full border-2 border-white"><ShieldCheck size={10} /></div>}
+                                    <img src={other.avatar} alt={other.name} className="w-14 h-14 rounded-full object-cover border border-gray-100 dark:border-slate-600" />
+                                    {isExpert && <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white p-0.5 rounded-full border-2 border-white dark:border-dark-card"><ShieldCheck size={10} /></div>}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <div className="flex justify-between items-baseline mb-0.5">
-                                        <h4 className="font-bold text-textDark truncate pr-2">{other.name}</h4>
+                                        <h4 className="font-bold text-textDark dark:text-white truncate pr-2">{other.name}</h4>
                                         <span className="text-[11px] text-gray-400 shrink-0">{time}</span>
                                     </div>
-                                    <p className={`text-sm truncate ${chat.unreadCount && chat.unreadCount[currentUser.id] > 0 ? 'font-bold text-textDark' : 'text-textGray'}`}>
+                                    <p className={`text-sm truncate ${chat.unreadCount && chat.unreadCount[currentUser.id] > 0 ? 'font-bold text-textDark dark:text-white' : 'text-textGray dark:text-gray-400'}`}>
                                         {chat.lastMessage}
                                     </p>
                                 </div>
@@ -141,12 +143,12 @@ export const Messages: React.FC<MessagesProps> = ({ currentUser }) => {
             {showNewChatModal && (
                 <div className="fixed inset-0 z-[60] flex flex-col justify-end md:justify-center items-center">
                     <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowNewChatModal(false)}></div>
-                    <div className="bg-white w-full md:w-[450px] md:rounded-2xl rounded-t-[2rem] p-5 pb-safe-bottom relative z-10 animate-slide-up shadow-2xl max-h-[80vh] flex flex-col">
-                         <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-4 md:hidden shrink-0"></div>
+                    <div className="bg-white dark:bg-dark-card w-full md:w-[450px] md:rounded-2xl rounded-t-[2rem] p-5 pb-safe-bottom relative z-10 animate-slide-up shadow-2xl max-h-[80vh] flex flex-col transition-colors">
+                         <div className="w-12 h-1.5 bg-gray-200 dark:bg-slate-600 rounded-full mx-auto mb-4 md:hidden shrink-0"></div>
                          
                          <div className="flex justify-between items-center mb-4 shrink-0">
-                             <h3 className="text-lg font-bold text-textDark">Tin nhắn mới</h3>
-                             <button onClick={() => setShowNewChatModal(false)} className="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200">
+                             <h3 className="text-lg font-bold text-textDark dark:text-white">Tin nhắn mới</h3>
+                             <button onClick={() => setShowNewChatModal(false)} className="p-2 bg-gray-100 dark:bg-slate-700 rounded-full text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600">
                                  <X size={20} />
                              </button>
                          </div>
@@ -156,18 +158,18 @@ export const Messages: React.FC<MessagesProps> = ({ currentUser }) => {
                                 <div className="flex justify-center py-10"><Loader2 className="animate-spin text-primary" /></div>
                             ) : followingUsers.length === 0 ? (
                                 <div className="text-center py-10">
-                                    <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-400">
+                                    <div className="w-16 h-16 bg-gray-50 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-400">
                                         <UserPlus size={28} />
                                     </div>
-                                    <p className="font-medium text-textDark mb-1">Chưa theo dõi ai</p>
-                                    <p className="text-xs text-textGray mb-4">Hãy theo dõi các chuyên gia hoặc mẹ khác để bắt đầu trò chuyện.</p>
+                                    <p className="font-medium text-textDark dark:text-white mb-1">Chưa theo dõi ai</p>
+                                    <p className="text-xs text-textGray dark:text-gray-400 mb-4">Hãy theo dõi các chuyên gia hoặc mẹ khác để bắt đầu trò chuyện.</p>
                                     <Link to="/" onClick={() => setShowNewChatModal(false)} className="inline-block bg-primary text-white px-4 py-2 rounded-xl text-xs font-bold">
                                         Tìm bạn bè ngay
                                     </Link>
                                 </div>
                             ) : (
                                 <div className="space-y-2">
-                                    <p className="text-xs font-bold text-textGray uppercase tracking-wider mb-2">Đang theo dõi</p>
+                                    <p className="text-xs font-bold text-textGray dark:text-gray-500 uppercase tracking-wider mb-2">Đang theo dõi</p>
                                     {followingUsers.map(user => (
                                         <button 
                                             key={user.id}
@@ -175,15 +177,15 @@ export const Messages: React.FC<MessagesProps> = ({ currentUser }) => {
                                                 setShowNewChatModal(false);
                                                 navigate(`/messages/${user.id}`);
                                             }}
-                                            className="w-full flex items-center gap-3 p-3 rounded-2xl hover:bg-gray-50 active:bg-gray-100 transition-colors text-left group"
+                                            className="w-full flex items-center gap-3 p-3 rounded-2xl hover:bg-gray-50 dark:hover:bg-slate-800 active:bg-gray-100 dark:active:bg-slate-700 transition-colors text-left group"
                                         >
                                             <div className="relative">
-                                                <img src={user.avatar} className="w-12 h-12 rounded-full object-cover border border-gray-100 group-hover:border-primary/30 transition-colors" />
+                                                <img src={user.avatar} className="w-12 h-12 rounded-full object-cover border border-gray-100 dark:border-slate-600 group-hover:border-primary/30 transition-colors" />
                                                 {user.isExpert && <ShieldCheck size={14} className="absolute -bottom-0.5 -right-0.5 bg-blue-500 text-white rounded-full p-0.5" />}
                                             </div>
                                             <div className="flex-1">
-                                                <p className="font-bold text-textDark text-sm">{user.name}</p>
-                                                <p className="text-xs text-textGray truncate">{user.bio || "Thành viên Asking.vn"}</p>
+                                                <p className="font-bold text-textDark dark:text-white text-sm">{user.name}</p>
+                                                <p className="text-xs text-textGray dark:text-gray-400 truncate">{user.bio || "Thành viên Asking.vn"}</p>
                                             </div>
                                             <div className="p-2 text-primary">
                                                 <MessageCircle size={20} />
