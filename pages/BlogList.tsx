@@ -10,7 +10,7 @@ import {
   Sparkles, AlertCircle, ChevronLeft, ChevronRight, Flame, Eye, ExternalLink 
 } from 'lucide-react';
 
-const PAGE_SIZE = 9; 
+const PAGE_SIZE = 7; 
 
 // --- COMPONENT: SKELETON LOADER ---
 const BlogSkeleton = () => (
