@@ -6,7 +6,7 @@ import { fetchPostBySlug, fetchRelatedPosts, fetchBlogComments, addBlogComment }
 import { loginAnonymously } from '../services/auth';
 import { 
   Loader2, ArrowLeft, Calendar, Share2, MessageCircle, Send, 
-  ExternalLink, ShieldCheck, Heart, ChevronDown 
+  ExternalLink, ShieldCheck, Heart, ChevronDown, ChevronRight, Eye, Home, Clock 
 } from 'lucide-react';
 import { AuthModal } from '../components/AuthModal';
 import { ShareModal } from '../components/ShareModal';
@@ -21,6 +21,13 @@ const getYoutubeId = (url: string) => {
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
   const match = url.match(regExp);
   return (match && match[2].length === 11) ? match[2] : null;
+};
+
+// Hàm tính thời gian đọc (giả định 200 từ/phút)
+const calculateReadingTime = (content: string) => {
+    const words = content.split(/\s+/).length;
+    const minutes = Math.ceil(words / 200);
+    return minutes;
 };
 
 export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }> = ({ currentUser, onOpenAuth }) => {
@@ -129,7 +136,7 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
   return (
     <div className="min-h-screen bg-white animate-fade-in pb-32">
       
-      {/* 1. HEADER (Giữ nguyên độ an toàn, chỉ căn chỉnh padding) */}
+      {/* 1. STICKY HEADER */}
       <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b border-gray-50 transition-all">
         <div className="max-w-[720px] mx-auto px-4 h-14 flex items-center justify-between">
             <button onClick={() => navigate('/blog')} className="p-2 -ml-2 hover:bg-gray-50 rounded-full text-gray-500 transition-colors">
@@ -143,32 +150,59 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
         </div>
       </div>
 
-      {/* 2. ARTICLE CONTAINER (Căn giữa, tối ưu chiều rộng đọc) */}
-      <article className="max-w-[720px] mx-auto px-5 pt-8 md:pt-12">
+      {/* 2. ARTICLE CONTAINER */}
+      <article className="max-w-[720px] mx-auto px-5 pt-8 md:pt-10">
         
-        {/* HERO SECTION */}
-        <header className="mb-10 text-center md:text-left">
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mb-6">
-                <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-600 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border border-blue-100">
-                    {post.iconEmoji} Blog
-                </span>
-                <span className="flex items-center gap-1 text-[10px] text-gray-400 font-medium bg-gray-50 px-2 py-1 rounded-full">
-                    <Calendar size={12} /> {new Date(post.createdAt).toLocaleDateString('vi-VN')}
+        {/* === [NEW] BREADCRUMBS & META SECTION === */}
+        <header className="mb-8 text-center md:text-left">
+            
+            {/* Breadcrumb Navigation: Trang chủ > Blog > Chủ đề */}
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 text-sm text-gray-500 mb-6 font-medium">
+                <Link to="/" className="hover:text-black flex items-center gap-1"><Home size={14}/> Trang chủ</Link>
+                <ChevronRight size={14} className="text-gray-300" />
+                <Link to="/blog" className="hover:text-black">Blog</Link>
+                <ChevronRight size={14} className="text-gray-300" />
+                <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
+                    {post.categoryId || 'Kiến thức'}
                 </span>
             </div>
 
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-black text-gray-900 mb-8 leading-[1.2] tracking-tight">
+            {/* Main Title */}
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-black text-gray-900 mb-6 leading-[1.2] tracking-tight">
                 {post.title}
             </h1>
 
-            {/* Author */}
-            <div className="flex items-center justify-center md:justify-start gap-4 p-4 rounded-2xl bg-gray-50 border border-gray-100">
-                <img src={post.authorAvatar || "https://cdn-icons-png.flaticon.com/512/3177/3177440.png"} className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" alt="Author" />
-                <div className="text-left">
-                    <p className="font-bold text-gray-900 text-sm flex items-center gap-1">
-                        {post.authorName} {post.authorIsExpert && <ShieldCheck size={14} className="text-blue-500" />}
-                    </p>
-                    <p className="text-xs text-gray-500">Tác giả chuyên mục</p>
+            {/* Meta Info: Author | Date | Views | Time */}
+            <div className="flex flex-col md:flex-row items-center md:items-start gap-6 border-b border-gray-100 pb-8">
+                
+                {/* Author Info */}
+                <div className="flex items-center gap-3">
+                    <img src={post.authorAvatar || "https://cdn-icons-png.flaticon.com/512/3177/3177440.png"} className="w-10 h-10 rounded-full object-cover border border-gray-100" alt="Author" />
+                    <div className="text-left">
+                        <p className="font-bold text-gray-900 text-sm flex items-center gap-1">
+                            {post.authorName} {post.authorIsExpert && <ShieldCheck size={14} className="text-blue-500" />}
+                        </p>
+                        <p className="text-xs text-gray-500">Tác giả</p>
+                    </div>
+                </div>
+
+                {/* Stats Divider (Desktop) */}
+                <div className="hidden md:block w-px h-8 bg-gray-200"></div>
+
+                {/* Stats Row */}
+                <div className="flex items-center gap-4 text-xs text-gray-500 font-medium">
+                    <span className="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-full">
+                        <Calendar size={14} /> 
+                        {new Date(post.createdAt).toLocaleDateString('vi-VN')}
+                    </span>
+                    <span className="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-full">
+                        <Eye size={14} /> 
+                        {post.views || 0} lượt xem
+                    </span>
+                    <span className="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-full">
+                        <Clock size={14} /> 
+                        {calculateReadingTime(post.content)} phút đọc
+                    </span>
                 </div>
             </div>
         </header>
@@ -180,7 +214,7 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
             </div>
         )}
 
-        {/* --- CONTENT BODY (Styling thủ công an toàn, không dùng plugin) --- */}
+        {/* --- CONTENT BODY --- */}
         <div className="text-gray-800 text-lg leading-relaxed md:text-xl md:leading-[1.8] mb-16
             [&>p]:mb-6 
             [&>h2]:text-2xl [&>h2]:font-bold [&>h2]:text-gray-900 [&>h2]:mt-10 [&>h2]:mb-4 
@@ -193,7 +227,7 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
             [&>strong]:font-bold [&>strong]:text-gray-900
         ">
             {/* Excerpt */}
-            <p className="text-xl md:text-2xl text-gray-500 font-normal mb-10 border-b border-gray-100 pb-10 leading-relaxed">
+            <p className="text-xl md:text-2xl text-gray-500 font-normal mb-10 border-b border-gray-100 pb-10 leading-relaxed font-serif italic">
                 {post.excerpt}
             </p>
 
