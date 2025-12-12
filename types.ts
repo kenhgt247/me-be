@@ -188,6 +188,17 @@ export interface AdConfig {
     link: string;
     sponsorName: string; // Tên nhà tài trợ (thay cho tên tác giả)
   };
+// THÊM KHỐI NÀY:
+  documentAd?: {
+    enabled: boolean;
+    frequency: number;
+    title: string;
+    description: string;
+    imageUrl: string; // Logo hoặc ảnh nhỏ
+    ctaText: string;
+    link: string;
+    sponsorName: string;
+  };
 }
 // --- BLOG MODULE TYPES ---
 export interface BlogCategory {
