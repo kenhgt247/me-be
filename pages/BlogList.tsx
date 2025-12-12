@@ -212,7 +212,12 @@ export const BlogList: React.FC = () => {
              </div>
          </div>
       </div>
-
+{/* --- THÊM KHỐI ĐĂNG KÝ CHUYÊN GIA TẠI ĐÂY --- */}
+                 {!currentUser?.isExpert && (
+                    <div className="mb-12 animate-slide-up" style={{ animationDelay: '0.08s' }}>
+                        <ExpertPromoBox />
+                    </div>
+                 )}
       {/* --- MAIN CONTENT --- */}
       <div className="max-w-5xl mx-auto px-4 py-8">
          {loading ? (
@@ -226,12 +231,7 @@ export const BlogList: React.FC = () => {
              </div>
          ) : (
              <>
-                {/* --- THÊM KHỐI ĐĂNG KÝ CHUYÊN GIA TẠI ĐÂY --- */}
-                 {!currentUser?.isExpert && (
-                    <div className="mb-12 animate-slide-up" style={{ animationDelay: '0.08s' }}>
-                        <ExpertPromoBox />
-                    </div>
-                 )}
+                
                  {/* 1. HERO POST */}
                  {heroPost && (
                     <div className="mb-10 animate-slide-up">
