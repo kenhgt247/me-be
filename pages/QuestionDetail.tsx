@@ -16,7 +16,8 @@ import { ShareModal } from '../components/ShareModal';
 import { loginAnonymously } from '../services/auth';
 import { uploadFile } from '../services/storage';
 import { AdBanner } from '../components/AdBanner';
-
+// IMPORT COMPONENT MỚI
+import { ExpertPromoBox } from '../components/ExpertPromoBox';
 interface DetailProps {
   questions: Question[];
   currentUser: User;
@@ -472,7 +473,12 @@ export default function QuestionDetail({
               {/* --- SIDEBAR (RIGHT) - STICKY --- */}
               <aside className="hidden lg:block lg:col-span-4 space-y-6">
                   <div className="sticky top-24 space-y-6">
-                      
+                      {/* --- KHỐI ĐĂNG KÝ CHUYÊN GIA --- */}
+                    {!currentUser?.isExpert && (
+                        <div className="animate-slide-up">
+                            <ExpertPromoBox />
+                        </div>
+                    )}
                       {/* 1. TRENDING QUESTIONS SECTION */}
                       {trendingQuestions.length > 0 && (
                           <div className="bg-white dark:bg-dark-card p-5 rounded-[1.5rem] border border-gray-200 dark:border-dark-border shadow-sm">
