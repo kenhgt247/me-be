@@ -12,17 +12,17 @@ import { AuthModal } from '../components/AuthModal';
 import { uploadFile } from '../services/storage'; 
 import { loginAnonymously } from '../services/auth';
 
-// --- CONFIGURATION & CONSTANTS ---
+// --- CONFIGURATION & CONSTANTS (Đã thêm Dark Mode Classes) ---
 const CATEGORY_CONFIG: Record<string, { icon: any, color: string, bg: string, border: string }> = {
-  "Mang thai": { icon: Baby, color: "text-pink-600", bg: "bg-pink-50", border: "border-pink-100" },
-  "Dinh dưỡng": { icon: Utensils, color: "text-green-600", bg: "bg-green-50", border: "border-green-100" },
-  "Sức khỏe": { icon: Stethoscope, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100" },
-  "0-1 tuổi": { icon: Smile, color: "text-indigo-600", bg: "bg-indigo-50", border: "border-indigo-100" },
-  "1-3 tuổi": { icon: Smile, color: "text-indigo-600", bg: "bg-indigo-50", border: "border-indigo-100" },
-  "Tâm lý": { icon: Brain, color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-100" },
-  "Giáo dục": { icon: BookOpen, color: "text-yellow-600", bg: "bg-yellow-50", border: "border-yellow-100" },
-  "Gia đình": { icon: Users, color: "text-teal-600", bg: "bg-teal-50", border: "border-teal-100" },
-  "Default": { icon: Tag, color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-100" }
+  "Mang thai": { icon: Baby, color: "text-pink-600 dark:text-pink-400", bg: "bg-pink-50 dark:bg-pink-900/20", border: "border-pink-100 dark:border-pink-900/30" },
+  "Dinh dưỡng": { icon: Utensils, color: "text-green-600 dark:text-green-400", bg: "bg-green-50 dark:bg-green-900/20", border: "border-green-100 dark:border-green-900/30" },
+  "Sức khỏe": { icon: Stethoscope, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/20", border: "border-blue-100 dark:border-blue-900/30" },
+  "0-1 tuổi": { icon: Smile, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-900/20", border: "border-indigo-100 dark:border-indigo-900/30" },
+  "1-3 tuổi": { icon: Smile, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-900/20", border: "border-indigo-100 dark:border-indigo-900/30" },
+  "Tâm lý": { icon: Brain, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-50 dark:bg-purple-900/20", border: "border-purple-100 dark:border-purple-900/30" },
+  "Giáo dục": { icon: BookOpen, color: "text-yellow-600 dark:text-yellow-400", bg: "bg-yellow-50 dark:bg-yellow-900/20", border: "border-yellow-100 dark:border-yellow-900/30" },
+  "Gia đình": { icon: Users, color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-50 dark:bg-teal-900/20", border: "border-teal-100 dark:border-teal-900/30" },
+  "Default": { icon: Tag, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-900/20", border: "border-orange-100 dark:border-orange-900/30" }
 };
 
 const STICKER_PACKS = {
@@ -70,9 +70,9 @@ const ToastContainer = ({ toasts }: { toasts: ToastMessage[] }) => (
   <div className="fixed top-4 left-0 right-0 z-[100] flex flex-col items-center gap-2 pointer-events-none px-4">
     {toasts.map(t => (
       <div key={t.id} className={`flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg shadow-black/5 animate-slide-down backdrop-blur-md max-w-sm w-full pointer-events-auto border ${
-        t.type === 'error' ? 'bg-red-50/90 text-red-600 border-red-100' : 
-        t.type === 'success' ? 'bg-green-50/90 text-green-600 border-green-100' : 
-        'bg-blue-50/90 text-blue-600 border-blue-100'
+        t.type === 'error' ? 'bg-red-50/90 dark:bg-red-900/80 text-red-600 dark:text-red-200 border-red-100 dark:border-red-800' : 
+        t.type === 'success' ? 'bg-green-50/90 dark:bg-green-900/80 text-green-600 dark:text-green-200 border-green-100 dark:border-green-800' : 
+        'bg-blue-50/90 dark:bg-blue-900/80 text-blue-600 dark:text-blue-200 border-blue-100 dark:border-blue-800'
       }`}>
         {t.type === 'error' ? <AlertCircle size={18} /> : 
          t.type === 'success' ? <CheckCircle2 size={18} /> : <Sparkles size={18} />}
@@ -95,14 +95,12 @@ export const Ask: React.FC<AskProps> = ({
   const navigate = useNavigate();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
-  // State: Form Data
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [category, setCategory] = useState(categories[0]);
   const [customCategory, setCustomCategory] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   
-  // State: UI & Logic
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -111,20 +109,17 @@ export const Ask: React.FC<AskProps> = ({
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   
-  // State: Modals & Feedback
   const [showCategorySheet, setShowCategorySheet] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  // Toast Handler
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Date.now();
     setToasts(prev => [...prev, { id, message, type }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
   };
 
-  // Auto-resize Textarea
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -132,13 +127,11 @@ export const Ask: React.FC<AskProps> = ({
     }
   }, [content]);
   
-  // Cleanup Object URLs
   useEffect(() => {
     return () => attachments.forEach(att => URL.revokeObjectURL(att.preview));
   }, []);
 
-  // --- HANDLERS ---
-
+  // --- HANDLERS (LOGIC GIỮ NGUYÊN) ---
   const handleAiSuggest = async () => {
     if (title.length < 3) {
       showToast("Mẹ ơi, viết thêm vài từ để AI hiểu ý nhé!", "error");
@@ -161,14 +154,9 @@ export const Ask: React.FC<AskProps> = ({
       showToast("Mẹ nhập tiêu đề rõ ràng trước (ít nhất 5 ký tự) nhé!", "error");
       return;
     }
-    // Non-blocking confirmation logic could go here, but for now direct action is better UX with undo capability (future)
-    // Or just simple check if content is very long
     if (content.length > 50) {
-       // Replace simple confirm with toast warning or just proceed. 
-       // For UX safety, we'll keep confirm but planned to improve later.
        if (!confirm("AI sẽ viết đè lên nội dung hiện tại. Mẹ đồng ý không?")) return; 
     }
-
     setIsGeneratingContent(true);
     try {
         const aiContent = await generateQuestionContent(title);
@@ -192,16 +180,13 @@ export const Ask: React.FC<AskProps> = ({
         showToast("Chỉ được đăng tối đa 3 ảnh thôi mẹ nhé!", "error");
         return;
       }
-
       const newAttachments: Attachment[] = filesArray.map(file => ({
           id: Math.random().toString(36).substr(2, 9),
           file,
           preview: URL.createObjectURL(file),
           uploading: true
       }));
-
       setAttachments(prev => [...prev, ...newAttachments]);
-
       newAttachments.forEach(async (att) => {
           try {
               const url = await uploadFile(att.file, 'question_images');
@@ -323,7 +308,8 @@ export const Ask: React.FC<AskProps> = ({
   const activeCategoryStyle = getCategoryStyle(category);
 
   return (
-    <div className="min-h-screen bg-white flex flex-col animate-fade-in relative">
+    // THAY ĐỔI: bg-white -> dark:bg-dark-bg
+    <div className="min-h-screen bg-white dark:bg-dark-bg flex flex-col animate-fade-in relative transition-colors duration-300">
       <ToastContainer toasts={toasts} />
       
       <AuthModal 
@@ -336,29 +322,28 @@ export const Ask: React.FC<AskProps> = ({
       />
 
       {/* --- HEADER --- */}
-      <div className="w-full bg-white/95 backdrop-blur-md sticky top-0 z-30 pt-safe-top border-b border-gray-50 shadow-sm">
+      <div className="w-full bg-white/95 dark:bg-dark-card/95 backdrop-blur-md sticky top-0 z-30 pt-safe-top border-b border-gray-50 dark:border-dark-border shadow-sm transition-colors">
           <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
             <button 
                 onClick={() => navigate(-1)} 
-                className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors text-gray-600 active:scale-90"
+                className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors text-gray-600 dark:text-gray-300 active:scale-90"
             >
                 <ArrowLeft size={24} />
             </button>
-            <span className="font-bold text-lg text-gray-800">Đặt câu hỏi</span>
+            <span className="font-bold text-lg text-gray-800 dark:text-white">Đặt câu hỏi</span>
             <div className="w-10"></div>
           </div>
       </div>
 
       {/* --- MAIN EDITOR --- */}
       <div className="flex-1 w-full max-w-3xl mx-auto px-4 py-6 overflow-y-auto pb-[180px]"> 
-      {/* pb-[180px] ensures content is not hidden behind the footer/keyboard accessory */}
-        
+      
         {/* User & Category Selector */}
         <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-                <img src={currentUser.avatar} className="w-12 h-12 rounded-full border border-gray-100 object-cover shadow-sm" alt="Avatar"/>
+                <img src={currentUser.avatar} className="w-12 h-12 rounded-full border border-gray-100 dark:border-slate-700 object-cover shadow-sm" alt="Avatar"/>
                 <div>
-                    <div className="font-bold text-sm text-gray-900 mb-1">{currentUser.name}</div>
+                    <div className="font-bold text-sm text-gray-900 dark:text-white mb-1">{currentUser.name}</div>
                     <button 
                         onClick={() => setShowCategorySheet(true)}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border shadow-sm active:scale-95 ${activeCategoryStyle.bg} ${activeCategoryStyle.color} ${activeCategoryStyle.border}`}
@@ -377,11 +362,11 @@ export const Ask: React.FC<AskProps> = ({
             {/* Title Section */}
             <div className="space-y-2">
                 <div className="flex justify-between items-end">
-                     <label className="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">Tiêu đề</label>
+                     <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider ml-1">Tiêu đề</label>
                      <button 
                         onClick={handleAiSuggest}
                         disabled={isSuggesting}
-                        className="text-xs font-bold text-orange-600 bg-orange-50 px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-orange-100 transition-all border border-orange-100 active:scale-95 disabled:opacity-50"
+                        className="text-xs font-bold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-all border border-orange-100 dark:border-orange-900/30 active:scale-95 disabled:opacity-50"
                     >
                         {isSuggesting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} 
                         {isSuggesting ? 'AI đang nghĩ...' : 'Gợi ý tiêu đề'}
@@ -392,26 +377,26 @@ export const Ask: React.FC<AskProps> = ({
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="VD: Bé 6 tháng tuổi bị sốt, mẹ nên làm gì?..."
-                    className="w-full text-xl md:text-2xl font-bold text-gray-800 placeholder-gray-300 border-none p-0 focus:ring-0 bg-transparent leading-tight"
+                    className="w-full text-xl md:text-2xl font-bold text-gray-800 dark:text-white placeholder-gray-300 dark:placeholder-gray-600 border-none p-0 focus:ring-0 bg-transparent leading-tight"
                     autoFocus
                 />
             </div>
 
             {/* AI Suggestions Dropdown */}
             {showSuggestions && (
-                <div className="bg-gradient-to-br from-orange-50 to-white rounded-2xl p-4 border border-orange-100 animate-slide-down shadow-sm">
+                <div className="bg-gradient-to-br from-orange-50 to-white dark:from-slate-800 dark:to-slate-900 rounded-2xl p-4 border border-orange-100 dark:border-slate-700 animate-slide-down shadow-sm">
                     <div className="flex justify-between items-center mb-3">
-                        <h4 className="text-xs font-bold text-orange-700 flex items-center gap-2">
+                        <h4 className="text-xs font-bold text-orange-700 dark:text-orange-400 flex items-center gap-2">
                              <Sparkles size={14}/> Gợi ý từ AI
                         </h4>
-                        <button onClick={() => setShowSuggestions(false)} className="p-1 hover:bg-orange-100 rounded-full"><X size={16} className="text-orange-400"/></button>
+                        <button onClick={() => setShowSuggestions(false)} className="p-1 hover:bg-orange-100 dark:hover:bg-slate-700 rounded-full"><X size={16} className="text-orange-400"/></button>
                     </div>
                     <div className="flex flex-col gap-2">
                         {suggestions.map((s, idx) => (
                             <button 
                                 key={idx} 
                                 onClick={() => { setTitle(s); setShowSuggestions(false); }} 
-                                className="w-full text-left px-3 py-2.5 bg-white rounded-xl text-sm font-medium text-gray-700 border border-orange-100 shadow-sm active:scale-[0.99] transition-transform hover:border-orange-300 hover:text-orange-700"
+                                className="w-full text-left px-3 py-2.5 bg-white dark:bg-dark-card rounded-xl text-sm font-medium text-gray-700 dark:text-slate-200 border border-orange-100 dark:border-slate-700 shadow-sm active:scale-[0.99] transition-transform hover:border-orange-300 dark:hover:border-slate-500 hover:text-orange-700 dark:hover:text-white"
                             >
                                 {s}
                             </button>
@@ -420,16 +405,16 @@ export const Ask: React.FC<AskProps> = ({
                 </div>
             )}
 
-            <div className="h-px bg-gray-100 w-full"></div>
+            <div className="h-px bg-gray-100 dark:bg-dark-border w-full"></div>
 
             {/* Main Content Section */}
             <div className="relative min-h-[200px] group">
                 <div className="flex justify-between items-center mb-2">
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">Nội dung chi tiết</label>
+                    <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider ml-1">Nội dung chi tiết</label>
                     {title.length > 5 && !content && !isGeneratingContent && (
                         <button 
                             onClick={handleAiContent}
-                            className="text-xs font-bold text-purple-600 bg-purple-50 px-3 py-1.5 rounded-full flex items-center gap-1.5 hover:bg-purple-100 transition-all border border-purple-100 shadow-sm animate-fade-in active:scale-95"
+                            className="text-xs font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-3 py-1.5 rounded-full flex items-center gap-1.5 hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-all border border-purple-100 dark:border-purple-900/30 shadow-sm animate-fade-in active:scale-95"
                         >
                             <Sparkles size={14} /> AI Viết hộ
                         </button>
@@ -437,10 +422,10 @@ export const Ask: React.FC<AskProps> = ({
                 </div>
 
                 <div className="relative w-full">
-                     {isGeneratingContent && (
-                        <div className="absolute inset-0 bg-white/80 z-20 flex flex-col items-center justify-center rounded-lg backdrop-blur-[1px]">
-                            <Loader2 size={24} className="animate-spin text-purple-600 mb-2" /> 
-                            <span className="text-purple-600 font-bold text-sm animate-pulse">AI đang viết, mẹ đợi xíu nhé...</span>
+                      {isGeneratingContent && (
+                        <div className="absolute inset-0 bg-white/80 dark:bg-dark-card/80 z-20 flex flex-col items-center justify-center rounded-lg backdrop-blur-[1px]">
+                            <Loader2 size={24} className="animate-spin text-purple-600 dark:text-purple-400 mb-2" /> 
+                            <span className="text-purple-600 dark:text-purple-400 font-bold text-sm animate-pulse">AI đang viết, mẹ đợi xíu nhé...</span>
                         </div>
                     )}
                     <textarea
@@ -448,7 +433,7 @@ export const Ask: React.FC<AskProps> = ({
                         value={content}
                         onChange={(e) => setContent(e.target.value)}
                         placeholder="Mô tả kỹ hơn về tình trạng của bé hoặc vấn đề mẹ đang gặp..."
-                        className="w-full text-base md:text-lg text-gray-800 placeholder-gray-400 border-none p-0 focus:ring-0 bg-transparent resize-none leading-relaxed min-h-[200px]"
+                        className="w-full text-base md:text-lg text-gray-800 dark:text-dark-text placeholder-gray-400 dark:placeholder-gray-600 border-none p-0 focus:ring-0 bg-transparent resize-none leading-relaxed min-h-[200px]"
                     />
                 </div>
             </div>
@@ -457,7 +442,7 @@ export const Ask: React.FC<AskProps> = ({
             {attachments.length > 0 && (
                 <div className="flex gap-3 overflow-x-auto pb-4 pt-2 px-1 no-scrollbar">
                     {attachments.map((att) => (
-                        <div key={att.id} className="relative w-28 h-28 shrink-0 rounded-2xl overflow-hidden shadow-md border border-gray-100 group bg-gray-50">
+                        <div key={att.id} className="relative w-28 h-28 shrink-0 rounded-2xl overflow-hidden shadow-md border border-gray-100 dark:border-dark-border group bg-gray-50 dark:bg-slate-700">
                             <img src={att.preview} className={`w-full h-full object-cover transition-opacity ${att.uploading ? 'opacity-50' : 'opacity-100'}`} alt="preview" />
                             {att.uploading && <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="animate-spin text-primary" size={24} /></div>}
                             <button 
@@ -474,29 +459,29 @@ export const Ask: React.FC<AskProps> = ({
       </div>
 
       {/* --- STICKY FOOTER TOOLBAR --- */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-3 pb-safe-bottom z-40 shadow-[0_-5px_25px_rgba(0,0,0,0.03)]">
+      <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-dark-card border-t border-gray-100 dark:border-dark-border px-4 py-3 pb-safe-bottom z-40 shadow-[0_-5px_25px_rgba(0,0,0,0.03)] dark:shadow-none transition-colors">
           <div className="max-w-3xl mx-auto flex flex-col gap-3">
               
               {/* Extra Tools Drawers */}
               {showLinkInput && (
-                  <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-2 flex gap-2 animate-slide-up mb-2 backdrop-blur-sm">
+                  <div className="bg-blue-50/50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl p-2 flex gap-2 animate-slide-up mb-2 backdrop-blur-sm">
                       <input 
                         type="url" 
                         value={linkUrl} 
                         onChange={(e) => setLinkUrl(e.target.value)} 
                         placeholder="Dán đường link vào đây..." 
-                        className="flex-1 text-sm bg-white border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400" 
+                        className="flex-1 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 text-textDark dark:text-white" 
                         autoFocus 
                       />
                       <button onClick={handleInsertLink} className="bg-blue-600 text-white text-xs font-bold px-4 rounded-lg hover:bg-blue-700 active:scale-95 transition-all">Chèn</button>
-                      <button onClick={() => setShowLinkInput(false)} className="text-gray-400 p-2 hover:bg-gray-100 rounded-lg"><X size={18}/></button>
+                      <button onClick={() => setShowLinkInput(false)} className="text-gray-400 p-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg"><X size={18}/></button>
                   </div>
               )}
               {showStickers && (
-                  <div className="h-48 overflow-y-auto bg-white border border-gray-100 rounded-xl p-3 animate-slide-up mb-2 shadow-lg scroll-smooth">
+                  <div className="h-48 overflow-y-auto bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border rounded-xl p-3 animate-slide-up mb-2 shadow-lg scroll-smooth">
                       {Object.entries(STICKER_PACKS).map(([category, emojis]) => (
                           <div key={category} className="mb-4 last:mb-0">
-                              <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-2 sticky top-0 bg-white py-1">{category}</h4>
+                              <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-2 sticky top-0 bg-white dark:bg-dark-card py-1">{category}</h4>
                               <div className="grid grid-cols-6 gap-3">
                                   {emojis.map(emoji => (
                                       <button key={emoji} onClick={() => handleInsertSticker(emoji)} className="text-3xl hover:scale-125 transition-transform p-1 active:scale-90">{emoji}</button>
@@ -511,21 +496,21 @@ export const Ask: React.FC<AskProps> = ({
               <div className="flex items-center justify-between gap-4">
                   {/* Left: Tools */}
                   <div className="flex items-center gap-2">
-                      <label className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all cursor-pointer active:scale-95 border ${attachments.length >= 3 ? 'opacity-50 cursor-not-allowed bg-gray-50 border-gray-200 text-gray-400' : 'bg-green-50 border-green-100 text-green-600 hover:bg-green-100'}`}>
+                      <label className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all cursor-pointer active:scale-95 border ${attachments.length >= 3 ? 'opacity-50 cursor-not-allowed bg-gray-50 dark:bg-slate-700 border-gray-200 dark:border-slate-600 text-gray-400' : 'bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-900/30 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30'}`}>
                           <ImageIcon size={24} />
                           <input type="file" accept="image/*" multiple onChange={handleImageChange} className="hidden" disabled={attachments.length >= 3} />
                       </label>
                       
                       <button 
                          onClick={() => {setShowStickers(!showStickers); setShowLinkInput(false)}}
-                         className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all active:scale-95 border ${showStickers ? 'bg-yellow-100 border-yellow-200 text-yellow-700' : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'}`}
+                         className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all active:scale-95 border ${showStickers ? 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-400' : 'bg-gray-50 dark:bg-slate-700 border-gray-200 dark:border-slate-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-600'}`}
                       >
                          <Smile size={24} />
                       </button>
 
                       <button 
                          onClick={() => {setShowLinkInput(!showLinkInput); setShowStickers(false)}}
-                         className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all active:scale-95 border ${showLinkInput ? 'bg-blue-100 border-blue-200 text-blue-700' : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'}`}
+                         className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all active:scale-95 border ${showLinkInput ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400' : 'bg-gray-50 dark:bg-slate-700 border-gray-200 dark:border-slate-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-600'}`}
                       >
                          <LinkIcon size={24} />
                       </button>
@@ -543,13 +528,13 @@ export const Ask: React.FC<AskProps> = ({
           </div>
       </div>
 
-      {/* --- CATEGORY SHEET --- */}
+      {/* --- CATEGORY SHEET (MODAL) --- */}
       {showCategorySheet && (
         <div className="fixed inset-0 z-[60] flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-fade-in" onClick={() => setShowCategorySheet(false)}></div>
-          <div className="bg-white rounded-t-[2rem] p-6 pb-safe-bottom relative z-10 animate-slide-up shadow-2xl max-h-[85vh] overflow-y-auto">
-            <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6"></div>
-            <h3 className="font-bold text-xl text-gray-900 mb-6 text-center">Chọn chủ đề câu hỏi</h3>
+          <div className="bg-white dark:bg-dark-card rounded-t-[2rem] p-6 pb-safe-bottom relative z-10 animate-slide-up shadow-2xl max-h-[85vh] overflow-y-auto transition-colors">
+            <div className="w-12 h-1.5 bg-gray-200 dark:bg-slate-600 rounded-full mx-auto mb-6"></div>
+            <h3 className="font-bold text-xl text-gray-900 dark:text-white mb-6 text-center">Chọn chủ đề câu hỏi</h3>
             
             {/* Input Custom Category */}
             <div className="flex gap-2 mb-6">
@@ -558,12 +543,12 @@ export const Ask: React.FC<AskProps> = ({
                   value={customCategory}
                   onChange={(e) => setCustomCategory(e.target.value)}
                   placeholder="Hoặc nhập chủ đề khác..."
-                  className="flex-1 p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#25A99C]/20 outline-none text-base"
+                  className="flex-1 p-4 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-[#25A99C]/20 outline-none text-base text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
                 />
                 <button 
                   onClick={handleAddCustomCategory}
                   disabled={!customCategory.trim()}
-                  className="bg-gray-900 text-white px-5 rounded-xl font-bold disabled:opacity-50 active:scale-95 transition-transform"
+                  className="bg-gray-900 dark:bg-slate-700 text-white px-5 rounded-xl font-bold disabled:opacity-50 active:scale-95 transition-transform"
                 >
                   <Plus size={24} />
                 </button>
@@ -579,14 +564,14 @@ export const Ask: React.FC<AskProps> = ({
                     key={cat}
                     onClick={() => { setCategory(cat); setShowCategorySheet(false); }}
                     className={`p-4 rounded-2xl border text-left transition-all active:scale-[0.98] flex items-center gap-4 ${
-                      isSelected ? `border-[#25A99C] bg-[#25A99C]/5 shadow-sm` : 'border-gray-100 bg-white shadow-sm hover:border-gray-300'
+                      isSelected ? `border-[#25A99C] bg-[#25A99C]/5 dark:bg-[#25A99C]/10 shadow-sm` : 'border-gray-100 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm hover:border-gray-300 dark:hover:border-slate-600'
                     }`}
                   >
                     <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${style.bg} ${style.color}`}>
                        {React.createElement(style.icon, { size: 20 })}
                     </div>
                     <div className="flex-1 min-w-0">
-                       <span className={`block font-bold text-base truncate ${isSelected ? 'text-[#25A99C]' : 'text-gray-800'}`}>{cat}</span>
+                       <span className={`block font-bold text-base truncate ${isSelected ? 'text-[#25A99C]' : 'text-gray-800 dark:text-white'}`}>{cat}</span>
                        {isSelected && <span className="text-xs text-[#25A99C] font-medium flex items-center gap-1 mt-0.5"><Check size={12} /> Đang chọn</span>}
                     </div>
                   </button>
