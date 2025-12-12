@@ -175,6 +175,18 @@ export interface AdConfig {
     buttonText: string;
     link: string;
     gradient: string;
+ };
+
+  // --- THÊM MỚI: QUẢNG CÁO XEN KẼ BLOG (NATIVE) ---
+  blogFeedAd?: {
+    enabled: boolean;
+    frequency: number; // Mặc định là 4
+    title: string;
+    excerpt: string; // Mô tả ngắn giống bài blog
+    imageUrl: string; // Ảnh bìa quảng cáo
+    ctaText: string; // Nút kêu gọi (VD: Xem ngay)
+    link: string;
+    sponsorName: string; // Tên nhà tài trợ (thay cho tên tác giả)
   };
 }
 // --- BLOG MODULE TYPES ---
