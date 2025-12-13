@@ -1,5 +1,6 @@
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { storage } from "../firebaseConfig"; // Đảm bảo đường dẫn đúng tới file firebase.ts của bạn
+// SỬA DÒNG NÀY: Dùng ../firebase
+import { storage } from "../firebase"; 
 
 /**
  * Uploads a file to Firebase Storage and returns the download URL.
@@ -11,23 +12,18 @@ export const uploadFile = async (file: File, folder: string): Promise<string> =>
   }
 
   try {
-    // 1. Tạo tên file an toàn
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9.]/g, "_").toLowerCase();
     const uniqueName = `${Date.now()}_${Math.floor(Math.random() * 1000)}_${sanitizedName}`;
     
-    // 2. Tạo reference
     const storageRef = ref(storage, `${folder}/${uniqueName}`);
     
-    // 3. THÊM METADATA (QUAN TRỌNG)
-    // Giúp trình duyệt biết đây là ảnh (image/png) hay pdf để hiển thị đúng thay vì bắt tải về
+    // Thêm metadata để hiển thị tốt trên trình duyệt
     const metadata = {
-      contentType: file.type, 
+      contentType: file.type,
     };
 
-    // 4. Upload file kèm metadata
     const snapshot = await uploadBytes(storageRef, file, metadata);
     
-    // 5. Lấy URL
     const downloadURL = await getDownloadURL(snapshot.ref);
     return downloadURL;
   } catch (error) {
