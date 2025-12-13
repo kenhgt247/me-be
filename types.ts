@@ -69,13 +69,18 @@ export interface Notification {
   createdAt: string;
 }
 
+// --- CẬP NHẬT: THÊM LOGIC TIN NHẮN TỪ STORY ---
 export interface Message {
   id: string;
   senderId: string;
   content: string;
   createdAt: string;
   isRead: boolean;
-  type: 'text' | 'image';
+  // Thêm 'story_reply' để biết đây là tin nhắn trả lời từ Story
+  type: 'text' | 'image' | 'story_reply'; 
+  // Các trường bổ sung nếu type là 'story_reply'
+  storyId?: string;       // ID của story gốc
+  storySnapshotUrl?: string; // Ảnh nhỏ của story để hiển thị trong đoạn chat
 }
 
 export interface ChatSession {
@@ -86,6 +91,25 @@ export interface ChatSession {
   lastMessageTime: string;
   updatedAt: string;
   unreadCount: { [uid: string]: number };
+}
+
+// --- THÊM MỚI: STORY / MOMENTS MODULE ---
+export interface Story {
+  id: string;
+  userId: string;          // Người đăng
+  userName: string;        // Tên hiển thị (để load nhanh không cần join bảng User)
+  userAvatar: string;      // Avatar người đăng
+  userIsExpert?: boolean;  // Để hiện tích xanh nếu là chuyên gia
+  
+  mediaUrl: string;        // Đường dẫn ảnh/video
+  mediaType: 'image' | 'video';
+  caption?: string;        // Chú thích (nếu có)
+  
+  createdAt: string;       // Thời gian tạo (ISO string)
+  expiresAt: string;       // Thời gian hết hạn (thường là createdAt + 24h)
+  
+  viewers: string[];       // Danh sách ID người đã xem
+  likes: string[];         // Danh sách ID người đã thả tim
 }
 
 // --- GAME TYPES ---
@@ -167,7 +191,6 @@ export interface AdConfig {
   customTargetUrl?: string;
   frequency: number;
 
-  // --- THÊM KHỐI NÀY (NẰM TRONG DẤU NGOẶC CỦA INTERFACE) ---
   sidebarAd?: {
     enabled: boolean;
     title: string;
@@ -175,41 +198,41 @@ export interface AdConfig {
     buttonText: string;
     link: string;
     gradient: string;
- };
+  };
 
-  // --- THÊM MỚI: QUẢNG CÁO XEN KẼ BLOG (NATIVE) ---
   blogFeedAd?: {
     enabled: boolean;
-    frequency: number; // Mặc định là 4
+    frequency: number;
     title: string;
-    excerpt: string; // Mô tả ngắn giống bài blog
-    imageUrl: string; // Ảnh bìa quảng cáo
-    ctaText: string; // Nút kêu gọi (VD: Xem ngay)
+    excerpt: string;
+    imageUrl: string;
+    ctaText: string;
     link: string;
-    sponsorName: string; // Tên nhà tài trợ (thay cho tên tác giả)
+    sponsorName: string;
   };
-// THÊM KHỐI NÀY:
+
   documentAd?: {
     enabled: boolean;
     frequency: number;
     title: string;
     description: string;
-    imageUrl: string; // Logo hoặc ảnh nhỏ
+    imageUrl: string;
     ctaText: string;
     link: string;
     sponsorName: string;
   };
-// THÊM KHỐI NÀY:
+
   questionDetailAd?: {
     enabled: boolean;
     title: string;
-    description: string; // Nội dung ngắn
+    description: string;
     imageUrl: string;
     ctaText: string;
     link: string;
     sponsorName: string;
   };
 }
+
 // --- BLOG MODULE TYPES ---
 export interface BlogCategory {
   id: string;
@@ -289,7 +312,7 @@ export interface Document {
   authorId: string;
   authorName: string;
   authorAvatar: string;
-  isExpert: boolean;
+  authorIsExpert: boolean;
   
   views: number;
   downloads: number;
@@ -335,42 +358,25 @@ export const DEFAULT_GAME_CATEGORIES: CategoryDef[] = [
 
 export const GAME_CATEGORIES = DEFAULT_GAME_CATEGORIES;
 
-// --- UTILS FOR SLUG (ĐÃ CẬP NHẬT CHUẨN SEO TIẾNG VIỆT) ---
+// --- UTILS FOR SLUG ---
 
 export const toSlug = (title: string, id?: string) => {
   if (!title) return '';
-
-  // 1. Chuyển hết sang chữ thường
   let slug = title.toLowerCase();
-
-  // 2. Xóa dấu tiếng Việt (Chuẩn hóa Unicode để tách dấu ra khỏi chữ, sau đó xóa dấu)
   slug = slug.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-  // 3. Xử lý riêng ký tự đ/Đ
   slug = slug.replace(/[đĐ]/g, "d");
-
-  // 4. Xóa các ký tự đặc biệt (chỉ giữ lại chữ, số và khoảng trắng)
   slug = slug.replace(/([^0-9a-z-\s])/g, "");
-
-  // 5. Thay khoảng trắng bằng dấu gạch ngang
   slug = slug.replace(/(\s+)/g, "-");
-
-  // 6. Xóa gạch ngang dư thừa (ví dụ: "a---b" -> "a-b") và gạch ngang ở đầu/cuối
   slug = slug.replace(/-+/g, "-");
   slug = slug.replace(/^-+|-+$/g, "");
-
-  // 7. Nối ID vào cuối để tạo đường dẫn duy nhất (nếu có ID)
-  // LƯU Ý: Với Username profile thì KHÔNG dùng cái này, dùng trực tiếp username.
   if (id) {
     return `${slug}-${id}`;
   }
-
   return slug;
 };
 
 export const getIdFromSlug = (slug: string | undefined): string => {
   if (!slug) return '';
-  // Tìm dấu gạch ngang cuối cùng để cắt lấy ID phía sau
   const lastHyphenIndex = slug.lastIndexOf('-');
   if (lastHyphenIndex !== -1) {
       return slug.substring(lastHyphenIndex + 1);
