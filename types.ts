@@ -68,11 +68,11 @@ export interface Notification {
   createdAt: string;
 }
 
-// --- SỬA Ở ĐÂY: THÊM receiverId ---
+// SỬA LẠI INTERFACE MESSAGE:
 export interface Message {
   id: string;
   senderId: string;
-  receiverId: string; // <--- BẮT BUỘC PHẢI CÓ ĐỂ BIẾT GỬI CHO AI
+  receiverId: string; // <--- BẮT BUỘC PHẢI THÊM DÒNG NÀY
   content: string;
   createdAt: string;
   isRead: boolean;
