@@ -3,28 +3,41 @@ import { Message, ChatSession } from '../types';
 const STORAGE_KEY = 'asking_vn_messages';
 
 /**
- * Hàm trợ giúp: Luôn lấy dữ liệu mới nhất từ Storage
+ * Hàm lấy dữ liệu tươi mới nhất từ ổ cứng (localStorage)
  */
 const getFreshMessages = (): Message[] => {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  return stored ? JSON.parse(stored) : [];
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch (error) {
+    console.error("Lỗi đọc tin nhắn:", error);
+    return [];
+  }
 };
 
 /**
- * Lấy danh sách tin nhắn
- * LƯU Ý: Phải gọi getFreshMessages() để thấy tin nhắn từ Tab khác gửi sang
+ * Lấy danh sách tin nhắn giữa 2 người (Dùng cho cả Tab A và Tab B)
  */
 export const getMessages = async (currentUserId: string, otherUserId: string): Promise<Message[]> => {
-  // Delay nhẹ
+  // Delay nhẹ để tạo cảm giác load mạng
   await new Promise(resolve => setTimeout(resolve, 200));
 
+  // Luôn lấy dữ liệu mới nhất từ Storage (để thấy tin nhắn từ Tab kia gửi sang)
   const allMessages = getFreshMessages();
 
-  // Lọc tin nhắn giữa 2 người
-  return allMessages.filter(msg => 
+  // Logic lọc tin nhắn 2 chiều:
+  // 1. Tin tôi gửi đi (sender = Me, receiver = You)
+  // 2. Tin tôi nhận được (sender = You, receiver = Me)
+  const conversation = allMessages.filter(msg => 
     (msg.senderId === currentUserId && msg.receiverId === otherUserId) || 
     (msg.senderId === otherUserId && msg.receiverId === currentUserId)
-  ).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  );
+
+  // Debug log để bạn kiểm tra nếu không thấy tin nhắn
+  // console.log(`GetMessages [${currentUserId} <-> ${otherUserId}]: Found ${conversation.length}`);
+
+  // Sắp xếp tin nhắn cũ -> mới
+  return conversation.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 };
 
 /**
@@ -41,7 +54,7 @@ export const sendMessage = async (
   await new Promise(resolve => setTimeout(resolve, 300));
 
   const newMessage: Message = {
-    id: `msg_${Date.now()}`,
+    id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // ID độc nhất
     senderId,
     receiverId, 
     content,
@@ -52,55 +65,43 @@ export const sendMessage = async (
     storySnapshotUrl: storyData?.snapshotUrl
   };
 
-  // 1. Lấy dữ liệu mới nhất
+  // 1. Lấy toàn bộ tin nhắn hiện có trong kho
   const currentMessages = getFreshMessages();
   
-  // 2. Thêm tin mới
-  currentMessages.push(newMessage);
+  // 2. Thêm tin mới vào
+  const updatedMessages = [...currentMessages, newMessage];
   
-  // 3. Lưu ngay vào Storage
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(currentMessages));
+  // 3. Lưu lại kho ngay lập tức
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedMessages));
   
-  console.log("LOG: Đã gửi và đồng bộ:", newMessage);
+  console.log("LOG: Đã gửi tin nhắn thành công:", newMessage);
 
-  // --- TÍNH NĂNG MỚI: GIẢ LẬP ĐỐI PHƯƠNG TRẢ LỜI (AUTO REPLY) ---
-  // Chỉ để test, giúp bạn thấy tin nhắn đến mà không cần mở 2 trình duyệt
-  simulateAutoReply(receiverId, senderId);
+  // --- MÌNH ĐÃ TẮT AUTO REPLY ĐỂ BẠN TEST NGƯỜI THẬT ---
+  // Nếu muốn bật lại bot, hãy uncomment dòng dưới:
+  // simulateAutoReply(receiverId, senderId);
 
   return newMessage;
 };
 
 /**
- * Hàm giả lập đối phương trả lời sau 3 giây
+ * Hàm giả lập Bot trả lời (Dành cho debug)
  */
 const simulateAutoReply = (botId: string, humanId: string) => {
   setTimeout(() => {
-    const currentMessages = getFreshMessages();
-    
-    // Kiểm tra để tránh bot tự trả lời chính mình
-    const lastMsg = currentMessages[currentMessages.length - 1];
-    if (lastMsg && lastMsg.senderId === botId) return; 
-
-    const botReply: Message = {
-      id: `msg_bot_${Date.now()}`,
-      senderId: botId,    // Bot đóng vai người gửi
-      receiverId: humanId, // Bạn là người nhận
-      content: "Mình đã nhận được tin nhắn rồi nhé! (Auto Reply) 😄",
+    const messages = getFreshMessages();
+    const reply: Message = {
+      id: `bot_${Date.now()}`,
+      senderId: botId,
+      receiverId: humanId,
+      content: "Bot: Đã nhận tin nhắn (Auto) 🤖",
       createdAt: new Date().toISOString(),
       isRead: false,
       type: 'text'
     };
-
-    currentMessages.push(botReply);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(currentMessages));
-    console.log("LOG: Bot đã trả lời tự động");
-    
-  }, 3000); // Trả lời sau 3s
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([...messages, reply]));
+  }, 2000);
 };
 
-/**
- * Đánh dấu đã đọc
- */
 export const markMessagesAsRead = async (chatId: string, userId: string) => {
-    console.log(`LOG: Đã đánh dấu đọc`);
+    // Logic đánh dấu đã đọc (chưa cần thiết cho Mock)
 };
