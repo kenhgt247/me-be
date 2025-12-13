@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Image as ImageIcon, Loader2, Send, Trash2, UploadCloud } from 'lucide-react';
 import { User, Story } from '../types';
-import { createStory } from '../services/stories'; // Import hàm API giả lập
+import { createStory } from '../services/stories'; 
 
 interface CreateStoryModalProps {
   currentUser: User;
@@ -17,7 +17,7 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ currentUser,
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Dọn dẹp URL preview khi component unmount để tránh rò rỉ bộ nhớ
+  // Dọn dẹp URL preview khi component unmount
   useEffect(() => {
     return () => {
       if (previewUrl) {
@@ -30,13 +30,11 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ currentUser,
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Kiểm tra loại file (chỉ cho phép ảnh)
       if (!file.type.startsWith('image/')) {
         setError('Vui lòng chỉ chọn file ảnh (JPG, PNG, WEBP).');
         return;
       }
       
-      // Kiểm tra dung lượng (VD: giới hạn 5MB)
       if (file.size > 5 * 1024 * 1024) {
         setError('File quá lớn. Vui lòng chọn ảnh dưới 5MB.');
         return;
@@ -50,7 +48,7 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ currentUser,
 
   // Xử lý xóa ảnh đã chọn
   const handleRemoveFile = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Ngăn sự kiện click lan ra ngoài
+    e.stopPropagation(); 
     setSelectedFile(null);
     setPreviewUrl(null);
     setError(null);
@@ -59,7 +57,7 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ currentUser,
     }
   };
 
-  // Xử lý Đăng tin (Gọi Service)
+  // Xử lý Đăng tin
   const handlePost = async () => {
     if (!selectedFile || !currentUser) return;
 
@@ -67,10 +65,7 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ currentUser,
     setError(null);
 
     try {
-      // Gọi hàm từ services/stories.ts
       const newStory = await createStory(currentUser, selectedFile);
-      
-      // Thành công -> Trả dữ liệu về Home -> Đóng modal
       onSuccess(newStory);
       onClose();
     } catch (err) {
@@ -83,10 +78,9 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ currentUser,
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center animate-fade-in p-4">
-      {/* Container chính */}
       <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]">
         
-        {/* 1. Header */}
+        {/* Header */}
         <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-white dark:bg-gray-900 z-10">
           <h3 className="font-bold text-lg text-gray-900 dark:text-white">Tạo tin mới</h3>
           <button 
@@ -98,7 +92,7 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ currentUser,
           </button>
         </div>
 
-        {/* 2. Content Area (Vùng chọn ảnh) */}
+        {/* Content Area */}
         <div className="flex-1 p-4 flex flex-col items-center justify-center min-h-[400px] bg-gray-50 dark:bg-black/50 relative overflow-hidden">
           
           {error && (
@@ -108,7 +102,6 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ currentUser,
           )}
 
           {!previewUrl ? (
-            // --- TRẠNG THÁI 1: CHƯA CHỌN ẢNH ---
             <div 
               onClick={() => fileInputRef.current?.click()}
               className="w-full h-full min-h-[350px] border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl flex flex-col items-center justify-center cursor-pointer group hover:border-primary hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all gap-4 p-6"
@@ -125,15 +118,12 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ currentUser,
               </button>
             </div>
           ) : (
-            // --- TRẠNG THÁI 2: ĐÃ CHỌN ẢNH (PREVIEW) ---
             <div className="relative w-full h-full rounded-xl overflow-hidden bg-black flex items-center justify-center animate-zoom-in">
                <img 
                  src={previewUrl} 
                  className="w-full h-full object-contain max-h-[60vh]" 
                  alt="Preview" 
                />
-               
-               {/* Nút xóa ảnh */}
                {!isUploading && (
                  <button 
                    onClick={handleRemoveFile}
@@ -155,7 +145,7 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ currentUser,
           />
         </div>
 
-        {/* 3. Footer Actions */}
+        {/* Footer Actions */}
         <div className="p-4 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center bg-white dark:bg-gray-900">
            <div className="flex items-center gap-3">
               <img src={currentUser.avatar} className="w-10 h-10 rounded-full border border-gray-200 object-cover" alt="User" />
