@@ -105,10 +105,14 @@ export const DocumentAdmin: React.FC = () => {
             };
             
             if (catForm.id) {
+                // UPDATE
                 await updateDocumentCategory(catForm.id, dataToSave);
             } else {
+                // CREATE
+                // Đảm bảo id không bị gửi vào hàm create
+                const { id, ...dataToCreate } = dataToSave;
                 await createDocumentCategory({ 
-                    ...dataToSave, 
+                    ...dataToCreate, 
                     isActive: true, 
                 } as DocumentCategory);
             }
@@ -135,14 +139,14 @@ export const DocumentAdmin: React.FC = () => {
         setShowCatModal(true);
     }
     
+    // Đảm bảo reset form hoàn toàn khi tạo mới
     const openCreateCatModal = () => {
-        setCatForm({ ...initialCatForm, order: categories.length + 1 });
+        setCatForm({ ...initialCatForm, id: '', order: categories.length + 1 });
         setShowCatModal(true);
     };
 
     // --- DOCUMENT HANDLERS ---
     
-    // Tự động tạo slug khi nhập tiêu đề
     const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newTitle = e.target.value;
         setDocForm(prev => ({
@@ -222,8 +226,10 @@ export const DocumentAdmin: React.FC = () => {
             const { id, ...dataToSave } = data;
             
             if (docForm.id) {
+                // UPDATE
                 await updateDocument(docForm.id, dataToSave as Document);
             } else {
+                // CREATE
                 await createDocument(dataToSave as Document);
             }
             setShowDocModal(false);
@@ -245,7 +251,6 @@ export const DocumentAdmin: React.FC = () => {
     };
 
     const openEditDocModal = (doc: Document) => {
-        // Đảm bảo categoryId không phải là null/undefined khi vào chế độ Edit
         const safeDoc: Partial<Document> = {
             ...doc,
             categoryId: doc.categoryId || '' 
@@ -479,12 +484,10 @@ export const DocumentAdmin: React.FC = () => {
                                         </p>
                                     ) : (
                                         <select 
-                                            // GIÁ TRỊ LUÔN LÀ CHUỖI VÀ ĐƯỢC KIỂM SOÁT
                                             value={docForm.categoryId || ''} 
                                             onChange={e => setDocForm({...docForm, categoryId: e.target.value})} 
                                             className="w-full p-2.5 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-green-100"
                                         >
-                                            {/* Option này có value="" để khớp với docForm.categoryId khi tạo mới */}
                                             <option value="">-- Chọn chuyên mục --</option>
                                             {categories.map(c => (
                                                 <option key={c.id} value={c.id}>
