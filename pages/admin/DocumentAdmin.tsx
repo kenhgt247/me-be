@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Document, DocumentCategory } from '../../types';
-import { toSlug } from '../../types'; // Import hàm toSlug chuẩn
+import { toSlug } from '../../types'; 
 import { 
     fetchDocumentCategories, createDocumentCategory, updateDocumentCategory, deleteDocumentCategory,
     fetchAllDocumentsAdmin, createDocument, updateDocument, deleteDocument 
@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 
 // --- UTILITY FUNCTIONS ---
-// Hàm xác định icon dựa trên fileType (đã thêm vào)
 const getFileIcon = (fileType?: string) => {
     switch (fileType) {
         case 'pdf': return <BookText size={24} className="text-red-500" />;
@@ -25,6 +24,7 @@ const getFileIcon = (fileType?: string) => {
         default: return <File size={24} className="text-gray-500" />;
     }
 }
+
 const initialCatForm = { id: '', name: '', iconEmoji: '📁', order: 1 };
 const initialDocForm: Partial<Document> = {
     title: '', slug: '', description: '', categoryId: '', tags: [], 
@@ -87,7 +87,7 @@ export const DocumentAdmin: React.FC = () => {
         }
     };
 
-    // --- CATEGORY HANDLERS ---
+    // --- CATEGORY HANDLERS (GIỮ NGUYÊN) ---
     const handleSaveCat = async () => {
         if (!catForm.name || !currentUser) return;
         const slug = toSlug(catForm.name);
@@ -102,7 +102,7 @@ export const DocumentAdmin: React.FC = () => {
             if (catForm.id) {
                 await updateDocumentCategory(catForm.id, dataToSave);
             } else {
-                const { id, ...dataToCreate } = dataToSave; // Loại bỏ id rỗng
+                const { id, ...dataToCreate } = dataToSave;
                 await createDocumentCategory({ ...dataToCreate, isActive: true } as DocumentCategory);
             }
             setShowCatModal(false);
@@ -171,13 +171,11 @@ export const DocumentAdmin: React.FC = () => {
                 isExternal: false,
                 externalLink: '' 
             }));
-            // Đảm bảo chuyển về chế độ upload sau khi upload thành công
             setInputMode('upload'); 
         } catch (e) {
             alert("Upload thất bại, vui lòng thử lại.");
         } finally {
             setUploading(false);
-             // Reset input file để có thể chọn lại file cùng tên
             e.target.value = '';
         }
     };
@@ -185,11 +183,12 @@ export const DocumentAdmin: React.FC = () => {
     const handleSaveDoc = async () => {
         if (!currentUser) return alert("Không tìm thấy thông tin người dùng.");
         if (!docForm.title) return alert("Vui lòng nhập tiêu đề tài liệu");
-        if (!docForm.categoryId) return alert("Vui lòng chọn danh mục."); // Thêm kiểm tra này
+        // SỬA LỖI: Kiểm tra danh mục phải có giá trị khác chuỗi rỗng
+        if (!docForm.categoryId) return alert("Vui lòng chọn danh mục.");
         
         const isExternal = inputMode === 'link';
         if (isExternal && !docForm.externalLink) return alert("Vui lòng nhập đường dẫn");
-        if (!isExternal && !docForm.fileUrl && !docForm.id) return alert("Vui lòng tải file lên"); // Kiểm tra upload khi tạo mới
+        if (!isExternal && !docForm.fileUrl && !docForm.id) return alert("Vui lòng tải file lên");
         
         const slug = docForm.slug || toSlug(docForm.title);
         const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t);
@@ -204,14 +203,13 @@ export const DocumentAdmin: React.FC = () => {
             isExpert: !!currentUser.isExpert,
             isExternal: isExternal,
             
-            // Xử lý nguồn file dựa trên inputMode
             fileType: isExternal ? 'link' : docForm.fileType,
             fileUrl: isExternal ? '' : docForm.fileUrl,
             externalLink: isExternal ? docForm.externalLink : ''
         };
 
         try {
-            const { id, ...dataToSave } = data; // Tách id ra
+            const { id, ...dataToSave } = data;
             if (docForm.id) {
                 await updateDocument(docForm.id, dataToSave as Document);
             } else {
@@ -232,19 +230,20 @@ export const DocumentAdmin: React.FC = () => {
     };
 
     const openEditDocModal = (doc: Document) => {
-        setDocForm({ ...doc, categoryId: doc.categoryId || '' }); // Đảm bảo categoryId là chuỗi
+        // Đảm bảo categoryId được khởi tạo an toàn
+        setDocForm({ ...doc, categoryId: doc.categoryId || '' }); 
         setTagsInput(doc.tags?.join(', ') || '');
         setInputMode(doc.isExternal ? 'link' : 'upload');
         setShowDocModal(true);
     };
 
     const openCreateDocModal = () => {
-        // FIX: Đảm bảo categoryId LUÔN là chuỗi rỗng để chọn option "-- Chọn chuyên mục --"
+        // Đảm bảo docForm.categoryId là chuỗi rỗng để cho phép chọn option đầu tiên
         setDocForm({ 
             ...initialDocForm, 
             categoryId: '', 
-            fileUrl: '', // Reset fileUrl
-            externalLink: '' // Reset externalLink
+            fileUrl: '', 
+            externalLink: '' 
         });
         setTagsInput('');
         setInputMode('upload');
@@ -288,8 +287,8 @@ export const DocumentAdmin: React.FC = () => {
                 <div className="space-y-4">
                     <div className="flex justify-end">
                         <button 
-                             onClick={openCreateCatModal} // Dùng hàm đã sửa
-                             className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold flex gap-2 shadow-lg hover:bg-green-700 transition-colors"
+                            onClick={openCreateCatModal}
+                            className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold flex gap-2 shadow-lg hover:bg-green-700 transition-colors"
                         >
                             <Plus size={18} /> Thêm Danh mục
                         </button>
@@ -401,10 +400,10 @@ export const DocumentAdmin: React.FC = () => {
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tiêu đề</label>
                                 <input 
-                                     value={docForm.title || ''} // Dùng giá trị an toàn
-                                     onChange={handleTitleChange} 
-                                     placeholder="Nhập tiêu đề tài liệu..." 
-                                     className="w-full p-3 border rounded-xl font-bold text-lg outline-none focus:ring-2 focus:ring-green-100" 
+                                    value={docForm.title || ''}
+                                    onChange={handleTitleChange} 
+                                    placeholder="Nhập tiêu đề tài liệu..." 
+                                    className="w-full p-3 border rounded-xl font-bold text-lg outline-none focus:ring-2 focus:ring-green-100" 
                                 />
                             </div>
 
@@ -414,10 +413,10 @@ export const DocumentAdmin: React.FC = () => {
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Đường dẫn (Slug)</label>
                                     <div className="flex gap-2">
                                         <input 
-                                             value={docForm.slug || ''} // Dùng giá trị an toàn
-                                             onChange={e => setDocForm({...docForm, slug: e.target.value})} 
-                                             placeholder="duong-dan-tai-lieu" 
-                                             className="w-full p-2 border rounded-xl text-sm font-mono text-gray-600 bg-gray-50 outline-none" 
+                                            value={docForm.slug || ''}
+                                            onChange={e => setDocForm({...docForm, slug: e.target.value})} 
+                                            placeholder="duong-dan-tai-lieu" 
+                                            className="w-full p-2 border rounded-xl text-sm font-mono text-gray-600 bg-gray-50 outline-none" 
                                         />
                                         <button onClick={handleRegenerateSlug} className="p-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600" title="Tạo lại"><RefreshCw size={18}/></button>
                                     </div>
@@ -430,7 +429,7 @@ export const DocumentAdmin: React.FC = () => {
                                         </p>
                                     ) : (
                                         <select 
-                                            // FIX: Luôn đảm bảo value là chuỗi rỗng khi tạo mới, cho phép chọn option đầu tiên
+                                            // LỖI ĐÃ KHẮC PHỤC: Sử dụng chuỗi rỗng để chọn option đầu tiên
                                             value={docForm.categoryId || ''} 
                                             onChange={e => setDocForm({...docForm, categoryId: e.target.value})} 
                                             className="w-full p-2.5 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-green-100"
@@ -490,10 +489,10 @@ export const DocumentAdmin: React.FC = () => {
                                     <div className="flex items-center border rounded-xl p-3 gap-2 focus-within:ring-2 focus-within:ring-blue-100 bg-gray-50 focus-within:bg-white transition-colors">
                                         <Globe size={20} className="text-gray-400" />
                                         <input 
-                                             value={docForm.externalLink || ''} // Dùng giá trị an toàn
-                                             onChange={e => setDocForm({...docForm, externalLink: e.target.value})} 
-                                             placeholder="https://drive.google.com/..." 
-                                             className="flex-1 outline-none text-sm bg-transparent" 
+                                            value={docForm.externalLink || ''}
+                                            onChange={e => setDocForm({...docForm, externalLink: e.target.value})} 
+                                            placeholder="https://drive.google.com/..." 
+                                            className="flex-1 outline-none text-sm bg-transparent" 
                                         />
                                     </div>
                                 )}
@@ -502,7 +501,7 @@ export const DocumentAdmin: React.FC = () => {
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Mô tả ngắn</label>
                                 <textarea 
-                                    value={docForm.description || ''} // Dùng giá trị an toàn
+                                    value={docForm.description || ''}
                                     onChange={e => setDocForm({...docForm, description: e.target.value})} 
                                     placeholder="Giới thiệu sơ lược về tài liệu này..." 
                                     className="w-full p-3 border rounded-xl h-24 resize-none outline-none focus:ring-2 focus:ring-green-100" 
@@ -524,8 +523,14 @@ export const DocumentAdmin: React.FC = () => {
                             <button onClick={() => setShowDocModal(false)} className="px-6 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-colors">Hủy</button>
                             <button 
                                 onClick={handleSaveDoc} 
-                                // Điều kiện disabled: Đang upload HOẶC chưa chọn CategoryId HOẶC chưa có nguồn file/link
-                                disabled={uploading || !docForm.categoryId || (inputMode === 'upload' && !docForm.fileUrl && !docForm.id) || (inputMode === 'link' && !docForm.externalLink)} 
+                                // FIX: Bỏ kiểm tra `!docForm.categoryId` ra khỏi biểu thức OR đầu tiên
+                                disabled={
+                                    uploading || 
+                                    !docForm.categoryId || // Chỉ disable khi categoryId là chuỗi rỗng
+                                    (inputMode === 'upload' && !docForm.fileUrl && !docForm.id) || 
+                                    (inputMode === 'link' && !docForm.externalLink) || 
+                                    !docForm.title // Thêm kiểm tra tiêu đề
+                                }
                                 className="px-6 py-2.5 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 disabled:opacity-50 shadow-lg shadow-green-200 transition-all active:scale-95 flex items-center gap-2"
                             >
                                 <CheckCircle size={18} /> Lưu tài liệu
