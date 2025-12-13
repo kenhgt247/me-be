@@ -1,6 +1,6 @@
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-// SỬA DÒNG NÀY: Dùng ../firebase
-import { storage } from "../firebase"; 
+// SỬA LẠI DÒNG NÀY:
+import { storage } from "../firebaseConfig"; 
 
 /**
  * Uploads a file to Firebase Storage and returns the download URL.
@@ -17,7 +17,6 @@ export const uploadFile = async (file: File, folder: string): Promise<string> =>
     
     const storageRef = ref(storage, `${folder}/${uniqueName}`);
     
-    // Thêm metadata để hiển thị tốt trên trình duyệt
     const metadata = {
       contentType: file.type,
     };
@@ -32,12 +31,8 @@ export const uploadFile = async (file: File, folder: string): Promise<string> =>
   }
 };
 
-/**
- * Upload multiple files concurrently
- */
 export const uploadMultipleFiles = async (files: File[], folder: string): Promise<string[]> => {
   if (!files || files.length === 0) return [];
-  
   try {
     const uploadPromises = files.map(file => uploadFile(file, folder));
     const urls = await Promise.all(uploadPromises);
