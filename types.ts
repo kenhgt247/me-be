@@ -65,6 +65,10 @@ export interface Category {
   id: string;
   name: string;
   slug: string;
+  // Thêm 3 trường này:
+  icon?: string;  // Tên icon (VD: 'Baby', 'Heart', 'Book')
+  color?: string; // Class màu chữ (VD: 'text-pink-600')
+  bg?: string;    // Class màu nền (VD: 'bg-pink-50')
 }
 export interface Notification {
   id: string;
