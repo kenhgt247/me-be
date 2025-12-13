@@ -15,7 +15,7 @@ import { getAdConfig } from '../services/ads';
 import { ShareModal } from '../components/ShareModal';
 import { loginAnonymously } from '../services/auth';
 import { uploadFile } from '../services/storage';
-// import { AdBanner } from '../components/AdBanner'; // Đã xoá import quảng cáo banner
+// import { AdBanner } from '../components/AdBanner'; 
 import { ExpertPromoBox } from '../components/ExpertPromoBox';
 
 interface DetailProps {
@@ -307,7 +307,7 @@ export default function QuestionDetail({
           const ans: Answer = { id: Date.now().toString(), questionId: question.id, author: user, content, likes: 0, isBestAnswer: false, createdAt: new Date().toISOString(), isAi: false }; 
           await onAddAnswer(question.id, ans); 
           setNewAnswer(''); setAnswerImage(null); 
-          setIsInputOpen(false); // Đóng input sau khi gửi thành công -> Menu chân trang sẽ hiện lại
+          setIsInputOpen(false); // Close sheet on success
           setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 100); 
       } catch (e: any) { 
           if (e.message !== "LOGIN_REQUIRED") alert("Lỗi gửi."); 
