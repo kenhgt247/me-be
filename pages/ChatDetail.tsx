@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 // @ts-ignore
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, Image as ImageIcon, MoreVertical, ShieldCheck, Loader2, Plus, X, ChevronDown } from 'lucide-react';
-import { sendMessage, subscribeToMessages, getChatId, subscribeToUser } from '../services/db';
+// CẬP NHẬT IMPORT: Dùng hàm từ services/chat thay vì services/db
+import { sendMessage, getMessages } from '../services/chat'; 
+import { subscribeToUser } from '../services/db'; // Vẫn giữ cái này để lấy info user
 import { loginAnonymously } from '../services/auth';
 import { uploadFile } from '../services/storage';
 import { User, Message } from '../types';
@@ -12,7 +14,6 @@ interface ChatDetailProps {
   onOpenAuth: () => void;
 }
 
-// Sticker Packs Data
 const STICKER_PACKS = {
   "Cảm xúc": ["😀", "😂", "🥰", "😎", "😭", "😡", "😱", "🥳", "😴", "🤔"],
   "Yêu thương": ["❤️", "🧡", "💛", "💚", "💙", "💜", "💖", "💝", "💋", "💌"],
@@ -21,13 +22,10 @@ const STICKER_PACKS = {
   "Đồ ăn": ["🍎", "🍌", "🍉", "🍓", "🥕", "🌽", "🍕", "🍔", "🍦", "🍪"]
 };
 
-// Helper to calculate "Active X minutes ago"
 const getTimeStatus = (lastActiveAt?: string) => {
     if (!lastActiveAt) return 'Không hoạt động';
     const diff = Date.now() - new Date(lastActiveAt).getTime();
     const minutes = Math.floor(diff / 60000);
-    
-    // Allow a buffer of 5 minutes before showing offline/time
     if (minutes < 5) return 'Đang hoạt động'; 
     if (minutes < 60) return `Hoạt động ${minutes} phút trước`;
     if (minutes < 1440) return `Hoạt động ${Math.floor(minutes / 60)} giờ trước`;
@@ -49,39 +47,35 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Subscribe to Target User (Realtime Status)
+    // 1. Lấy thông tin người chat cùng
     useEffect(() => {
         if (!userId) return;
+        // Mock: Nếu ko có DB thật thì set tạm, sau này dùng subscribeToUser thật
         const unsubscribe = subscribeToUser(userId, (user) => {
-            if (user) {
-                setTargetUser(user);
-            }
+            if (user) setTargetUser(user);
         });
         return () => unsubscribe();
     }, [userId]);
 
-    // Subscribe to Messages
+    // 2. Lấy tin nhắn (Dùng hàm getMessages từ service chat)
     useEffect(() => {
-        if (!currentUser || !userId || !targetUser) return;
-        
-        const chatId = getChatId(currentUser.id, userId);
-        const unsubscribe = subscribeToMessages(chatId, (msgs) => {
+        const loadMessages = async () => {
+            if (!currentUser || !userId) return;
+            const msgs = await getMessages(currentUser.id, userId);
             setMessages(msgs);
-            // Only auto-scroll if user is already near bottom or it's the first load
-            if (messagesContainerRef.current) {
-                const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
-                const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
-                if (isNearBottom || msgs.length === 0) {
-                     setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-                }
-            } else {
-                 setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-            }
-        });
-        return () => unsubscribe();
-    }, [currentUser.id, userId, targetUser]);
+            
+            // Scroll xuống dưới cùng khi mới load
+            setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+        };
+        
+        loadMessages();
+        
+        // (Tạm thời Mock nên dùng setInterval để giả lập realtime polling)
+        const interval = setInterval(loadMessages, 3000); 
+        return () => clearInterval(interval);
+    }, [currentUser.id, userId]);
 
-    // Handle Scroll to show/hide "Scroll Down" button
+    // ... (Các hàm handleScroll, scrollToBottom, auto resize textarea giữ nguyên) ...
     const handleScroll = () => {
         if (messagesContainerRef.current) {
             const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
@@ -94,7 +88,6 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
         scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
-    // Auto resize textarea
     useEffect(() => {
         if (textareaRef.current) {
             textareaRef.current.style.height = 'auto';
@@ -107,7 +100,6 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
             try {
                 return await loginAnonymously();
             } catch (e: any) {
-                console.error("Guest auth failed:", e);
                 onOpenAuth();
                 throw new Error("LOGIN_REQUIRED");
             }
@@ -115,15 +107,29 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
         return currentUser;
     };
 
+    // 3. Hàm gửi tin nhắn (Cập nhật để dùng service chat mới)
     const handleSend = async (content: string, type: 'text' | 'image' = 'text') => {
-        if (!content.trim() || !targetUser) return;
+        if (!content.trim() || !userId) return;
         
+        // Optimistic UI: Hiển thị tin nhắn ngay lập tức trước khi server phản hồi
+        const tempMsg: Message = {
+            id: `temp_${Date.now()}`,
+            senderId: currentUser.id,
+            content: content,
+            type: type,
+            createdAt: new Date().toISOString(),
+            isRead: false
+        };
+        setMessages(prev => [...prev, tempMsg]);
+        scrollToBottom();
+
         try {
             const user = await ensureAuth();
-            await sendMessage(user, targetUser, content, type);
-            scrollToBottom();
+            // Gọi hàm sendMessage từ service chat
+            await sendMessage(user.id, userId, content, type);
         } catch (error) {
-            console.error(error);
+            console.error("Gửi lỗi:", error);
+            // Xóa tin nhắn tạm nếu lỗi (trong thực tế)
         }
     };
 
@@ -133,13 +139,14 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
         
         const content = newMessage;
         setNewMessage('');
-        if(textareaRef.current) textareaRef.current.style.height = 'auto'; // Reset height
+        if(textareaRef.current) textareaRef.current.style.height = 'auto';
         setShowStickers(false);
         
         await handleSend(content, 'text');
     };
 
     const handleSendSticker = async (sticker: string) => {
+        setShowStickers(false);
         await handleSend(sticker, 'text');
     };
 
@@ -157,7 +164,8 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
         try {
             setIsUploading(true);
             const user = await ensureAuth(); 
-            const downloadUrl = await uploadFile(file, `chat_images/${getChatId(user.id, userId!)}`);
+            // Upload file (Service Storage vẫn dùng được bình thường)
+            const downloadUrl = await uploadFile(file, `chat_images/${user.id}_${userId}`);
             await handleSend(downloadUrl, 'image');
         } catch (error) {
             console.error("Image upload failed", error);
@@ -171,17 +179,10 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
         fileInputRef.current?.click();
     };
 
-    // Helper to detect if message is just stickers/emojis
     const isStickerMessage = (content: string, type: string) => {
         if (type !== 'text') return false;
-        try {
-            // Regex detects Emoji characters.
-            const emojiRegex = /^(\p{Extended_Pictographic}|\p{Emoji_Presentation}|\s)+$/u;
-            return emojiRegex.test(content) && [...content].length <= 3;
-        } catch (e) {
-            // Fallback for browsers not supporting unicode property escapes
-            return false; 
-        }
+        const emojiRegex = /^(\p{Extended_Pictographic}|\p{Emoji_Presentation}|\s)+$/u;
+        return emojiRegex.test(content) && [...content].length <= 3;
     };
 
     if (!targetUser) return <div className="p-10 text-center flex items-center justify-center h-screen bg-white dark:bg-dark-bg"><Loader2 className="animate-spin text-primary" size={32} /></div>;
@@ -191,10 +192,8 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
     const dotColor = isOnline ? 'bg-green-500 animate-pulse' : 'bg-gray-300 dark:bg-gray-500';
 
     return (
-        // THAY ĐỔI: bg-[#E5DDD5] -> dark:bg-slate-900 (Màu nền tối cho chat)
         <div className="flex flex-col h-[100dvh] bg-[#E5DDD5] dark:bg-slate-900 fixed inset-0 z-50 overflow-hidden transition-colors duration-300">
-            
-            {/* Background Pattern - Giảm opacity ở dark mode để không rối */}
+            {/* Background Pattern */}
             <div className="absolute inset-0 opacity-10 dark:opacity-5 pointer-events-none" style={{ 
                 backgroundImage: "url('https://www.transparenttextures.com/patterns/cubes.png')" 
             }}></div>
@@ -229,7 +228,7 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
                 ref={messagesContainerRef}
                 onScroll={handleScroll}
                 className="flex-1 overflow-y-auto p-4 space-y-1 min-h-0 w-full relative z-10 scroll-smooth"
-                onClick={() => setShowStickers(false)} // Click outside closes stickers
+                onClick={() => setShowStickers(false)}
             >
                 {(messages.length === 0 && currentUser.isGuest) && (
                      <div className="text-center py-12 px-6">
@@ -247,6 +246,9 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
                     const isFirstInGroup = !prevMsg || prevMsg.senderId !== msg.senderId;
                     const isLastInGroup = !nextMsg || nextMsg.senderId !== msg.senderId;
                     const isSticker = isStickerMessage(msg.content, msg.type);
+
+                    // Xử lý hiển thị tin nhắn Story Reply
+                    const isStoryReply = msg.type === 'story_reply';
 
                     const radiusClass = isMe 
                         ? `${isFirstInGroup ? 'rounded-tr-2xl' : 'rounded-tr-md'} ${isLastInGroup ? 'rounded-br-2xl' : 'rounded-br-md'} rounded-l-2xl`
@@ -267,6 +269,14 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
                                     ? 'p-1 bg-transparent shadow-none' 
                                     : (isMe ? 'bg-primary text-white' : 'bg-white dark:bg-dark-card text-textDark dark:text-white')}
                             `}>
+                                {/* Hiển thị ảnh Story nếu là tin reply */}
+                                {isStoryReply && msg.storySnapshotUrl && (
+                                    <div className="mb-2 rounded-lg overflow-hidden relative cursor-pointer opacity-90 hover:opacity-100 transition-opacity border-l-4 border-white/50 pl-2">
+                                        <div className="text-[10px] font-bold opacity-70 mb-1">Đã trả lời tin của bạn</div>
+                                        <img src={msg.storySnapshotUrl} className="w-16 h-24 object-cover rounded-md" />
+                                    </div>
+                                )}
+
                                 {msg.type === 'image' ? (
                                     <img src={msg.content} className={`w-full rounded-2xl max-w-[200px] border ${isMe ? 'border-primary/30' : 'border-white dark:border-slate-700'}`} loading="lazy" onClick={() => window.open(msg.content, '_blank')} />
                                 ) : isSticker ? (
