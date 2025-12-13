@@ -11,8 +11,10 @@ import { suggestTitles, generateQuestionContent } from '../services/gemini';
 import { AuthModal } from '../components/AuthModal';
 import { uploadFile } from '../services/storage'; 
 import { loginAnonymously } from '../services/auth';
+// --- IMPORT MỚI: Hàm lấy danh mục từ Admin Service ---
+import { fetchCategories } from '../services/admin';
 
-// --- CONFIGURATION & CONSTANTS (Đã thêm Dark Mode Classes) ---
+// --- CONFIGURATION & CONSTANTS ---
 const CATEGORY_CONFIG: Record<string, { icon: any, color: string, bg: string, border: string }> = {
   "Mang thai": { icon: Baby, color: "text-pink-600 dark:text-pink-400", bg: "bg-pink-50 dark:bg-pink-900/20", border: "border-pink-100 dark:border-pink-900/30" },
   "Dinh dưỡng": { icon: Utensils, color: "text-green-600 dark:text-green-400", bg: "bg-green-50 dark:bg-green-900/20", border: "border-green-100 dark:border-green-900/30" },
@@ -95,6 +97,9 @@ export const Ask: React.FC<AskProps> = ({
   const navigate = useNavigate();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
+  // --- STATE QUẢN LÝ DANH MỤC ĐẦY ĐỦ ---
+  const [allCategories, setAllCategories] = useState<string[]>(categories);
+
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [category, setCategory] = useState(categories[0]);
@@ -114,6 +119,22 @@ export const Ask: React.FC<AskProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
+  // --- EFFECT: TẢI DANH MỤC TỪ FIREBASE ---
+  useEffect(() => {
+    const loadDynamicCategories = async () => {
+      try {
+        const dbCategories = await fetchCategories();
+        const dbCategoryNames = dbCategories.map(c => c.name);
+        // Gộp danh mục cứng và danh mục từ DB, loại bỏ trùng lặp
+        const merged = Array.from(new Set([...categories, ...dbCategoryNames]));
+        setAllCategories(merged);
+      } catch (error) {
+        console.error("Lỗi tải danh mục:", error);
+      }
+    };
+    loadDynamicCategories();
+  }, [categories]);
+
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Date.now();
     setToasts(prev => [...prev, { id, message, type }]);
@@ -131,7 +152,7 @@ export const Ask: React.FC<AskProps> = ({
     return () => attachments.forEach(att => URL.revokeObjectURL(att.preview));
   }, []);
 
-  // --- HANDLERS (LOGIC GIỮ NGUYÊN) ---
+  // --- HANDLERS ---
   const handleAiSuggest = async () => {
     if (title.length < 3) {
       showToast("Mẹ ơi, viết thêm vài từ để AI hiểu ý nhé!", "error");
@@ -308,7 +329,6 @@ export const Ask: React.FC<AskProps> = ({
   const activeCategoryStyle = getCategoryStyle(category);
 
   return (
-    // THAY ĐỔI: bg-white -> dark:bg-dark-bg
     <div className="min-h-screen bg-white dark:bg-dark-bg flex flex-col animate-fade-in relative transition-colors duration-300">
       <ToastContainer toasts={toasts} />
       
@@ -362,8 +382,8 @@ export const Ask: React.FC<AskProps> = ({
             {/* Title Section */}
             <div className="space-y-2">
                 <div className="flex justify-between items-end">
-                     <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider ml-1">Tiêu đề</label>
-                     <button 
+                      <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider ml-1">Tiêu đề</label>
+                      <button 
                         onClick={handleAiSuggest}
                         disabled={isSuggesting}
                         className="text-xs font-bold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-all border border-orange-100 dark:border-orange-900/30 active:scale-95 disabled:opacity-50"
@@ -505,24 +525,24 @@ export const Ask: React.FC<AskProps> = ({
                          onClick={() => {setShowStickers(!showStickers); setShowLinkInput(false)}}
                          className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all active:scale-95 border ${showStickers ? 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-400' : 'bg-gray-50 dark:bg-slate-700 border-gray-200 dark:border-slate-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-600'}`}
                       >
-                         <Smile size={24} />
+                          <Smile size={24} />
                       </button>
 
                       <button 
-                         onClick={() => {setShowLinkInput(!showLinkInput); setShowStickers(false)}}
-                         className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all active:scale-95 border ${showLinkInput ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400' : 'bg-gray-50 dark:bg-slate-700 border-gray-200 dark:border-slate-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-600'}`}
+                          onClick={() => {setShowLinkInput(!showLinkInput); setShowStickers(false)}}
+                          className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all active:scale-95 border ${showLinkInput ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400' : 'bg-gray-50 dark:bg-slate-700 border-gray-200 dark:border-slate-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-600'}`}
                       >
-                         <LinkIcon size={24} />
+                          <LinkIcon size={24} />
                       </button>
                   </div>
 
                   {/* Right: Submit Button */}
                   <button 
-                     onClick={handleSubmit} 
-                     disabled={!title || !content || isSubmitting}
-                     className="flex-1 bg-[#25A99C] text-white h-12 rounded-2xl font-bold text-base shadow-lg shadow-[#25A99C]/30 disabled:opacity-50 disabled:shadow-none transition-all active:scale-[0.97] flex items-center justify-center gap-2 hover:bg-[#1E8A7F]"
+                      onClick={handleSubmit} 
+                      disabled={!title || !content || isSubmitting}
+                      className="flex-1 bg-[#25A99C] text-white h-12 rounded-2xl font-bold text-base shadow-lg shadow-[#25A99C]/30 disabled:opacity-50 disabled:shadow-none transition-all active:scale-[0.97] flex items-center justify-center gap-2 hover:bg-[#1E8A7F]"
                   >
-                     {isSubmitting ? <Loader2 size={22} className="animate-spin" /> : <>Đăng câu hỏi <Send size={20} /></>}
+                      {isSubmitting ? <Loader2 size={22} className="animate-spin" /> : <>Đăng câu hỏi <Send size={20} /></>}
                   </button>
               </div>
           </div>
@@ -556,7 +576,7 @@ export const Ask: React.FC<AskProps> = ({
 
             {/* Category Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-8">
-              {categories.map(cat => {
+              {allCategories.map(cat => {
                 const style = getCategoryStyle(cat);
                 const isSelected = category === cat;
                 return (
@@ -568,11 +588,11 @@ export const Ask: React.FC<AskProps> = ({
                     }`}
                   >
                     <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${style.bg} ${style.color}`}>
-                       {React.createElement(style.icon, { size: 20 })}
+                        {React.createElement(style.icon, { size: 20 })}
                     </div>
                     <div className="flex-1 min-w-0">
-                       <span className={`block font-bold text-base truncate ${isSelected ? 'text-[#25A99C]' : 'text-gray-800 dark:text-white'}`}>{cat}</span>
-                       {isSelected && <span className="text-xs text-[#25A99C] font-medium flex items-center gap-1 mt-0.5"><Check size={12} /> Đang chọn</span>}
+                        <span className={`block font-bold text-base truncate ${isSelected ? 'text-[#25A99C]' : 'text-gray-800 dark:text-white'}`}>{cat}</span>
+                        {isSelected && <span className="text-xs text-[#25A99C] font-medium flex items-center gap-1 mt-0.5"><Check size={12} /> Đang chọn</span>}
                     </div>
                   </button>
                 );
