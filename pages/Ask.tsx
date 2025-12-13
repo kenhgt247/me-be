@@ -11,8 +11,8 @@ import { suggestTitles, generateQuestionContent } from '../services/gemini';
 import { AuthModal } from '../components/AuthModal';
 import { uploadFile } from '../services/storage'; 
 import { loginAnonymously } from '../services/auth';
-// --- IMPORT MỚI: Hàm lấy danh mục từ Admin Service ---
-import { fetchCategories } from '../services/admin';
+// --- IMPORT MỚI: Thêm hàm addCategory để lưu danh mục người dùng tạo ---
+import { fetchCategories, addCategory } from '../services/admin';
 
 // --- CONFIGURATION & CONSTANTS ---
 const CATEGORY_CONFIG: Record<string, { icon: any, color: string, bg: string, border: string }> = {
@@ -61,13 +61,11 @@ interface ToastMessage {
   type: 'success' | 'error' | 'info';
 }
 
-// --- HELPER FUNCTIONS ---
 const getCategoryStyle = (catName: string) => {
   const key = Object.keys(CATEGORY_CONFIG).find(k => catName.includes(k)) || "Default";
   return CATEGORY_CONFIG[key];
 };
 
-// --- INTERNAL COMPONENT: TOAST NOTIFICATION ---
 const ToastContainer = ({ toasts }: { toasts: ToastMessage[] }) => (
   <div className="fixed top-4 left-0 right-0 z-[100] flex flex-col items-center gap-2 pointer-events-none px-4">
     {toasts.map(t => (
@@ -84,7 +82,6 @@ const ToastContainer = ({ toasts }: { toasts: ToastMessage[] }) => (
   </div>
 );
 
-// --- MAIN COMPONENT ---
 export const Ask: React.FC<AskProps> = ({ 
   onAddQuestion, 
   currentUser, 
@@ -97,8 +94,8 @@ export const Ask: React.FC<AskProps> = ({
   const navigate = useNavigate();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
-  // --- STATE QUẢN LÝ DANH MỤC ĐẦY ĐỦ ---
   const [allCategories, setAllCategories] = useState<string[]>(categories);
+  const [isAddingCategory, setIsAddingCategory] = useState(false); // Loading state khi thêm danh mục
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -119,13 +116,11 @@ export const Ask: React.FC<AskProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  // --- EFFECT: TẢI DANH MỤC TỪ FIREBASE ---
   useEffect(() => {
     const loadDynamicCategories = async () => {
       try {
         const dbCategories = await fetchCategories();
         const dbCategoryNames = dbCategories.map(c => c.name);
-        // Gộp danh mục cứng và danh mục từ DB, loại bỏ trùng lặp
         const merged = Array.from(new Set([...categories, ...dbCategoryNames]));
         setAllCategories(merged);
       } catch (error) {
@@ -226,12 +221,38 @@ export const Ask: React.FC<AskProps> = ({
     setAttachments(prev => prev.filter(att => att.id !== id));
   };
 
-  const handleAddCustomCategory = () => {
-    if (customCategory.trim()) {
-      onAddCategory(customCategory.trim());
-      setCategory(customCategory.trim());
-      setCustomCategory('');
-      setShowCategorySheet(false);
+  // --- XỬ LÝ THÊM DANH MỤC MỚI VÀO FIREBASE ---
+  const handleAddCustomCategory = async () => {
+    const newCat = customCategory.trim();
+    if (newCat) {
+      // 1. Kiểm tra xem đã có chưa
+      if (allCategories.includes(newCat)) {
+          setCategory(newCat);
+          setCustomCategory('');
+          setShowCategorySheet(false);
+          return;
+      }
+
+      setIsAddingCategory(true);
+      try {
+          // 2. Lưu vào Firebase (Collection 'categories')
+          await addCategory(newCat);
+          
+          // 3. Cập nhật state cục bộ để hiện ngay
+          setAllCategories(prev => [...prev, newCat]);
+          setCategory(newCat);
+          
+          // 4. Reset form
+          setCustomCategory('');
+          setShowCategorySheet(false);
+          showToast("Đã thêm chủ đề mới!", "success");
+      } catch (error) {
+          console.error("Lỗi thêm danh mục:", error);
+          showToast("Không thêm được chủ đề. Bạn cần đăng nhập!", "error");
+          if (!currentUser.id) setShowAuthModal(true);
+      } finally {
+          setIsAddingCategory(false);
+      }
     }
   };
 
@@ -567,10 +588,10 @@ export const Ask: React.FC<AskProps> = ({
                 />
                 <button 
                   onClick={handleAddCustomCategory}
-                  disabled={!customCategory.trim()}
-                  className="bg-gray-900 dark:bg-slate-700 text-white px-5 rounded-xl font-bold disabled:opacity-50 active:scale-95 transition-transform"
+                  disabled={!customCategory.trim() || isAddingCategory}
+                  className="bg-gray-900 dark:bg-slate-700 text-white px-5 rounded-xl font-bold disabled:opacity-50 active:scale-95 transition-transform flex items-center justify-center"
                 >
-                  <Plus size={24} />
+                  {isAddingCategory ? <Loader2 className="animate-spin" size={24}/> : <Plus size={24} />}
                 </button>
             </div>
 
