@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 // @ts-ignore
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, Image as ImageIcon, MoreVertical, ShieldCheck, Loader2, Plus, X, ChevronDown } from 'lucide-react';
-// CẬP NHẬT IMPORT: Dùng hàm từ services/chat thay vì services/db
 import { sendMessage, getMessages } from '../services/chat'; 
-import { subscribeToUser } from '../services/db'; // Vẫn giữ cái này để lấy info user
+import { subscribeToUser } from '../services/db'; 
 import { loginAnonymously } from '../services/auth';
 import { uploadFile } from '../services/storage';
 import { User, Message } from '../types';
@@ -36,7 +35,11 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
     const { userId } = useParams<{ userId: string }>();
     const navigate = useNavigate();
     const [targetUser, setTargetUser] = useState<User | null>(null);
+    
+    // Sử dụng ref để giữ danh sách tin nhắn mới nhất, tránh closure stale state trong setInterval
     const [messages, setMessages] = useState<Message[]>([]);
+    const messagesRef = useRef<Message[]>([]); 
+
     const [newMessage, setNewMessage] = useState('');
     const [isUploading, setIsUploading] = useState(false);
     const [showStickers, setShowStickers] = useState(false);
@@ -47,35 +50,67 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // Cập nhật messagesRef mỗi khi messages thay đổi
+    useEffect(() => {
+        messagesRef.current = messages;
+    }, [messages]);
+
     // 1. Lấy thông tin người chat cùng
     useEffect(() => {
         if (!userId) return;
-        // Mock: Nếu ko có DB thật thì set tạm, sau này dùng subscribeToUser thật
         const unsubscribe = subscribeToUser(userId, (user) => {
             if (user) setTargetUser(user);
         });
         return () => unsubscribe();
     }, [userId]);
 
-    // 2. Lấy tin nhắn (Dùng hàm getMessages từ service chat)
+    // 2. Lấy tin nhắn (Sử dụng Polling)
     useEffect(() => {
+        let isMounted = true;
+
         const loadMessages = async () => {
             if (!currentUser || !userId) return;
-            const msgs = await getMessages(currentUser.id, userId);
-            setMessages(msgs);
-            
-            // Scroll xuống dưới cùng khi mới load
-            setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+            try {
+                const fetchedMsgs = await getMessages(currentUser.id, userId);
+                if (!isMounted) return;
+
+                // CHỈ CẬP NHẬT NẾU CÓ TIN NHẮN MỚI
+                // So sánh độ dài hoặc ID tin nhắn cuối cùng để tránh render thừa
+                if (fetchedMsgs.length > messagesRef.current.length || 
+                    (fetchedMsgs.length > 0 && fetchedMsgs[fetchedMsgs.length - 1].id !== messagesRef.current[messagesRef.current.length - 1]?.id)) {
+                    
+                    setMessages(fetchedMsgs);
+                    
+                    // Chỉ scroll xuống nếu user đang ở gần đáy
+                    if (messagesContainerRef.current) {
+                        const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+                        const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+                        if (isNearBottom) {
+                            setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error("Lỗi tải tin nhắn:", error);
+            }
         };
         
-        loadMessages();
+        loadMessages(); // Load ngay lập tức
         
-        // (Tạm thời Mock nên dùng setInterval để giả lập realtime polling)
-        const interval = setInterval(loadMessages, 3000); 
-        return () => clearInterval(interval);
+        const interval = setInterval(loadMessages, 2000); // Polling mỗi 2s
+        return () => {
+            isMounted = false;
+            clearInterval(interval);
+        };
     }, [currentUser.id, userId]);
 
-    // ... (Các hàm handleScroll, scrollToBottom, auto resize textarea giữ nguyên) ...
+    // Scroll xuống đáy khi vào chat lần đầu
+    useLayoutEffect(() => {
+        if (messages.length > 0) {
+             scrollRef.current?.scrollIntoView({ behavior: 'auto' });
+        }
+    }, []); // Chỉ chạy 1 lần khi mount
+
     const handleScroll = () => {
         if (messagesContainerRef.current) {
             const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
@@ -107,29 +142,35 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
         return currentUser;
     };
 
-    // 3. Hàm gửi tin nhắn (Cập nhật để dùng service chat mới)
+    // 3. Hàm gửi tin nhắn (Đã sửa lỗi mất tin nhắn tạm)
     const handleSend = async (content: string, type: 'text' | 'image' = 'text') => {
         if (!content.trim() || !userId) return;
         
-        // Optimistic UI: Hiển thị tin nhắn ngay lập tức trước khi server phản hồi
+        const tempId = `temp_${Date.now()}`;
         const tempMsg: Message = {
-            id: `temp_${Date.now()}`,
+            id: tempId,
             senderId: currentUser.id,
             content: content,
             type: type,
             createdAt: new Date().toISOString(),
             isRead: false
         };
+
+        // Thêm tin nhắn tạm vào state NGAY LẬP TỨC
         setMessages(prev => [...prev, tempMsg]);
-        scrollToBottom();
+        
+        // Scroll ngay lập tức
+        setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
 
         try {
             const user = await ensureAuth();
-            // Gọi hàm sendMessage từ service chat
             await sendMessage(user.id, userId, content, type);
+            // Sau khi gửi thành công, lần polling tiếp theo sẽ cập nhật tin nhắn thật có ID thật
         } catch (error) {
             console.error("Gửi lỗi:", error);
-            // Xóa tin nhắn tạm nếu lỗi (trong thực tế)
+            // Xử lý lỗi: Có thể hiện thông báo hoặc xóa tin nhắn tạm
+            setMessages(prev => prev.filter(m => m.id !== tempId));
+            alert("Gửi tin nhắn thất bại. Vui lòng thử lại.");
         }
     };
 
@@ -164,7 +205,6 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
         try {
             setIsUploading(true);
             const user = await ensureAuth(); 
-            // Upload file (Service Storage vẫn dùng được bình thường)
             const downloadUrl = await uploadFile(file, `chat_images/${user.id}_${userId}`);
             await handleSend(downloadUrl, 'image');
         } catch (error) {
@@ -299,7 +339,8 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
                         </div>
                     );
                 })}
-                <div ref={scrollRef} />
+                {/* Dummy div để scroll xuống đáy */}
+                <div ref={scrollRef} className="h-1" />
             </div>
 
             {/* Scroll Down Button */}
