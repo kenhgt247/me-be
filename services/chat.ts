@@ -1,5 +1,6 @@
 import { Message } from '../types';
-import { db } from './firebase';
+// SỬA DÒNG NÀY: Dùng ../ để tìm file firebase.ts ở thư mục cha
+import { db } from '../firebase'; 
 import { 
   collection, addDoc, query, where, orderBy, getDocs 
 } from 'firebase/firestore';
@@ -30,12 +31,10 @@ export const getMessages = async (currentUserId: string, otherUserId: string): P
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => {
         const data = doc.data();
-        // Convert timestamp Firestore nếu cần, hoặc dùng string ISO như hiện tại
         return { id: doc.id, ...data } as Message;
     });
   } catch (error) {
     console.error("Lỗi lấy tin nhắn:", error);
-    // Nếu lỗi do chưa tạo Index, nó sẽ hiện link trong Console trình duyệt
     return [];
   }
 };
@@ -71,5 +70,4 @@ export const sendMessage = async (
   return { id: docRef.id, ...newMessageData } as Message;
 };
 
-// Hàm đánh dấu đã đọc (Có thể implement sau)
 export const markMessagesAsRead = async (chatId: string, userId: string) => {};
