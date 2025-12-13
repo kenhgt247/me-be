@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Question, Category, toSlug } from '../../types'; // Nhớ import Category
-// Nhớ import thêm các hàm category từ service
+// Import các hàm từ service
 import { 
   fetchAllQuestionsAdmin, 
   bulkUpdateQuestions, 
@@ -8,9 +8,10 @@ import {
   fetchCategories,
   addCategory,
   updateCategory,
-  deleteCategory
+  deleteCategory,
+  syncCategoriesFromCode // <-- Hàm đồng bộ mới
 } from '../../services/admin';
-import { Search, Eye, EyeOff, Trash2, Filter, Plus, X, Edit2, List, Save } from 'lucide-react';
+import { Search, Eye, EyeOff, Trash2, Filter, Plus, X, Edit2, List, Save, RefreshCw } from 'lucide-react';
 // @ts-ignore
 import { Link } from 'react-router-dom';
 
@@ -27,6 +28,20 @@ const CategoryModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const loadData = async () => {
     const data = await fetchCategories();
     setCategories(data);
+  };
+
+  // Hàm đồng bộ danh mục từ code cũ
+  const handleSync = async () => {
+      setLoading(true);
+      try {
+          const count = await syncCategoriesFromCode();
+          alert(`Đã đồng bộ thành công ${count} danh mục từ file code cũ!`);
+          await loadData();
+      } catch (e) {
+          alert("Lỗi đồng bộ: " + e);
+      } finally {
+          setLoading(false);
+      }
   };
 
   const handleAdd = async () => {
@@ -64,6 +79,15 @@ const CategoryModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         </div>
         
         <div className="p-4 max-h-[60vh] overflow-y-auto space-y-3">
+          
+          {/* NÚT ĐỒNG BỘ (MỚI THÊM) */}
+          <div className="mb-4 p-3 bg-blue-50 rounded-xl border border-blue-100 flex justify-between items-center">
+             <span className="text-xs text-blue-800 font-medium">Bạn có danh mục cũ trong code?</span>
+             <button onClick={handleSync} disabled={loading} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 hover:bg-blue-700 transition-colors disabled:opacity-50">
+                <RefreshCw size={12} className={loading ? "animate-spin" : ""} /> Đồng bộ ngay
+             </button>
+          </div>
+
           {/* Form thêm mới */}
           <div className="flex gap-2 mb-4">
             <input 
@@ -72,7 +96,7 @@ const CategoryModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               placeholder="Tên danh mục mới..." 
               className="flex-1 border p-2 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
             />
-            <button onClick={handleAdd} disabled={loading || !newCatName} className="bg-blue-600 text-white px-3 py-2 rounded-lg font-bold text-sm disabled:opacity-50">Thêm</button>
+            <button onClick={handleAdd} disabled={loading || !newCatName} className="bg-blue-600 text-white px-3 py-2 rounded-lg font-bold text-sm disabled:opacity-50 hover:bg-blue-700 transition-colors">Thêm</button>
           </div>
 
           {/* Danh sách */}
@@ -84,18 +108,18 @@ const CategoryModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     <input 
                       value={editName} 
                       onChange={e => setEditName(e.target.value)} 
-                      className="flex-1 border p-1 rounded text-sm"
+                      className="flex-1 border p-1 rounded text-sm outline-none focus:border-blue-500"
                       autoFocus
                     />
-                    <button onClick={() => handleUpdate(cat.id)} className="text-green-600"><Save size={18}/></button>
-                    <button onClick={() => setEditingId(null)} className="text-gray-400"><X size={18}/></button>
+                    <button onClick={() => handleUpdate(cat.id)} className="text-green-600 hover:bg-green-50 p-1 rounded"><Save size={18}/></button>
+                    <button onClick={() => setEditingId(null)} className="text-gray-400 hover:bg-gray-200 p-1 rounded"><X size={18}/></button>
                   </div>
                 ) : (
                   <>
                     <span className="font-medium text-gray-700">{cat.name}</span>
                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => { setEditingId(cat.id); setEditName(cat.name); }} className="text-blue-500 hover:bg-white p-1 rounded"><Edit2 size={16}/></button>
-                      <button onClick={() => handleDelete(cat.id)} className="text-red-500 hover:bg-white p-1 rounded"><Trash2 size={16}/></button>
+                      <button onClick={() => { setEditingId(cat.id); setEditName(cat.name); }} className="text-blue-500 hover:bg-white p-1 rounded transition-colors"><Edit2 size={16}/></button>
+                      <button onClick={() => handleDelete(cat.id)} className="text-red-500 hover:bg-white p-1 rounded transition-colors"><Trash2 size={16}/></button>
                     </div>
                   </>
                 )}
