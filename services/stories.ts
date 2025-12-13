@@ -1,79 +1,69 @@
 import { Story, User } from '../types';
+import { db } from './firebase'; 
+import { uploadFile } from './storage';
+import { 
+  collection, addDoc, getDocs, query, where, orderBy, doc, updateDoc, arrayUnion 
+} from 'firebase/firestore';
 
-// Dữ liệu giả lập ban đầu (Database giả)
-let MOCK_DB_STORIES: Story[] = [
-  {
-    id: 's1',
-    userId: 'u2',
-    userName: 'Bác sĩ Thảo',
-    userAvatar: 'https://i.pravatar.cc/150?u=b',
-    userIsExpert: true,
-    mediaUrl: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=500&q=80',
-    mediaType: 'image',
-    createdAt: new Date().toISOString(), // Vừa đăng
-    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    viewers: [],
-    likes: []
-  },
-  {
-    id: 's2',
-    userId: 'u3',
-    userName: 'Mẹ Bắp',
-    userAvatar: 'https://i.pravatar.cc/150?u=c',
-    mediaUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500&q=80',
-    mediaType: 'image',
-    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // Đăng 2 tiếng trước
-    expiresAt: new Date(Date.now() + 22 * 60 * 60 * 1000).toISOString(),
-    viewers: [],
-    likes: []
-  }
-];
-
-// 1. Lấy danh sách Story (Chỉ lấy tin còn hạn)
+// 1. Lấy danh sách Story từ Firebase
 export const fetchStories = async (currentUser: User): Promise<Story[]> => {
-  // Giả lập độ trễ mạng
-  await new Promise(resolve => setTimeout(resolve, 500));
+  try {
+    const now = new Date().toISOString();
+    const storiesRef = collection(db, 'stories');
+    
+    // Lấy các story chưa hết hạn (expiresAt > bây giờ)
+    // Lưu ý: Nếu Firebase báo lỗi Index, hãy check console và bấm vào link để tạo Index
+    const q = query(
+      storiesRef, 
+      where('expiresAt', '>', now),
+      orderBy('expiresAt', 'asc') // Firestore bắt buộc sort field filter trước
+    );
 
-  const now = new Date().toISOString();
-  
-  // Lọc tin chưa hết hạn
-  const activeStories = MOCK_DB_STORIES.filter(s => s.expiresAt > now);
-  
-  // Sắp xếp tin mới nhất lên đầu
-  return activeStories.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const snapshot = await getDocs(q);
+    
+    // Map dữ liệu và sort lại theo thời gian tạo (Mới nhất lên đầu)
+    const stories = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Story));
+    return stories.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  } catch (error) {
+    console.error("Lỗi lấy stories:", error);
+    return [];
+  }
 };
 
-// 2. Đăng Story mới
+// 2. Đăng Story mới lên Firebase
 export const createStory = async (user: User, file: File): Promise<Story> => {
-  await new Promise(resolve => setTimeout(resolve, 1000)); // Giả lập upload lâu hơn chút
+  // Upload ảnh lên Storage
+  const path = `stories/${user.id}/${Date.now()}_${file.name}`;
+  const mediaUrl = await uploadFile(file, path);
 
-  // Giả lập upload ảnh (Trong thực tế bạn sẽ upload lên Firebase/AWS S3 lấy về URL)
-  const fakeImageUrl = URL.createObjectURL(file);
-
-  const newStory: Story = {
-    id: `s_${Date.now()}`,
+  const newStoryData = {
     userId: user.id,
     userName: user.name,
     userAvatar: user.avatar,
-    userIsExpert: user.isExpert,
-    mediaUrl: fakeImageUrl,
-    mediaType: 'image', // Tạm thời chỉ hỗ trợ ảnh
+    userIsExpert: !!user.isExpert,
+    mediaUrl: mediaUrl,
+    mediaType: 'image' as const, // Ép kiểu string thành literal type
     createdAt: new Date().toISOString(),
-    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Hết hạn sau 24h
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24h
     viewers: [],
     likes: []
   };
 
-  // Lưu vào DB giả
-  MOCK_DB_STORIES.unshift(newStory);
+  // Lưu thông tin vào Firestore
+  const docRef = await addDoc(collection(db, 'stories'), newStoryData);
   
-  return newStory;
+  return { id: docRef.id, ...newStoryData };
 };
 
-// 3. Đánh dấu đã xem
+// 3. Đánh dấu đã xem (Realtime Update)
 export const markStoryViewed = async (storyId: string, userId: string) => {
-  const story = MOCK_DB_STORIES.find(s => s.id === storyId);
-  if (story && !story.viewers.includes(userId)) {
-    story.viewers.push(userId);
+  try {
+    const storyRef = doc(db, 'stories', storyId);
+    // Dùng arrayUnion để thêm userId vào mảng viewers (không bị trùng lặp)
+    await updateDoc(storyRef, {
+      viewers: arrayUnion(userId)
+    });
+  } catch (error) {
+    console.error("Lỗi mark view:", error);
   }
 };
