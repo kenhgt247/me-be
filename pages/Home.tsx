@@ -1,107 +1,122 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 // @ts-ignore
 import { Link } from 'react-router-dom';
 import { 
   Search, MessageCircle, Heart, HelpCircle, Clock, Flame, 
   MessageSquareOff, ShieldCheck, ChevronRight, Sparkles, X, 
   User as UserIcon, BookOpen, FileText, Download, LayoutGrid, 
-  ExternalLink, MoreHorizontal, Plus, Send, Image as ImageIcon 
+  ExternalLink, MoreHorizontal, Plus, Send, Image as ImageIcon, Loader2 
 } from 'lucide-react';
-import { Question, User, toSlug, BlogPost, Document, AdConfig } from '../types';
+import { Question, User, toSlug, BlogPost, Document, AdConfig, Story } from '../types';
 import { AdBanner } from '../components/AdBanner';
 import { subscribeToAdConfig, getAdConfig } from '../services/ads';
 import { fetchPublishedPosts } from '../services/blog';
 import { fetchDocuments } from '../services/documents';
-import { ExpertPromoBox } from '../components/ExpertPromoBox'; // Giả sử bạn đã tách component này
+import { ExpertPromoBox } from '../components/ExpertPromoBox';
+import { fetchStories, createStory, markStoryViewed } from '../services/stories'; 
+import { sendMessage } from '../services/chat'; 
 
 interface HomeProps {
   questions: Question[];
   categories: string[];
-  currentUser: User; // Cần thông tin người dùng hiện tại để hiển thị avatar ở nút "Tạo tin"
+  currentUser: User;
 }
 
 const PAGE_SIZE = 20;
 
-// --- MOCK DATA CHO STORIES ---
-const MOCK_STORIES = [
-  { id: '1', userId: 'u1', username: 'Minh Anh', avatar: 'https://i.pravatar.cc/150?u=a', image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&q=80', viewed: false },
-  { id: '2', userId: 'u2', username: 'Bs. Thảo', avatar: 'https://i.pravatar.cc/150?u=b', image: 'https://images.unsplash.com/photo-1519681393798-2f6192918e48?w=400&q=80', viewed: true },
-  { id: '3', userId: 'u3', username: 'Mẹ Bắp', avatar: 'https://i.pravatar.cc/150?u=c', image: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=400&q=80', viewed: false },
-  { id: '4', userId: 'u4', username: 'Gia đình nhỏ', avatar: 'https://i.pravatar.cc/150?u=d', image: 'https://images.unsplash.com/photo-1511895426328-dc8714191300?w=400&q=80', viewed: false },
-];
-
-// --- COMPONENT: STORY VIEWER (XEM TIN & CHAT) ---
-const StoryViewer = ({ story, onClose }: { story: any, onClose: () => void }) => {
+// --- COMPONENT: STORY VIEWER (XEM TIN & CHAT TRỰC TIẾP) ---
+const StoryViewer = ({ story, onClose, currentUser }: { story: Story, onClose: () => void, currentUser: User }) => {
   const [progress, setProgress] = useState(0);
   const [replyText, setReplyText] = useState('');
+  const [isSending, setIsSending] = useState(false);
 
-  // Tự động chạy thanh thời gian (Progress Bar)
+  // Đánh dấu đã xem
+  useEffect(() => {
+    markStoryViewed(story.id, currentUser.id);
+  }, [story.id, currentUser.id]);
+
+  // Thanh thời gian chạy tự động
   useEffect(() => {
     const timer = setInterval(() => {
       setProgress((prev) => {
         if (prev >= 100) {
           clearInterval(timer);
-          onClose(); // Đóng khi hết giờ
+          onClose();
           return 100;
         }
-        return prev + 1; // Tốc độ chạy
+        return prev + 1; // Tốc độ chạy của story
       });
     }, 50); 
     return () => clearInterval(timer);
   }, [onClose]);
 
-  const handleSendReply = () => {
-      if(!replyText.trim()) return;
-      // TODO: Kết nối với API chat có sẵn của bạn ở đây
-      console.log(`Gửi tin nhắn đến ${story.username}: ${replyText}`);
-      setReplyText('');
-      alert('Đã gửi tin nhắn!'); // Demo phản hồi
+  // Xử lý gửi tin nhắn trả lời Story
+  const handleSendReply = async () => {
+      if(!replyText.trim() || isSending) return;
+      setIsSending(true);
+      try {
+          // Gọi hàm sendMessage từ file services/chat.ts
+          await sendMessage(
+              currentUser.id, 
+              story.userId, 
+              replyText, 
+              'story_reply', 
+              { storyId: story.id, snapshotUrl: story.mediaUrl }
+          );
+          setReplyText('');
+          alert('Đã gửi tin nhắn!'); // Thông báo hoặc hiệu ứng gửi thành công
+      } catch (e) {
+          console.error(e);
+          alert('Gửi thất bại');
+      } finally {
+          setIsSending(false);
+      }
   };
 
   return (
     <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center animate-fade-in">
-      {/* Container mô phỏng màn hình điện thoại hoặc full màn hình */}
       <div className="relative w-full h-full md:max-w-md md:h-[90vh] md:rounded-2xl overflow-hidden bg-gray-900 shadow-2xl">
         
-        {/* 1. Thanh Tiến Trình */}
+        {/* 1. Progress Bar */}
         <div className="absolute top-4 left-2 right-2 flex gap-1 z-20">
           <div className="h-1 flex-1 bg-white/30 rounded-full overflow-hidden">
             <div className="h-full bg-white transition-all duration-100 ease-linear" style={{ width: `${progress}%` }} />
           </div>
         </div>
 
-        {/* 2. Header (Thông tin người đăng) */}
+        {/* 2. Header: Info người đăng */}
         <div className="absolute top-8 left-4 right-4 flex items-center justify-between z-20 text-white">
           <div className="flex items-center gap-2">
-            <img src={story.avatar} className="w-9 h-9 rounded-full border border-white/50 object-cover" alt="" />
+            <img src={story.userAvatar} className="w-9 h-9 rounded-full border border-white/50 object-cover" alt="avatar"/>
             <div className="flex flex-col">
-                <span className="font-bold text-sm text-shadow">{story.username}</span>
-                <span className="text-[10px] text-white/80">2 giờ trước</span>
+                <span className="font-bold text-sm text-shadow">{story.userName}</span>
+                <span className="text-[10px] text-white/80">Vừa xong</span>
             </div>
           </div>
           <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition-colors"><X size={24} /></button>
         </div>
 
-        {/* 3. Nội dung chính (Ảnh/Video) */}
+        {/* 3. Nội dung ảnh/video */}
         <div className="absolute inset-0 flex items-center justify-center bg-black">
-            <img src={story.image} className="w-full h-full object-cover" alt="story" />
+            <img src={story.mediaUrl} className="w-full h-full object-cover" alt="content" />
+            {/* Gradient để text dễ đọc hơn */}
             <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60 pointer-events-none"></div>
         </div>
 
-        {/* 4. Footer (Ô Chat Kết Nối) */}
+        {/* 4. Footer: Ô nhập tin nhắn kết nối Chat */}
         <div className="absolute bottom-0 left-0 right-0 z-30 p-4 pb-6 flex items-center gap-3">
           <div className="flex-1 relative">
               <input 
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
-                placeholder={`Gửi tin nhắn cho ${story.username}...`} 
+                placeholder={`Gửi tin nhắn cho ${story.userName}...`} 
                 className="w-full bg-transparent border border-white/60 rounded-full pl-5 pr-10 py-3 text-white placeholder-white/70 text-sm outline-none focus:border-white focus:bg-black/20 transition-all backdrop-blur-sm" 
               />
           </div>
           
           {replyText.trim() ? (
-              <button onClick={handleSendReply} className="p-3 bg-primary text-white rounded-full hover:bg-primary/90 transition-transform active:scale-95">
-                  <Send size={20} className="ml-0.5" />
+              <button onClick={handleSendReply} disabled={isSending} className="p-3 bg-primary text-white rounded-full hover:bg-primary/90 transition-transform active:scale-95 disabled:opacity-50">
+                  {isSending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} className="ml-0.5" />}
               </button>
           ) : (
               <button className="p-3 hover:bg-white/10 rounded-full text-white transition-colors active:scale-90">
@@ -115,11 +130,11 @@ const StoryViewer = ({ story, onClose }: { story: any, onClose: () => void }) =>
   );
 };
 
-// --- COMPONENT ẢNH FACEBOOK STYLE ---
+// --- CÁC COMPONENT PHỤ (Giữ nguyên style cũ) ---
+
 const FBImageGrid: React.FC<{ images: string[] }> = ({ images }) => {
   if (!images || images.length === 0) return null;
   const count = images.length;
-  // Cập nhật Dark Mode cho khung ảnh: border và background
   const containerClass = "mt-3 rounded-xl overflow-hidden border border-gray-100 dark:border-dark-border bg-gray-50 dark:bg-slate-800";
   
   if (count === 1) return <div className={containerClass}><img src={images[0]} className="w-full h-64 object-cover" loading="lazy" /></div>;
@@ -128,7 +143,6 @@ const FBImageGrid: React.FC<{ images: string[] }> = ({ images }) => {
   return <div className={`${containerClass} grid grid-cols-2 gap-1 h-64`}><img src={images[0]} className="w-full h-full object-cover" loading="lazy" /><div className="grid grid-rows-2 gap-1 h-full"><img src={images[1]} className="w-full h-full object-cover" loading="lazy" /><div className="relative w-full h-full"><img src={images[2]} className="w-full h-full object-cover" loading="lazy" />{count > 3 && (<div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white font-bold text-xl backdrop-blur-[2px]">+{count - 3}</div>)}</div></div></div>;
 };
 
-// --- COMPONENT TAB TÌM KIẾM ---
 const SearchTabs = ({ activeTab, onChange, counts }: { activeTab: string, onChange: (t: string) => void, counts: any }) => {
   const tabs = [
     { id: 'all', label: 'Tất cả', icon: LayoutGrid },
@@ -170,28 +184,51 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
   const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
 
-  // State quản lý xem Story nào đang được mở
-  const [activeStory, setActiveStory] = useState<any | null>(null);
+  // --- LOGIC STORIES ---
+  const [stories, setStories] = useState<Story[]>([]);
+  const [activeStory, setActiveStory] = useState<Story | null>(null);
+  const [isUploadingStory, setIsUploadingStory] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
       const unsub = subscribeToAdConfig(config => setAdConfig(config));
       Promise.all([
           fetchPublishedPosts('all', 50),
           fetchDocuments('all', 50),
-          getAdConfig()
-      ]).then(([blogs, docs, ads]) => {
+          getAdConfig(),
+          fetchStories(currentUser) // Fetch stories từ service
+      ]).then(([blogs, docs, ads, fetchedStories]) => {
           if (blogs) setBlogPosts(blogs);
           if (docs) setDocuments(docs);
           if (ads) setAdConfig(ads);
+          if (fetchedStories) setStories(fetchedStories);
       });
       return () => unsub();
-  }, []);
+  }, [currentUser]); // Chạy lại khi user thay đổi để lấy story của người mình follow
+
+  // Xử lý tạo tin mới
+  const handleCreateStory = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      setIsUploadingStory(true);
+      try {
+          const newStory = await createStory(currentUser, file);
+          setStories(prev => [newStory, ...prev]);
+          alert("Đã thêm vào tin của bạn!");
+      } catch (error) {
+          alert("Lỗi khi đăng tin");
+      } finally {
+          setIsUploadingStory(false);
+          if(e.target) e.target.value = '';
+      }
+  };
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
   }, [activeCategory, viewFilter, searchQuery, searchTab]);
 
-  // --- LOGIC SEARCH ---
+  // --- LOGIC SEARCH (Giữ nguyên) ---
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return { questions: [], blogs: [], docs: [], users: [] };
     const query = searchQuery.toLowerCase().trim();
@@ -227,7 +264,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
     return { questions: matchedQuestions, blogs: matchedBlogs, docs: matchedDocs, users: Array.from(usersMap.values()) };
   }, [searchQuery, questions, blogPosts, documents]);
 
-  // --- LOGIC FILTER ---
+  // --- LOGIC FILTER (Giữ nguyên) ---
   let displayList = [...questions];
   if (!searchQuery) {
       if (activeCategory !== 'Tất cả') {
@@ -298,7 +335,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
     <div className="space-y-4 animate-fade-in min-h-screen">
       
       {/* 1. MỞ MODAL STORY (KHOẢNH KHẮC) NẾU CÓ ACTIVE */}
-      {activeStory && <StoryViewer story={activeStory} onClose={() => setActiveStory(null)} />}
+      {activeStory && <StoryViewer story={activeStory} onClose={() => setActiveStory(null)} currentUser={currentUser} />}
 
       {/* 2. SEARCH BAR (Sticky Header) */}
       <div className="px-4 md:px-0 sticky top-[68px] md:top-20 z-30 py-2 md:pt-0 -mx-4 md:mx-0 bg-[#F7F7F5]/95 dark:bg-dark-bg/95 md:bg-transparent backdrop-blur-sm transition-all">
@@ -365,47 +402,57 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
       /* --- HOME FEED --- */
       <div className="space-y-4">
            
-           {/* --- 3. STORIES BAR (MỚI) --- */}
-           {/* Thanh hiển thị tin của bạn bè, giống Zalo/Facebook */}
+           {/* --- 3. STORIES BAR (NEW) --- */}
            <div className="px-4 md:px-0">
               <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 snap-x">
                  
                  {/* Card 1: Tạo Tin Mới */}
-                 <div className="snap-start shrink-0 relative group cursor-pointer w-[85px] h-[130px] md:w-[100px] md:h-[150px]">
+                 <div className="snap-start shrink-0 relative group cursor-pointer w-[85px] h-[130px] md:w-[100px] md:h-[150px]" onClick={() => fileInputRef.current?.click()}>
                     <div className="w-full h-full rounded-2xl overflow-hidden relative border border-gray-200 dark:border-slate-700 bg-white dark:bg-dark-card shadow-sm">
-                       {/* Avatar user hiện tại */}
                        <img src={currentUser?.avatar || 'https://via.placeholder.com/150'} className="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-500" />
                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                       
+                       {/* Input File Ẩn */}
+                       <input 
+                           type="file" 
+                           ref={fileInputRef} 
+                           className="hidden" 
+                           accept="image/*" 
+                           onChange={handleCreateStory} 
+                       />
+
                        <div className="absolute bottom-2 left-0 right-0 flex flex-col items-center">
                           <div className="bg-primary text-white rounded-full p-1 border-2 border-white dark:border-dark-card mb-1 transition-transform group-hover:scale-110">
-                             <Plus size={16} />
+                             {isUploadingStory ? <Loader2 size={16} className="animate-spin"/> : <Plus size={16} />}
                           </div>
                           <span className="text-[10px] font-bold text-white">Tạo tin</span>
                        </div>
                     </div>
                  </div>
 
-                 {/* Các Card Tin của bạn bè */}
-                 {MOCK_STORIES.map((story) => (
-                    <div key={story.id} onClick={() => setActiveStory(story)} className="snap-start shrink-0 relative group cursor-pointer w-[85px] h-[130px] md:w-[100px] md:h-[150px]">
-                       <div className={`w-full h-full rounded-2xl overflow-hidden relative border-[2px] p-[2px] transition-all ${story.viewed ? 'border-gray-200 dark:border-slate-700' : 'border-blue-500'}`}>
-                          <div className="w-full h-full rounded-xl overflow-hidden relative">
-                             <img src={story.image} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                             <div className="absolute inset-0 bg-black/20 hover:bg-black/10 transition-colors"></div>
-                             <div className="absolute top-2 left-2 w-8 h-8 rounded-full border-2 border-blue-500 overflow-hidden shadow-md">
-                                <img src={story.avatar} className="w-full h-full object-cover" />
-                             </div>
-                             <span className="absolute bottom-2 left-2 right-2 text-[10px] font-bold text-white truncate text-shadow">{story.username}</span>
-                          </div>
-                       </div>
-                    </div>
-                 ))}
+                 {/* Danh sách Tin (Load từ API) */}
+                 {stories.map((story) => {
+                    const isViewed = story.viewers.includes(currentUser.id);
+                    return (
+                        <div key={story.id} onClick={() => setActiveStory(story)} className="snap-start shrink-0 relative group cursor-pointer w-[85px] h-[130px] md:w-[100px] md:h-[150px]">
+                           <div className={`w-full h-full rounded-2xl overflow-hidden relative border-[2px] p-[2px] transition-all ${isViewed ? 'border-gray-200 dark:border-slate-700' : 'border-blue-500'}`}>
+                              <div className="w-full h-full rounded-xl overflow-hidden relative">
+                                 <img src={story.mediaUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                 <div className="absolute inset-0 bg-black/20 hover:bg-black/10 transition-colors"></div>
+                                 <div className="absolute top-2 left-2 w-8 h-8 rounded-full border-2 border-blue-500 overflow-hidden shadow-md">
+                                    <img src={story.userAvatar} className="w-full h-full object-cover" />
+                                 </div>
+                                 <span className="absolute bottom-2 left-2 right-2 text-[10px] font-bold text-white truncate text-shadow">{story.userName}</span>
+                              </div>
+                           </div>
+                        </div>
+                    );
+                 })}
               </div>
            </div>
 
-           {/* EXPERT PROMO - Giữ nguyên Gradient */}
+           {/* EXPERT PROMO */}
            <div className="bg-gradient-to-br from-primary to-[#26A69A] rounded-3xl p-6 text-white shadow-xl shadow-primary/20 relative overflow-hidden mx-4 md:mx-0">
-                {/* ... (Giữ nguyên nội dung Promo) */}
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
                 <div className="relative z-10 flex justify-between items-center">
                     <div>
@@ -434,7 +481,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
                             <Link to={`/blog/${post.slug}`} key={post.id} 
                                 className="snap-start flex-shrink-0 w-64 bg-white dark:bg-dark-card rounded-2xl p-3 border border-gray-100 dark:border-dark-border shadow-sm hover:shadow-md transition-all active:scale-95 flex flex-col">
                                 <div className="aspect-[2/1] rounded-xl bg-gray-100 dark:bg-slate-700 mb-3 overflow-hidden relative shrink-0 flex items-center justify-center">
-                                    {post.coverImageUrl ? <img src={post.coverImageUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-3xl bg-gradient-to-br from-blue-50 to-purple-50 dark:from-slate-700 dark:to-slate-600">{post.iconEmoji || '📝'}</div>}
+                                    {post.coverImageUrl ? <img src={post.coverImageUrl} className="w-full h-full object-cover" loading="lazy" /> : <div className="w-full h-full flex items-center justify-center text-3xl bg-gradient-to-br from-blue-50 to-purple-50 dark:from-slate-700 dark:to-slate-600">{post.iconEmoji || '📝'}</div>}
                                 </div>
                                 <h4 className="font-bold text-sm text-textDark dark:text-dark-text line-clamp-2 mb-1 leading-snug flex-1">{post.title}</h4>
                                 <div className="flex items-center gap-1 mt-auto pt-2">
