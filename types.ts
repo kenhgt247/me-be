@@ -4,15 +4,14 @@ export interface User {
   avatar: string;
   isExpert: boolean;
   expertStatus?: 'none' | 'pending' | 'approved' | 'rejected';
-  specialty?: string; // e.g., "Bác sĩ Nhi khoa", "Chuyên gia Dinh dưỡng"
+  specialty?: string; 
   workplace?: string;
   isAdmin?: boolean;
   isBanned?: boolean;
   bio?: string;
   
-  // --- CÁC TRƯỜNG MỚI CHO PROFILE CHUYÊN NGHIỆP ---
-  username?: string; // Tên định danh (VD: "bacsihung")
-  coverUrl?: string; // Ảnh bìa (Cover Image)
+  username?: string; 
+  coverUrl?: string; 
   
   points?: number;
   joinedAt?: string;
@@ -69,18 +68,17 @@ export interface Notification {
   createdAt: string;
 }
 
-// --- CẬP NHẬT: THÊM LOGIC TIN NHẮN TỪ STORY ---
+// --- SỬA Ở ĐÂY: THÊM receiverId ---
 export interface Message {
   id: string;
   senderId: string;
+  receiverId: string; // <--- BẮT BUỘC PHẢI CÓ ĐỂ BIẾT GỬI CHO AI
   content: string;
   createdAt: string;
   isRead: boolean;
-  // Thêm 'story_reply' để biết đây là tin nhắn trả lời từ Story
   type: 'text' | 'image' | 'story_reply'; 
-  // Các trường bổ sung nếu type là 'story_reply'
-  storyId?: string;       // ID của story gốc
-  storySnapshotUrl?: string; // Ảnh nhỏ của story để hiển thị trong đoạn chat
+  storyId?: string;       
+  storySnapshotUrl?: string; 
 }
 
 export interface ChatSession {
@@ -93,26 +91,21 @@ export interface ChatSession {
   unreadCount: { [uid: string]: number };
 }
 
-// --- THÊM MỚI: STORY / MOMENTS MODULE ---
 export interface Story {
   id: string;
-  userId: string;          // Người đăng
-  userName: string;        // Tên hiển thị (để load nhanh không cần join bảng User)
-  userAvatar: string;      // Avatar người đăng
-  userIsExpert?: boolean;  // Để hiện tích xanh nếu là chuyên gia
-  
-  mediaUrl: string;        // Đường dẫn ảnh/video
+  userId: string;          
+  userName: string;        
+  userAvatar: string;      
+  userIsExpert?: boolean;  
+  mediaUrl: string;        
   mediaType: 'image' | 'video';
-  caption?: string;        // Chú thích (nếu có)
-  
-  createdAt: string;       // Thời gian tạo (ISO string)
-  expiresAt: string;       // Thời gian hết hạn (thường là createdAt + 24h)
-  
-  viewers: string[];       // Danh sách ID người đã xem
-  likes: string[];         // Danh sách ID người đã thả tim
+  caption?: string;        
+  createdAt: string;       
+  expiresAt: string;       
+  viewers: string[];       
+  likes: string[];         
 }
 
-// --- GAME TYPES ---
 export type GameCategory = string; 
 export type GameType = 'quiz' | 'html5' | 'story' | 'ai-story';
 export type GameOrientation = 'portrait' | 'landscape' | 'auto';
@@ -133,10 +126,8 @@ export interface Game {
   gameType: GameType;
   category: GameCategory;
   orientation?: GameOrientation;
-  
   gameUrl?: string;
   storyContent?: string;
-  
   minAge: number;
   maxAge: number;
   isActive: boolean;
@@ -181,7 +172,6 @@ export interface Report {
   status: 'open' | 'resolved' | 'dismissed';
 }
 
-// --- ADVERTISING ---
 export interface AdConfig {
   isEnabled: boolean;
   provider: 'adsense' | 'custom';
@@ -190,7 +180,16 @@ export interface AdConfig {
   customBannerUrl?: string;
   customTargetUrl?: string;
   frequency: number;
-
+  homeAd?: {
+    enabled: boolean;
+    frequency: number;
+    title: string;
+    content: string;
+    imageUrl: string;
+    ctaText: string;
+    link: string;
+    sponsorName: string;
+  };
   sidebarAd?: {
     enabled: boolean;
     title: string;
@@ -199,7 +198,6 @@ export interface AdConfig {
     link: string;
     gradient: string;
   };
-
   blogFeedAd?: {
     enabled: boolean;
     frequency: number;
@@ -210,7 +208,6 @@ export interface AdConfig {
     link: string;
     sponsorName: string;
   };
-
   documentAd?: {
     enabled: boolean;
     frequency: number;
@@ -221,7 +218,6 @@ export interface AdConfig {
     link: string;
     sponsorName: string;
   };
-
   questionDetailAd?: {
     enabled: boolean;
     title: string;
@@ -233,7 +229,6 @@ export interface AdConfig {
   };
 }
 
-// --- BLOG MODULE TYPES ---
 export interface BlogCategory {
   id: string;
   name: string;
@@ -251,19 +246,15 @@ export interface BlogPost {
   content: string;
   coverImageUrl?: string;
   iconEmoji?: string;
-  
   youtubeUrl?: string;
   sourceUrl?: string;
   sourceLabel?: string;
-  
   categoryId?: string;
   tags?: string[];
-  
   authorId: string;
   authorName: string;
   authorAvatar: string;
   authorIsExpert: boolean;
-  
   status: 'draft' | 'published';
   views: number;
   createdAt: string;
@@ -282,7 +273,6 @@ export interface BlogComment {
   updatedAt: string;
 }
 
-// --- DOCUMENT MODULE TYPES ---
 export interface DocumentCategory {
   id: string;
   name: string;
@@ -297,28 +287,22 @@ export interface Document {
   title: string;
   slug: string;
   description: string;
-  
   isExternal?: boolean; 
   externalLink?: string; 
   fileUrl?: string;      
-  
   fileType: 'pdf' | 'docx' | 'xlsx' | 'pptx' | 'image' | 'video' | 'link' | 'other';
   fileName?: string;
   fileSize?: number;
-  
   categoryId: string;
   tags: string[];
-  
   authorId: string;
   authorName: string;
   authorAvatar: string;
   authorIsExpert: boolean;
-  
   views: number;
   downloads: number;
   rating: number; 
   ratingCount: number;
-  
   createdAt: string;
   updatedAt: string;
 }
@@ -357,8 +341,6 @@ export const DEFAULT_GAME_CATEGORIES: CategoryDef[] = [
 ];
 
 export const GAME_CATEGORIES = DEFAULT_GAME_CATEGORIES;
-
-// --- UTILS FOR SLUG ---
 
 export const toSlug = (title: string, id?: string) => {
   if (!title) return '';
