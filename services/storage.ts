@@ -1,28 +1,17 @@
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-// SỬA LẠI DÒNG NÀY:
+// SỬA ĐÚNG TÊN FILE CẤU HÌNH
 import { storage } from "../firebaseConfig"; 
 
-/**
- * Uploads a file to Firebase Storage and returns the download URL.
- */
 export const uploadFile = async (file: File, folder: string): Promise<string> => {
-  if (!storage) {
-    console.error("Storage not initialized");
-    return "";
-  }
+  if (!storage) { console.error("Storage not initialized"); return ""; }
 
   try {
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9.]/g, "_").toLowerCase();
     const uniqueName = `${Date.now()}_${Math.floor(Math.random() * 1000)}_${sanitizedName}`;
-    
     const storageRef = ref(storage, `${folder}/${uniqueName}`);
     
-    const metadata = {
-      contentType: file.type,
-    };
-
+    const metadata = { contentType: file.type };
     const snapshot = await uploadBytes(storageRef, file, metadata);
-    
     const downloadURL = await getDownloadURL(snapshot.ref);
     return downloadURL;
   } catch (error) {
@@ -37,8 +26,5 @@ export const uploadMultipleFiles = async (files: File[], folder: string): Promis
     const uploadPromises = files.map(file => uploadFile(file, folder));
     const urls = await Promise.all(uploadPromises);
     return urls.filter(url => url !== "");
-  } catch (error) {
-    console.error("Error uploading multiple files:", error);
-    throw error;
-  }
+  } catch (error) { console.error("Error uploading multiple files:", error); throw error; }
 };
