@@ -1,14 +1,20 @@
 import { useEffect } from "react";
 // @ts-ignore
-import { useLocation } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 
 export default function ScrollToTop() {
   const { pathname } = useLocation();
+  const params = useParams();
 
   useEffect(() => {
-    // Mỗi khi đường dẫn (pathname) thay đổi -> Cuộn lên đầu (0, 0)
-    window.scrollTo(0, 0);
-  }, [pathname]);
+    // Sử dụng window.scrollTo với tùy chọn behavior: 'instant'
+    // Để ghi đè hiệu ứng 'smooth' của CSS
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "instant" // QUAN TRỌNG: Nhảy ngay lập tức, không trượt
+    });
+  }, [pathname, params]); // Chạy khi đổi link hoặc đổi tham số (slug)
 
   return null;
 }
