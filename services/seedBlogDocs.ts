@@ -11,7 +11,6 @@ import { db } from '../firebaseConfig';
 // 1. DATASETS (DỮ LIỆU MẪU)
 // ==========================================
 
-// 5 Chuyên gia mẫu
 const EXPERT_SEEDS = [
     { name: "BS.CKII Nguyễn Văn Chương", title: "Trưởng khoa Nhi", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=Felix" },
     { name: "ThS.BS Lê Thị Lan", title: "Viện Dinh dưỡng", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=Aneka" },
@@ -43,61 +42,57 @@ const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.len
 const getRandomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 const createSlug = (str: string) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d").replace(/[^0-9a-z-\s]/g, "").replace(/(\s+)/g, "-").replace(/^-+|-+$/g, "") + "-" + Date.now();
 
-// Hàm log an toàn
 const safeLog = (logger: ((msg: string) => void) | undefined, message: string) => {
     if (typeof logger === 'function') logger(message);
     else console.log(message);
 };
 
+// Hàm nội bộ: Tạo hoặc lấy danh sách chuyên gia giả
+const ensureExperts = (batch: any) => {
+    const experts = [];
+    for (let i = 0; i < EXPERT_SEEDS.length; i++) {
+        const seed = EXPERT_SEEDS[i];
+        const expertId = `fake_expert_${i}`;
+        const expertData = {
+            id: expertId,
+            name: seed.name,
+            email: `expert${i}@asking.vn`,
+            avatar: seed.avatar,
+            bio: `Chuyên gia ${seed.title} với 10 năm kinh nghiệm.`,
+            isExpert: true,
+            expertStatus: 'approved',
+            isAdmin: false,
+            isFake: true,
+            createdAt: serverTimestamp()
+        };
+        batch.set(doc(db, 'users', expertId), expertData);
+        experts.push(expertData);
+    }
+    return experts;
+};
+
 // ==========================================
-// 3. MAIN FUNCTION (CHẠY 1 LỆNH DUY NHẤT)
+// 3. EXPORTED FUNCTIONS (TÁCH RIÊNG ĐỂ KHỚP VỚI SEEDDATA.TSX)
 // ==========================================
 
+// --- HÀM 1: SINH BLOG ---
 export const generateFakeBlogs = async (onLog?: (msg: string) => void) => {
     if (!db) return;
     const auth = getAuth();
-    
-    // Yêu cầu quyền Admin để tạo dữ liệu cho người khác
     if (!auth.currentUser) {
         safeLog(onLog, "❌ Lỗi: Bạn chưa đăng nhập Admin.");
         return;
     }
 
-    safeLog(onLog, "🚀 Bắt đầu quy trình sinh dữ liệu chuẩn...");
+    safeLog(onLog, "🚀 Đang sinh Blog (kèm 5 Chuyên gia)...");
 
     try {
         const batch = writeBatch(db);
 
-        // --- BƯỚC 1: TẠO 5 CHUYÊN GIA GIẢ (Vào collection users) ---
-        safeLog(onLog, "creating 5 Experts...");
-        const createdExperts = [];
+        // 1. Đảm bảo có chuyên gia
+        const createdExperts = ensureExperts(batch);
 
-        for (let i = 0; i < EXPERT_SEEDS.length; i++) {
-            const seed = EXPERT_SEEDS[i];
-            const expertId = `fake_expert_${i}`; // ID cố định để dễ quản lý
-            
-            const expertData = {
-                id: expertId,
-                name: seed.name,
-                email: `expert${i}@asking.vn`,
-                avatar: seed.avatar,
-                bio: `Chuyên gia ${seed.title} với 10 năm kinh nghiệm.`,
-                isExpert: true,
-                expertStatus: 'approved',
-                isAdmin: false,
-                isFake: true, // Đánh dấu để dễ xóa
-                createdAt: serverTimestamp()
-            };
-
-            // Lưu vào batch
-            batch.set(doc(db, 'users', expertId), expertData);
-            createdExperts.push(expertData);
-        }
-
-        // --- BƯỚC 2: TẠO DANH MỤC (Categories) ---
-        safeLog(onLog, "creating Categories...");
-        
-        // Blog Categories
+        // 2. Tạo Blog Categories
         const blogCats = [
             { id: 'cat_blog_suckhoe', name: "Sức khỏe", slug: "suc-khoe" },
             { id: 'cat_blog_dinhduong', name: "Dinh dưỡng", slug: "dinh-duong" },
@@ -106,17 +101,7 @@ export const generateFakeBlogs = async (onLog?: (msg: string) => void) => {
         ];
         blogCats.forEach(c => batch.set(doc(db, 'blogCategories', c.id), { ...c, createdAt: serverTimestamp() }));
 
-        // Doc Categories
-        const docCats = [
-            { id: 'cat_doc_tailieu', name: "Tài liệu học tập", slug: "tai-lieu" },
-            { id: 'cat_doc_ebook', name: "Ebook - Sách", slug: "ebook" },
-            { id: 'cat_doc_media', name: "Âm nhạc & Video", slug: "media" }
-        ];
-        docCats.forEach(c => batch.set(doc(db, 'documentCategories', c.id), { ...c, createdAt: serverTimestamp() }));
-
-        // --- BƯỚC 3: TẠO 20 BLOG POSTS ---
-        safeLog(onLog, "creating 20 Blogs...");
-        
+        // 3. Tạo Blog Posts
         for (let i = 0; i < 20; i++) {
             const expert = getRandomItem(createdExperts);
             const template = getRandomItem(BLOG_TOPICS);
@@ -130,24 +115,14 @@ export const generateFakeBlogs = async (onLog?: (msg: string) => void) => {
                 title: title,
                 slug: createSlug(title),
                 summary: template.summary,
-                content: `<p>${template.summary}</p><p>Nội dung chi tiết bài viết...</p>`,
+                content: `<p>${template.summary}</p><p>Nội dung chi tiết...</p>`,
                 thumbnail: `https://picsum.photos/seed/blog${i}/600/400`,
                 
-                // QUAN TRỌNG: Full Object Author & Category để KHÔNG TRẮNG TRANG
+                // DATA CHUẨN ĐỂ KHÔNG TRẮNG TRANG
                 authorId: expert.id,
-                author: {
-                    id: expert.id,
-                    name: expert.name,
-                    avatar: expert.avatar,
-                    isExpert: true
-                },
-                
+                author: { id: expert.id, name: expert.name, avatar: expert.avatar, isExpert: true },
                 categoryId: category.id,
-                category: {
-                    id: category.id,
-                    name: category.name,
-                    slug: category.slug
-                },
+                category: { id: category.id, name: category.name, slug: category.slug },
 
                 views: getRandomInt(100, 5000),
                 commentCount: getRandomInt(0, 20),
@@ -157,9 +132,41 @@ export const generateFakeBlogs = async (onLog?: (msg: string) => void) => {
             });
         }
 
-        // --- BƯỚC 4: TẠO 20 DOCUMENTS ---
-        safeLog(onLog, "creating 20 Documents...");
+        await batch.commit();
+        safeLog(onLog, "✅ Đã tạo xong: 5 Chuyên gia + 20 Blog.");
 
+    } catch (error: any) {
+        if (error.code === 'permission-denied') safeLog(onLog, "❌ LỖI QUYỀN: Cần Admin.");
+        else safeLog(onLog, `❌ Lỗi: ${error.message}`);
+    }
+};
+
+// --- HÀM 2: SINH TÀI LIỆU ---
+export const generateFakeDocuments = async (onLog?: (msg: string) => void) => {
+    if (!db) return;
+    const auth = getAuth();
+    if (!auth.currentUser) {
+        safeLog(onLog, "❌ Lỗi: Bạn chưa đăng nhập Admin.");
+        return;
+    }
+
+    safeLog(onLog, "🚀 Đang sinh Tài liệu (kèm 5 Chuyên gia)...");
+
+    try {
+        const batch = writeBatch(db);
+
+        // 1. Đảm bảo có chuyên gia (Logic lặp lại để đảm bảo chạy hàm nào cũng có expert)
+        const createdExperts = ensureExperts(batch);
+
+        // 2. Tạo Doc Categories
+        const docCats = [
+            { id: 'cat_doc_tailieu', name: "Tài liệu học tập", slug: "tai-lieu" },
+            { id: 'cat_doc_ebook', name: "Ebook - Sách", slug: "ebook" },
+            { id: 'cat_doc_media', name: "Âm nhạc & Video", slug: "media" }
+        ];
+        docCats.forEach(c => batch.set(doc(db, 'documentCategories', c.id), { ...c, createdAt: serverTimestamp() }));
+
+        // 3. Tạo Documents
         for (let i = 0; i < 20; i++) {
             const expert = getRandomItem(createdExperts);
             const template = getRandomItem(DOC_TOPICS);
@@ -171,27 +178,17 @@ export const generateFakeBlogs = async (onLog?: (msg: string) => void) => {
             batch.set(doc(db, 'documents', docId), {
                 id: docId,
                 title: title,
-                description: `Mô tả tài liệu: ${title}`,
+                description: `Mô tả: ${title}`,
                 fileUrl: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
                 thumbnail: `https://picsum.photos/seed/doc${i}/300/400`,
                 fileType: template.type,
                 price: Math.random() > 0.7 ? 50 : 0,
                 
-                // QUAN TRỌNG: Full Object Author & Category
+                // DATA CHUẨN
                 authorId: expert.id,
-                author: {
-                    id: expert.id,
-                    name: expert.name,
-                    avatar: expert.avatar,
-                    isExpert: true
-                },
-                
+                author: { id: expert.id, name: expert.name, avatar: expert.avatar, isExpert: true },
                 categoryId: category.id,
-                category: {
-                    id: category.id,
-                    name: category.name,
-                    slug: category.slug
-                },
+                category: { id: category.id, name: category.name, slug: category.slug },
 
                 downloads: getRandomInt(10, 500),
                 views: getRandomInt(50, 1000),
@@ -204,22 +201,16 @@ export const generateFakeBlogs = async (onLog?: (msg: string) => void) => {
             });
         }
 
-        // --- BƯỚC 5: GHI DỮ LIỆU (COMMIT) ---
         await batch.commit();
-        safeLog(onLog, "✅ HOÀN TẤT! Đã tạo: 5 Chuyên gia + 20 Blog + 20 Tài liệu.");
-        safeLog(onLog, "👉 Hãy F5 lại trang để xem kết quả.");
+        safeLog(onLog, "✅ Đã tạo xong: 5 Chuyên gia + 20 Tài liệu.");
 
     } catch (error: any) {
-        console.error(error);
-        if (error.code === 'permission-denied') {
-            safeLog(onLog, "❌ LỖI QUYỀN: Bạn phải là ADMIN mới chạy được script này.");
-        } else {
-            safeLog(onLog, `❌ Lỗi hệ thống: ${error.message}`);
-        }
+        if (error.code === 'permission-denied') safeLog(onLog, "❌ LỖI QUYỀN: Cần Admin.");
+        else safeLog(onLog, `❌ Lỗi: ${error.message}`);
     }
 };
 
-// === HÀM XÓA DỮ LIỆU ===
+// --- HÀM 3: XÓA DỮ LIỆU ---
 export const clearFakeBlogDocs = async (onLog?: (msg: string) => void) => {
     if (!db) return;
     
@@ -238,14 +229,10 @@ export const clearFakeBlogDocs = async (onLog?: (msg: string) => void) => {
     try {
         const blogsDeleted = await deleteCollection('blogPosts');
         const docsDeleted = await deleteCollection('documents');
-        const usersDeleted = await deleteCollection('users'); // Xóa luôn cả chuyên gia giả
+        // const usersDeleted = await deleteCollection('users'); // Có thể comment dòng này nếu không muốn xóa chuyên gia giả
 
-        safeLog(onLog, `✨ Đã xóa: ${blogsDeleted} Blog, ${docsDeleted} Docs, ${usersDeleted} Fake Users.`);
+        safeLog(onLog, `✨ Đã xóa: ${blogsDeleted} Blog, ${docsDeleted} Docs.`);
     } catch (error: any) {
         safeLog(onLog, `❌ Lỗi xóa: ${error.message}`);
     }
 };
-
-// Giữ lại hàm cũ để tránh lỗi import nếu file khác đang gọi, nhưng để trống
-export const generateFakeContent = async () => {}; 
-export const generateFakeUsers = async () => {};
