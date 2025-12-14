@@ -26,6 +26,22 @@ interface HomeProps {
 
 const PAGE_SIZE = 20;
 
+// --- HELPER: Hàm xóa dấu tiếng Việt để tìm kiếm chính xác ---
+const removeVietnameseTones = (str: string) => {
+    if (!str) return "";
+    str = str.toLowerCase();
+    str = str.replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g, "a");
+    str = str.replace(/è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ/g, "e");
+    str = str.replace(/ì|í|ị|ỉ|ĩ/g, "i");
+    str = str.replace(/ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ/g, "o");
+    str = str.replace(/ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ/g, "u");
+    str = str.replace(/ỳ|ý|ỵ|ỷ|ỹ/g, "y");
+    str = str.replace(/đ/g, "d");
+    // Xóa ký tự đặc biệt
+    str = str.replace(/!|@|%|\^|\*|\(|\)|\+|\=|\<|\>|\?|\/|,|\.|\:|\;|\'|\"|\&|\#|\[|\]|~|\$|_|`|-|{|}|\||\\/g, " ");
+    return str.trim();
+}
+
 // --- 1. COMPONENT: CREATE STORY MODAL ---
 interface CreateStoryModalProps {
   currentUser: User;
@@ -186,7 +202,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
   const [adConfig, setAdConfig] = useState<AdConfig | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   
-  // --- FIX LỖI NHẢY TRANG: Tách Input và Query ---
+  // --- Tách Input và Query để Debounce ---
   const [inputValue, setInputValue] = useState(''); // Giá trị thực trong ô input
   const [debouncedQuery, setDebouncedQuery] = useState(''); // Giá trị dùng để lọc (có delay)
   
@@ -200,7 +216,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
   const [activeStory, setActiveStory] = useState<Story | null>(null);
   const [showCreateStory, setShowCreateStory] = useState(false);
 
-  // --- KỸ THUẬT DEBOUNCE: Chỉ tìm kiếm khi ngừng gõ 300ms ---
+  // --- KỸ THUẬT DEBOUNCE ---
   useEffect(() => {
     const handler = setTimeout(() => {
         setDebouncedQuery(inputValue);
@@ -246,16 +262,54 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
   };
   const handleStoryCreated = (newStory: Story) => { setStories(prev => [newStory, ...prev]); };
 
-  // --- LOGIC SEARCH & FILTER (Dùng debouncedQuery thay vì inputValue) ---
+  // --- LOGIC SEARCH & FILTER (NÂNG CẤP: BỎ DẤU + TÌM SÂU) ---
   const searchResults = useMemo(() => {
     if (!debouncedQuery.trim()) return { questions: [], blogs: [], docs: [], users: [] };
-    const query = debouncedQuery.toLowerCase().trim();
-    const matchedQuestions = questions.filter(q => q.title.toLowerCase().includes(query) || q.content.toLowerCase().includes(query) || q.author.name.toLowerCase().includes(query));
-    const matchedBlogs = blogPosts.filter(p => p.title.toLowerCase().includes(query) || p.authorName.toLowerCase().includes(query));
-    const matchedDocs = documents.filter(d => d.title.toLowerCase().includes(query) || d.authorName.toLowerCase().includes(query));
+    
+    // Chuẩn hóa từ khóa
+    const normalizedQuery = removeVietnameseTones(debouncedQuery);
+
+    // Hàm kiểm tra match (So sánh chuỗi đã bỏ dấu)
+    const isMatch = (text: string | undefined | null) => {
+        return removeVietnameseTones(text || '').includes(normalizedQuery);
+    }
+
+    // --- TÌM TRONG CÂU HỎI & TRẢ LỜI ---
+    const matchedQuestions = questions.filter(q => 
+        isMatch(q.title) ||             
+        isMatch(q.content) ||           
+        isMatch(q.author.name) ||
+        (q.answers && q.answers.some(ans => isMatch(ans.content) || isMatch(ans.author.name)))
+    );
+    
+    // --- TÌM TRONG BLOG ---
+    const matchedBlogs = blogPosts.filter(p => 
+        isMatch(p.title) ||             
+        isMatch(p.excerpt) ||           
+        isMatch(p.authorName)           
+    );
+    
+    // --- TÌM TRONG TÀI LIỆU ---
+    const matchedDocs = documents.filter(d => 
+        isMatch(d.title) ||             
+        isMatch(d.description) ||       
+        isMatch(d.authorName)           
+    );
+    
+    // --- TÌM NGƯỜI DÙNG (GỘP TỪ CÁC NGUỒN) ---
     const usersMap = new Map<string, User>();
-    questions.forEach(q => { if (q.author.name.toLowerCase().includes(query)) usersMap.set(q.author.id, q.author); });
-    return { questions: matchedQuestions, blogs: matchedBlogs, docs: matchedDocs, users: Array.from(usersMap.values()) };
+    matchedQuestions.forEach(q => usersMap.set(q.author.id, q.author));
+    // Tự tạo user giả từ blog nếu cần
+    matchedBlogs.forEach(p => {
+        if(isMatch(p.authorName)) usersMap.set(p.authorId, { id: p.authorId, name: p.authorName, avatar: p.authorAvatar || '', isExpert: true } as User);
+    });
+
+    return { 
+        questions: matchedQuestions, 
+        blogs: matchedBlogs, 
+        docs: matchedDocs, 
+        users: Array.from(usersMap.values()) 
+    };
   }, [debouncedQuery, questions, blogPosts, documents]);
 
   let displayList = [...questions];
@@ -325,9 +379,32 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
                    {/* Users */}
                    {(searchTab === 'all' || searchTab === 'users') && searchResults.users.length > 0 && (<div className="mb-6"><div className="grid grid-cols-1 md:grid-cols-2 gap-3">{searchResults.users.map(renderUserCard)}</div></div>)}
                    
+                   {/* Blogs */}
+                   {(searchTab === 'all' || searchTab === 'blogs') && searchResults.blogs.length > 0 && (
+                       <div className="mb-6 space-y-3">
+                           <h4 className="text-sm font-bold text-gray-500 uppercase px-1">Bài viết ({searchResults.blogs.length})</h4>
+                           <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">{searchResults.blogs.map(post => (
+                               <Link to={`/blog/${post.slug}`} key={post.id} className="flex-shrink-0 w-64 bg-white dark:bg-dark-card rounded-2xl p-3 border border-gray-100 dark:border-dark-border shadow-sm flex flex-col">
+                                   <div className="aspect-[2/1] rounded-xl bg-gray-100 mb-3 overflow-hidden relative shrink-0"><img src={post.coverImageUrl} className="w-full h-full object-cover" /></div>
+                                   <h4 className="font-bold text-sm line-clamp-2 mb-1">{post.title}</h4>
+                                   <div className="text-[10px] text-gray-400">{post.authorName}</div>
+                               </Link>
+                           ))}</div>
+                       </div>
+                   )}
+
+                   {/* Docs */}
+                   {(searchTab === 'all' || searchTab === 'docs') && searchResults.docs.length > 0 && (
+                       <div className="mb-6 space-y-3">
+                           <h4 className="text-sm font-bold text-gray-500 uppercase px-1">Tài liệu ({searchResults.docs.length})</h4>
+                           <div className="space-y-3">{searchResults.docs.map(renderDocCard)}</div>
+                       </div>
+                   )}
+                   
                    {/* Questions */}
                    {(searchTab === 'all' || searchTab === 'questions') && (
                      <div className="space-y-4">
+                        <h4 className="text-sm font-bold text-gray-500 uppercase px-1">Câu hỏi thảo luận ({searchResults.questions.length})</h4>
                         {paginatedList.map(q => (
                           <Link to={`/question/${toSlug(q.title, q.id)}`} key={q.id} className="block group">
                             <div className="bg-white dark:bg-dark-card p-5 rounded-[1.5rem] shadow-sm dark:shadow-none border border-gray-100 dark:border-dark-border hover:border-primary/30 transition-all">
