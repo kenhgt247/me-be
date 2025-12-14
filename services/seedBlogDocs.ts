@@ -301,4 +301,8 @@ export const clearFakeBlogDocs = async (onLog?: (msg: string) => void) => {
         const docsDeleted = await deleteCollection('documents');
         // const usersDeleted = await deleteCollection('users'); // Tùy chọn: xóa cả chuyên gia giả
 
-        safeLog(onLog,
+        safeLog(onLog, `✨ Đã xóa: ${blogsDeleted} Blog, ${docsDeleted} Docs.`);
+    } catch (error: any) {
+        safeLog(onLog, `❌ Lỗi xóa: ${error.message}`);
+    }
+};
