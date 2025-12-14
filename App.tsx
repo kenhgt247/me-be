@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 // @ts-ignore
+import ScrollToTop from './components/ScrollToTop';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { AdminLayout } from './layouts/AdminLayout';
@@ -190,6 +191,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <PWAInstallPrompt />
       
       <AuthModal 
