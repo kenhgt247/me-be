@@ -26,7 +26,7 @@ interface HomeProps {
 
 const PAGE_SIZE = 20;
 
-// --- 1. COMPONENT: CREATE STORY MODAL (Tích hợp trực tiếp để tránh lỗi import) ---
+// --- 1. COMPONENT: CREATE STORY MODAL ---
 interface CreateStoryModalProps {
   currentUser: User;
   onClose: () => void;
@@ -99,17 +99,15 @@ const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ currentUser, onClos
   );
 };
 
-// --- 2. COMPONENT: STORY VIEWER (XEM TIN & CHAT) ---
+// --- 2. COMPONENT: STORY VIEWER ---
 const StoryViewer = ({ story, currentUser, onClose }: { story: Story, currentUser?: User | null, onClose: () => void }) => {
   const [progress, setProgress] = useState(0);
   const [replyText, setReplyText] = useState('');
 
-  // Đánh dấu đã xem
   useEffect(() => {
     if (currentUser && story.id) { markStoryViewed(story.id, currentUser.id); }
   }, [story.id, currentUser]);
 
-  // Thanh thời gian
   useEffect(() => {
     const timer = setInterval(() => {
       setProgress((prev) => {
@@ -187,7 +185,11 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
   const [viewFilter, setViewFilter] = useState<'newest' | 'active' | 'unanswered'>('newest');
   const [adConfig, setAdConfig] = useState<AdConfig | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [searchQuery, setSearchQuery] = useState('');
+  
+  // --- FIX LỖI NHẢY TRANG: Tách Input và Query ---
+  const [inputValue, setInputValue] = useState(''); // Giá trị thực trong ô input
+  const [debouncedQuery, setDebouncedQuery] = useState(''); // Giá trị dùng để lọc (có delay)
+  
   const [searchTab, setSearchTab] = useState('all');
   const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -197,6 +199,15 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
   const [isLoadingStories, setIsLoadingStories] = useState(true);
   const [activeStory, setActiveStory] = useState<Story | null>(null);
   const [showCreateStory, setShowCreateStory] = useState(false);
+
+  // --- KỸ THUẬT DEBOUNCE: Chỉ tìm kiếm khi ngừng gõ 300ms ---
+  useEffect(() => {
+    const handler = setTimeout(() => {
+        setDebouncedQuery(inputValue);
+    }, 300); // Delay 300ms
+
+    return () => clearTimeout(handler);
+  }, [inputValue]);
 
   // 1. LOAD DỮ LIỆU BAN ĐẦU
   useEffect(() => {
@@ -213,7 +224,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
       return () => unsub();
   }, []);
 
-  // 2. LOAD STORIES TỪ SERVICE (DATA THẬT)
+  // 2. LOAD STORIES
   useEffect(() => {
     const loadStories = async () => {
         if (currentUser) {
@@ -226,7 +237,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
     loadStories();
   }, [currentUser]);
 
-  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [activeCategory, viewFilter, searchQuery, searchTab]);
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [activeCategory, viewFilter, debouncedQuery, searchTab]);
 
   // --- HANDLERS ---
   const handleOpenCreateStory = () => {
@@ -235,27 +246,31 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
   };
   const handleStoryCreated = (newStory: Story) => { setStories(prev => [newStory, ...prev]); };
 
-  // --- LOGIC SEARCH & FILTER ---
+  // --- LOGIC SEARCH & FILTER (Dùng debouncedQuery thay vì inputValue) ---
   const searchResults = useMemo(() => {
-    if (!searchQuery.trim()) return { questions: [], blogs: [], docs: [], users: [] };
-    const query = searchQuery.toLowerCase().trim();
+    if (!debouncedQuery.trim()) return { questions: [], blogs: [], docs: [], users: [] };
+    const query = debouncedQuery.toLowerCase().trim();
     const matchedQuestions = questions.filter(q => q.title.toLowerCase().includes(query) || q.content.toLowerCase().includes(query) || q.author.name.toLowerCase().includes(query));
     const matchedBlogs = blogPosts.filter(p => p.title.toLowerCase().includes(query) || p.authorName.toLowerCase().includes(query));
     const matchedDocs = documents.filter(d => d.title.toLowerCase().includes(query) || d.authorName.toLowerCase().includes(query));
     const usersMap = new Map<string, User>();
     questions.forEach(q => { if (q.author.name.toLowerCase().includes(query)) usersMap.set(q.author.id, q.author); });
     return { questions: matchedQuestions, blogs: matchedBlogs, docs: matchedDocs, users: Array.from(usersMap.values()) };
-  }, [searchQuery, questions, blogPosts, documents]);
+  }, [debouncedQuery, questions, blogPosts, documents]);
 
   let displayList = [...questions];
-  if (!searchQuery) {
+  
+  if (!debouncedQuery) {
       if (activeCategory !== 'Tất cả') displayList = displayList.filter(q => q.category === activeCategory);
       switch (viewFilter) {
         case 'newest': displayList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); break;
         case 'active': displayList.sort((a, b) => (b.answers.length * 2 + b.likes) - (a.answers.length * 2 + a.likes)); break;
         case 'unanswered': displayList = displayList.filter(q => q.answers.length === 0).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); break;
       }
-  } else { displayList = searchResults.questions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); }
+  } else { 
+      displayList = searchResults.questions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); 
+  }
+  
   const paginatedList = displayList.slice(0, visibleCount);
 
   // --- RENDER HELPERS ---
@@ -267,6 +282,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
         <div className="flex flex-col"><span className="text-sm font-bold text-textDark dark:text-dark-text truncate max-w-[100px]">{user.name}</span><span className="text-[10px] text-primary font-medium">Xem trang</span></div>
     </Link>
   );
+  
   const renderDocCard = (doc: Document) => (
     <Link to={`/documents/${doc.slug}`} key={doc.id} className="flex items-center gap-4 bg-white dark:bg-dark-card p-3 rounded-2xl border border-gray-100 dark:border-dark-border shadow-sm active:scale-[0.98] transition-transform group hover:border-green-200 dark:hover:border-green-500/50">
         <div className="w-12 h-12 bg-green-50 dark:bg-green-900/20 rounded-xl flex items-center justify-center text-2xl shrink-0">{doc.fileType === 'pdf' ? '📕' : doc.fileType === 'image' ? '🖼️' : '📄'}</div>
@@ -287,15 +303,21 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
       <div className="px-4 md:px-0 sticky top-[68px] md:top-20 z-30 py-2 md:pt-0 -mx-4 md:mx-0 bg-[#F7F7F5]/95 dark:bg-dark-bg/95 md:bg-transparent backdrop-blur-sm transition-all">
         <div className="relative group shadow-[0_4px_20px_rgba(0,0,0,0.05)] rounded-2xl mx-4 md:mx-0">
             <div className="absolute inset-0 bg-white/80 dark:bg-dark-card/80 backdrop-blur-xl rounded-2xl"></div>
-            <div className={`relative flex items-center bg-white/90 dark:bg-dark-card/90 rounded-2xl border transition-all overflow-hidden ${searchQuery ? 'border-primary ring-2 ring-primary/10' : 'border-gray-100 dark:border-dark-border focus-within:ring-2 focus-within:ring-primary/20'}`}>
+            <div className={`relative flex items-center bg-white/90 dark:bg-dark-card/90 rounded-2xl border transition-all overflow-hidden ${inputValue ? 'border-primary ring-2 ring-primary/10' : 'border-gray-100 dark:border-dark-border focus-within:ring-2 focus-within:ring-primary/20'}`}>
                 <div className="pl-4 text-primary"><Search size={20} /></div>
-                <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Tìm kiếm câu hỏi, chuyên gia, tài liệu..." className="w-full py-3.5 px-3 bg-transparent text-textDark dark:text-dark-text placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none text-[15px] font-medium" />
-                {searchQuery && (<button onClick={() => { setSearchQuery(''); setSearchTab('all'); }} className="pr-4 text-gray-400 hover:text-textDark dark:hover:text-white"><X size={16} /></button>)}
+                <input 
+                  type="text" 
+                  value={inputValue} 
+                  onChange={(e) => setInputValue(e.target.value)} 
+                  placeholder="Tìm kiếm câu hỏi, chuyên gia, tài liệu..." 
+                  className="w-full py-3.5 px-3 bg-transparent text-textDark dark:text-dark-text placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none text-[15px] font-medium" 
+                />
+                {inputValue && (<button onClick={() => { setInputValue(''); setDebouncedQuery(''); setSearchTab('all'); }} className="pr-4 text-gray-400 hover:text-textDark dark:hover:text-white"><X size={16} /></button>)}
             </div>
         </div>
       </div>
 
-      {searchQuery ? (
+      {debouncedQuery ? (
            <div className="animate-slide-up space-y-4">
                <SearchTabs activeTab={searchTab} onChange={setSearchTab} counts={{ questions: searchResults.questions.length, blogs: searchResults.blogs.length, docs: searchResults.docs.length, users: searchResults.users.length }} />
                <div className="px-4 md:px-0 space-y-4 pb-20">
@@ -304,13 +326,28 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
                    {(searchTab === 'all' || searchTab === 'users') && searchResults.users.length > 0 && (<div className="mb-6"><div className="grid grid-cols-1 md:grid-cols-2 gap-3">{searchResults.users.map(renderUserCard)}</div></div>)}
                    
                    {/* Questions */}
-                   {(searchTab === 'all' || searchTab === 'questions') && (<div className="space-y-4">{paginatedList.map(q => (<Link to={`/question/${toSlug(q.title, q.id)}`} key={q.id} className="block group"><div className="bg-white dark:bg-dark-card p-5 rounded-[1.5rem] shadow-sm dark:shadow-none border border-gray-100 dark:border-dark-border hover:border-primary/30 transition-all"><h3 className="text-[16px] font-bold text-textDark dark:text-dark-text mb-2 leading-snug">{q.title}</h3><p className="text-textGray dark:text-dark-muted text-sm line-clamp-2 mb-3">{q.content}</p><div className="flex items-center gap-3 text-xs text-gray-400 dark:text-gray-500"><img src={q.author.avatar} className="w-5 h-5 rounded-full border border-gray-100 dark:border-slate-700" /><span>{q.author.name}</span></div></div></Link>))}</div>)}
+                   {(searchTab === 'all' || searchTab === 'questions') && (
+                     <div className="space-y-4">
+                        {paginatedList.map(q => (
+                          <Link to={`/question/${toSlug(q.title, q.id)}`} key={q.id} className="block group">
+                            <div className="bg-white dark:bg-dark-card p-5 rounded-[1.5rem] shadow-sm dark:shadow-none border border-gray-100 dark:border-dark-border hover:border-primary/30 transition-all">
+                              <h3 className="text-[16px] font-bold text-textDark dark:text-dark-text mb-2 leading-snug">{q.title}</h3>
+                              <p className="text-textGray dark:text-dark-muted text-sm line-clamp-2 mb-3">{q.content}</p>
+                              <div className="flex items-center gap-3 text-xs text-gray-400 dark:text-gray-500">
+                                <img src={q.author.avatar} className="w-5 h-5 rounded-full border border-gray-100 dark:border-slate-700" alt="" />
+                                <span>{q.author.name}</span>
+                              </div>
+                            </div>
+                          </Link>
+                        ))}
+                     </div>
+                   )}
                </div>
            </div>
       ) : (
       <div className="space-y-4">
           
-          {/* --- STORIES BAR (DATA THẬT) --- */}
+          {/* --- STORIES BAR --- */}
           <div className="px-4 md:px-0">
              <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 snap-x">
                 {/* Card Tạo Tin */}
@@ -326,7 +363,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
                 </div>
                 {/* Skeleton Loading */}
                 {isLoadingStories && [1,2,3].map(i => (<div key={i} className="snap-start shrink-0 w-[85px] h-[130px] bg-gray-200 dark:bg-slate-700 rounded-2xl animate-pulse"></div>))}
-                {/* Danh sách Stories thật */}
+                {/* Danh sách Stories */}
                 {!isLoadingStories && stories.map((story) => (
                     <div key={story.id} onClick={() => setActiveStory(story)} className="snap-start shrink-0 relative group cursor-pointer w-[85px] h-[130px] md:w-[100px] md:h-[150px]">
                         <div className={`w-full h-full rounded-2xl overflow-hidden relative border-[2px] p-[2px] transition-all ${story.viewers.includes(currentUser?.id || '') ? 'border-gray-200 dark:border-slate-700' : 'border-blue-500'}`}>
