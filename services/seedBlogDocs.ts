@@ -5,42 +5,41 @@ import {
   getDocs, 
   query, 
   where, 
-  serverTimestamp, 
-  Timestamp 
+  serverTimestamp 
 } from 'firebase/firestore';
-import { db } from '../firebaseConfig'; // Đảm bảo đường dẫn đúng
+import { db } from '../firebaseConfig'; // Đảm bảo đường dẫn import db đúng với dự án của bạn
 
-// --- 1. DATASETS: CHỦ ĐỀ BLOG & TÀI LIỆU (RICH CONTENT) ---
+// --- 1. DATASETS ---
 
 const BLOG_DATASET = [
   {
     title: "Bí quyết giúp trẻ sơ sinh ngủ xuyên đêm",
     summary: "Phương pháp Easy và cách rèn nếp sinh hoạt cho bé từ 0-12 tháng.",
-    content: "<p>Giấc ngủ của trẻ sơ sinh luôn là nỗi ám ảnh của các mẹ bỉm sữa. Để bé ngủ ngon, mẹ cần chú ý môi trường ngủ, nhiệt độ và tiếng ồn trắng...</p>",
-    tags: ["Giấc ngủ", "Trẻ sơ sinh", "Kinh nghiệm"]
+    content: "<p>Giấc ngủ của trẻ sơ sinh luôn là nỗi ám ảnh của các mẹ bỉm sữa...</p>",
+    tags: ["Giấc ngủ", "Trẻ sơ sinh"]
   },
   {
     title: "Thực đơn ăn dặm kiểu Nhật cho bé 6 tháng",
     summary: "Gợi ý 30 món ăn dặm giàu dinh dưỡng, dễ làm.",
-    content: "<p>Ăn dặm kiểu Nhật chú trọng vào việc giữ nguyên hương vị tự nhiên của thực phẩm. Mẹ nên bắt đầu với cháo rây tỉ lệ 1:10...</p>",
-    tags: ["Ăn dặm", "Dinh dưỡng", "Thực đơn"]
+    content: "<p>Ăn dặm kiểu Nhật chú trọng vào việc giữ nguyên hương vị tự nhiên...</p>",
+    tags: ["Ăn dặm", "Dinh dưỡng"]
   },
   {
     title: "Dấu hiệu nhận biết sớm bệnh tay chân miệng",
     summary: "Cách phân biệt ban tay chân miệng và thủy đậu.",
-    content: "<p>Bệnh tay chân miệng thường bùng phát vào mùa hè. Dấu hiệu điển hình là các vết loét ở miệng và phỏng nước ở lòng bàn tay, bàn chân...</p>",
+    content: "<p>Bệnh tay chân miệng thường bùng phát vào mùa hè...</p>",
     tags: ["Sức khỏe", "Bệnh trẻ em"]
   },
   {
-    title: "Review các loại bỉm mỏng, thấm hút tốt mùa hè",
+    title: "Review các loại bỉm mỏng, thấm hút tốt",
     summary: "So sánh ưu nhược điểm của Merries, Moony, Bobby.",
-    content: "<p>Mùa hè nóng bức, việc chọn bỉm mỏng nhẹ là ưu tiên hàng đầu để tránh hăm tã. Sau đây là trải nghiệm thực tế của mình...</p>",
+    content: "<p>Mùa hè nóng bức, việc chọn bỉm mỏng nhẹ là ưu tiên hàng đầu...</p>",
     tags: ["Review", "Mẹ và bé"]
   },
   {
     title: "Giáo dục sớm: Dạy trẻ học nói qua thẻ Flashcard",
     summary: "Phương pháp Glenn Doman có thực sự hiệu quả?",
-    content: "<p>Flashcard là công cụ tuyệt vời để kích thích não phải. Tuy nhiên, mẹ cần tráo thẻ đúng tốc độ và không ép con học khi con chán...</p>",
+    content: "<p>Flashcard là công cụ tuyệt vời để kích thích não phải...</p>",
     tags: ["Giáo dục sớm", "Dạy con"]
   }
 ];
@@ -82,84 +81,53 @@ const DOC_DATASET = [
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 const getRandomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 
-// Hàm tạo slug từ tiêu đề
 const createSlug = (str: string) => {
-  return str
-    .toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/[đĐ]/g, "d")
-    .replace(/([^0-9a-z-\s])/g, "")
-    .replace(/(\s+)/g, "-")
-    .replace(/^-+|-+$/g, "") + "-" + Date.now();
+  return str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d").replace(/([^0-9a-z-\s])/g, "").replace(/(\s+)/g, "-").replace(/^-+|-+$/g, "") + "-" + Date.now();
 };
 
-// --- 3. MAIN FUNCTION ---
+// --- 3. EXPORTED FUNCTIONS (ĐÚNG TÊN NHƯ BẠN IMPORT) ---
 
-export const seedBlogAndDocs = async (onLog: (msg: string) => void) => {
+// === HÀM 1: TẠO BLOG ===
+export const generateFakeBlogs = async (onLog: (msg: string) => void) => {
   if (!db) return;
-  
-  onLog("🚀 Bắt đầu quá trình tạo Blog & Tài liệu...");
+  onLog("🚀 Đang tạo dữ liệu Blog...");
 
-  // BƯỚC 1: LẤY DANH SÁCH CHUYÊN GIA (EXPERTS) TỪ FIRESTORE
-  // (Chúng ta lấy những user mà bạn đã tạo ở file trước với isExpert: true)
-  onLog("🔍 Đang tìm kiếm hồ sơ Chuyên gia...");
-  
+  // 1. Lấy chuyên gia
   const expertsQuery = query(collection(db, 'users'), where('isExpert', '==', true));
   const expertsSnapshot = await getDocs(expertsQuery);
-
+  
   if (expertsSnapshot.empty) {
-    onLog("❌ LỖI: Không tìm thấy Chuyên gia nào! Vui lòng chạy seed User trước.");
+    onLog("❌ Lỗi: Không tìm thấy User nào là Expert (isExpert=true). Hãy chạy seed User trước.");
     return;
   }
-
   const experts = expertsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
-  onLog(`✅ Tìm thấy ${experts.length} chuyên gia. Sẽ sử dụng họ làm tác giả.`);
 
-  // BƯỚC 2: TẠO BLOG CATEGORIES & DOCUMENT CATEGORIES (Nếu chưa có)
-  // Để đơn giản, ta gán cứng ID cho categories để dễ random
-  const blogCatIds = ['cat_blog_suckhoe', 'cat_blog_dinhduong', 'cat_blog_giaoduc'];
-  const docCatIds = ['cat_doc_tailieu', 'cat_doc_ebook', 'cat_doc_amnhac'];
-
-  // Tạo Categories (Viết đè lên nếu chưa có để đảm bảo tồn tại)
+  // 2. Tạo Category
   const batchCat = writeBatch(db);
-  
-  // Blog Categories
+  const blogCatIds = ['cat_blog_suckhoe', 'cat_blog_dinhduong', 'cat_blog_giaoduc'];
   batchCat.set(doc(db, 'blogCategories', 'cat_blog_suckhoe'), { name: "Sức khỏe", slug: "suc-khoe" });
   batchCat.set(doc(db, 'blogCategories', 'cat_blog_dinhduong'), { name: "Dinh dưỡng", slug: "dinh-duong" });
   batchCat.set(doc(db, 'blogCategories', 'cat_blog_giaoduc'), { name: "Giáo dục", slug: "giao-duc" });
-
-  // Document Categories (Dùng đúng tên documentCategories như rules)
-  batchCat.set(doc(db, 'documentCategories', 'cat_doc_tailieu'), { name: "Tài liệu học tập", slug: "tai-lieu" });
-  batchCat.set(doc(db, 'documentCategories', 'cat_doc_ebook'), { name: "Ebook - Sách", slug: "ebook" });
-  batchCat.set(doc(db, 'documentCategories', 'cat_doc_amnhac'), { name: "Âm nhạc & Video", slug: "media" });
-
   await batchCat.commit();
-  onLog("✅ Đã khởi tạo danh mục Blog & Tài liệu.");
 
-  // BƯỚC 3: TẠO 30 BÀI BLOG & 30 TÀI LIỆU
+  // 3. Tạo Blog Posts
   const batchData = writeBatch(db);
-  let count = 0;
-
-  // --- Tạo 30 Blog ---
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 20; i++) {
     const expert = getRandomItem(experts);
     const template = getRandomItem(BLOG_DATASET);
     const blogId = `seed_blog_${Date.now()}_${i}`;
     const title = `${template.title} #${i + 1}`;
 
-    const blogPost = {
+    batchData.set(doc(db, 'blogPosts', blogId), {
       id: blogId,
       title: title,
       slug: createSlug(title),
       summary: template.summary,
       content: template.content,
       thumbnail: `https://picsum.photos/seed/blog${i}/600/400`,
-      
-      // Thông tin tác giả (Lấy từ Expert thật)
       authorId: expert.id,
       authorName: expert.name,
       authorAvatar: expert.avatar,
-      
       categoryId: getRandomItem(blogCatIds),
       views: getRandomInt(100, 5000),
       commentCount: getRandomInt(0, 20),
@@ -167,74 +135,106 @@ export const seedBlogAndDocs = async (onLog: (msg: string) => void) => {
       isPublished: true,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      isFake: true // Đánh dấu để dễ xóa sau này
-    };
-
-    batchData.set(doc(db, 'blogPosts', blogId), blogPost);
-    count++;
+      isFake: true
+    });
   }
 
-  // --- Tạo 30 Tài liệu ---
-  for (let i = 0; i < 30; i++) {
+  await batchData.commit();
+  onLog("✅ Đã tạo xong 20 bài Blog từ chuyên gia.");
+};
+
+// === HÀM 2: TẠO DOCUMENTS ===
+export const generateFakeDocuments = async (onLog: (msg: string) => void) => {
+  if (!db) return;
+  onLog("🚀 Đang tạo dữ liệu Tài liệu...");
+
+  // 1. Lấy chuyên gia
+  const expertsQuery = query(collection(db, 'users'), where('isExpert', '==', true));
+  const expertsSnapshot = await getDocs(expertsQuery);
+  
+  if (expertsSnapshot.empty) {
+    onLog("❌ Lỗi: Không tìm thấy Expert.");
+    return;
+  }
+  const experts = expertsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+
+  // 2. Tạo Category Doc
+  const batchCat = writeBatch(db);
+  const docCatIds = ['cat_doc_tailieu', 'cat_doc_ebook', 'cat_doc_media'];
+  
+  // Hỗ trợ cả 2 tên collection để tránh lỗi
+  const categories = [
+    { id: 'cat_doc_tailieu', name: "Tài liệu học tập", slug: "tai-lieu" },
+    { id: 'cat_doc_ebook', name: "Ebook - Sách", slug: "ebook" },
+    { id: 'cat_doc_media', name: "Âm nhạc & Video", slug: "media" }
+  ];
+
+  categories.forEach(cat => {
+      // Ghi vào documentCategories (chuẩn)
+      batchCat.set(doc(db, 'documentCategories', cat.id), cat);
+      // Ghi dự phòng vào document_categories (nếu code cũ dùng)
+      batchCat.set(doc(db, 'document_categories', cat.id), cat);
+  });
+  
+  await batchCat.commit();
+
+  // 3. Tạo Documents
+  const batchData = writeBatch(db);
+  for (let i = 0; i < 20; i++) {
     const expert = getRandomItem(experts);
     const template = getRandomItem(DOC_DATASET);
     const docId = `seed_doc_${Date.now()}_${i}`;
     const title = `${template.title} #${i + 1}`;
 
-    const document = {
+    batchData.set(doc(db, 'documents', docId), {
       id: docId,
       title: title,
       description: template.desc,
       fileUrl: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
       thumbnail: `https://picsum.photos/seed/doc${i}/300/400`,
       fileType: template.type,
-      
-      price: Math.random() > 0.7 ? getRandomInt(10, 50) : 0, // 30% tài liệu có phí
-      
-      // Thông tin tác giả
+      price: Math.random() > 0.7 ? getRandomInt(10, 50) : 0,
       authorId: expert.id,
       authorName: expert.name,
       authorAvatar: expert.avatar,
-      
       categoryId: getRandomItem(docCatIds),
       downloads: getRandomInt(10, 200),
       views: getRandomInt(50, 1000),
       rating: getRandomInt(4, 5),
       ratingCount: getRandomInt(1, 15),
       pages: template.pages,
-      
       isApproved: true,
       createdAt: serverTimestamp(),
       isFake: true
-    };
-
-    batchData.set(doc(db, 'documents', docId), document);
-    count++;
+    });
   }
 
-  // Commit batch
   await batchData.commit();
-  onLog(`✨ HOÀN TẤT! Đã tạo thêm 30 Blog & 30 Tài liệu từ các chuyên gia.`);
+  onLog("✅ Đã tạo xong 20 Tài liệu từ chuyên gia.");
 };
 
-export const clearBlogAndDocs = async (onLog: (msg: string) => void) => {
-    if (!db) return;
-    const batchSize = 400;
-    
-    onLog("🗑 Đang xóa Blog & Tài liệu mẫu...");
+// === HÀM 3: XÓA DỮ LIỆU ===
+export const clearFakeBlogDocs = async (onLog: (msg: string) => void) => {
+  if (!db) return;
+  onLog("🗑 Đang xóa Blog & Tài liệu giả...");
 
-    // Xóa Blog
-    const bQuery = query(collection(db, 'blogPosts'), where('isFake', '==', true));
-    const bSnap = await getDocs(bQuery);
-    const batch = writeBatch(db);
-    
-    bSnap.forEach(d => batch.delete(d.ref));
-    
-    // Xóa Docs
-    const dQuery = query(collection(db, 'documents'), where('isFake', '==', true));
-    const dSnap = await getDocs(dQuery);
-    dSnap.forEach(d => batch.delete(d.ref));
+  const batch = writeBatch(db);
+  let count = 0;
 
-    await batch.commit();
-    onLog("✨ Đã dọn dẹp sạch sẽ Blog & Tài liệu giả!");
-}
+  // Xóa Blog
+  const bQuery = query(collection(db, 'blogPosts'), where('isFake', '==', true));
+  const bSnap = await getDocs(bQuery);
+  bSnap.forEach(d => { batch.delete(d.ref); count++; });
+
+  // Xóa Docs
+  const dQuery = query(collection(db, 'documents'), where('isFake', '==', true));
+  const dSnap = await getDocs(dQuery);
+  dSnap.forEach(d => { batch.delete(d.ref); count++; });
+
+  if (count > 0) {
+      await batch.commit();
+      onLog(`✨ Đã xóa ${count} mục (Blog + Docs).`);
+  } else {
+      onLog("ℹ️ Không tìm thấy dữ liệu giả nào để xóa.");
+  }
+};
