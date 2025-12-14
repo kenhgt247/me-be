@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 // IMPORT COMPONENT MỚI
 import { ExpertPromoBox } from '../components/ExpertPromoBox';
-const PAGE_SIZE = 8; 
+const PAGE_SIZE = 10; 
 
 // --- COMPONENT: SKELETON LOADER (Đã thêm Dark Mode) ---
 const BlogSkeleton = () => (
