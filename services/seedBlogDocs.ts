@@ -7,10 +7,10 @@ import {
   where, 
   serverTimestamp 
 } from 'firebase/firestore';
-import { db } from '../firebaseConfig'; // Đảm bảo đường dẫn import db đúng với dự án của bạn
+import { getAuth } from 'firebase/auth'; // Import thêm Auth để kiểm tra user
+import { db } from '../firebaseConfig'; 
 
 // --- 1. DATASETS ---
-
 const BLOG_DATASET = [
   {
     title: "Bí quyết giúp trẻ sơ sinh ngủ xuyên đêm",
@@ -85,132 +85,170 @@ const createSlug = (str: string) => {
   return str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d").replace(/([^0-9a-z-\s])/g, "").replace(/(\s+)/g, "-").replace(/^-+|-+$/g, "") + "-" + Date.now();
 };
 
-// --- 3. EXPORTED FUNCTIONS (ĐÚNG TÊN NHƯ BẠN IMPORT) ---
+// --- 3. EXPORTED FUNCTIONS ---
 
 // === HÀM 1: TẠO BLOG ===
 export const generateFakeBlogs = async (onLog: (msg: string) => void) => {
   if (!db) return;
+  
+  // Kiểm tra đăng nhập
+  const auth = getAuth();
+  if (!auth.currentUser) {
+      onLog("❌ Lỗi: Bạn chưa đăng nhập! Vui lòng đăng nhập Admin.");
+      return;
+  }
+
   onLog("🚀 Đang tạo dữ liệu Blog...");
 
-  // 1. Lấy chuyên gia
-  const expertsQuery = query(collection(db, 'users'), where('isExpert', '==', true));
-  const expertsSnapshot = await getDocs(expertsQuery);
-  
-  if (expertsSnapshot.empty) {
-    onLog("❌ Lỗi: Không tìm thấy User nào là Expert (isExpert=true). Hãy chạy seed User trước.");
-    return;
+  try {
+      // 1. Lấy chuyên gia
+      const expertsQuery = query(collection(db, 'users'), where('isExpert', '==', true));
+      const expertsSnapshot = await getDocs(expertsQuery);
+      
+      if (expertsSnapshot.empty) {
+        onLog("❌ Lỗi: Không tìm thấy User nào là Expert. Hãy chạy seed User trước.");
+        return;
+      }
+      const experts = expertsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+
+      // 2. Tạo Category
+      const batchCat = writeBatch(db);
+      const blogCatIds = ['cat_blog_suckhoe', 'cat_blog_dinhduong', 'cat_blog_giaoduc'];
+      batchCat.set(doc(db, 'blogCategories', 'cat_blog_suckhoe'), { name: "Sức khỏe", slug: "suc-khoe" });
+      batchCat.set(doc(db, 'blogCategories', 'cat_blog_dinhduong'), { name: "Dinh dưỡng", slug: "dinh-duong" });
+      batchCat.set(doc(db, 'blogCategories', 'cat_blog_giaoduc'), { name: "Giáo dục", slug: "giao-duc" });
+      await batchCat.commit(); // Commit Categories trước
+
+      // 3. Tạo Blog Posts
+      const batchData = writeBatch(db);
+      for (let i = 0; i < 20; i++) {
+        const expert = getRandomItem(experts);
+        const template = getRandomItem(BLOG_DATASET);
+        const blogId = `seed_blog_${Date.now()}_${i}`;
+        const title = `${template.title} #${i + 1}`;
+
+        batchData.set(doc(db, 'blogPosts', blogId), {
+          id: blogId,
+          title: title,
+          slug: createSlug(title),
+          summary: template.summary,
+          content: template.content,
+          thumbnail: `https://picsum.photos/seed/blog${i}/600/400`,
+          
+          authorId: expert.id, // Lỗi sẽ xảy ra ở đây nếu bạn không phải Admin
+          authorName: expert.name,
+          authorAvatar: expert.avatar,
+          
+          categoryId: getRandomItem(blogCatIds),
+          views: getRandomInt(100, 5000),
+          commentCount: getRandomInt(0, 20),
+          tags: template.tags,
+          isPublished: true,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          isFake: true
+        });
+      }
+
+      await batchData.commit();
+      onLog("✅ Đã tạo xong 20 bài Blog từ chuyên gia.");
+      
+  } catch (error: any) {
+      console.error("Lỗi tạo Blog:", error);
+      if (error.code === 'permission-denied') {
+          onLog("❌ LỖI QUYỀN (Permission Denied): Bạn đang cố gắng tạo bài viết cho người khác (Expert khác) nhưng không phải là Admin.");
+          onLog("👉 Giải pháp: Hãy đăng nhập bằng tài khoản có 'isAdmin: true' rồi thử lại.");
+      } else {
+          onLog(`❌ Lỗi: ${error.message}`);
+      }
   }
-  const experts = expertsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
-
-  // 2. Tạo Category
-  const batchCat = writeBatch(db);
-  const blogCatIds = ['cat_blog_suckhoe', 'cat_blog_dinhduong', 'cat_blog_giaoduc'];
-  batchCat.set(doc(db, 'blogCategories', 'cat_blog_suckhoe'), { name: "Sức khỏe", slug: "suc-khoe" });
-  batchCat.set(doc(db, 'blogCategories', 'cat_blog_dinhduong'), { name: "Dinh dưỡng", slug: "dinh-duong" });
-  batchCat.set(doc(db, 'blogCategories', 'cat_blog_giaoduc'), { name: "Giáo dục", slug: "giao-duc" });
-  await batchCat.commit();
-
-  // 3. Tạo Blog Posts
-  const batchData = writeBatch(db);
-  for (let i = 0; i < 20; i++) {
-    const expert = getRandomItem(experts);
-    const template = getRandomItem(BLOG_DATASET);
-    const blogId = `seed_blog_${Date.now()}_${i}`;
-    const title = `${template.title} #${i + 1}`;
-
-    batchData.set(doc(db, 'blogPosts', blogId), {
-      id: blogId,
-      title: title,
-      slug: createSlug(title),
-      summary: template.summary,
-      content: template.content,
-      thumbnail: `https://picsum.photos/seed/blog${i}/600/400`,
-      authorId: expert.id,
-      authorName: expert.name,
-      authorAvatar: expert.avatar,
-      categoryId: getRandomItem(blogCatIds),
-      views: getRandomInt(100, 5000),
-      commentCount: getRandomInt(0, 20),
-      tags: template.tags,
-      isPublished: true,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      isFake: true
-    });
-  }
-
-  await batchData.commit();
-  onLog("✅ Đã tạo xong 20 bài Blog từ chuyên gia.");
 };
 
 // === HÀM 2: TẠO DOCUMENTS ===
 export const generateFakeDocuments = async (onLog: (msg: string) => void) => {
   if (!db) return;
+  
+  const auth = getAuth();
+  if (!auth.currentUser) {
+      onLog("❌ Lỗi: Bạn chưa đăng nhập! Vui lòng đăng nhập Admin.");
+      return;
+  }
+
   onLog("🚀 Đang tạo dữ liệu Tài liệu...");
 
-  // 1. Lấy chuyên gia
-  const expertsQuery = query(collection(db, 'users'), where('isExpert', '==', true));
-  const expertsSnapshot = await getDocs(expertsQuery);
-  
-  if (expertsSnapshot.empty) {
-    onLog("❌ Lỗi: Không tìm thấy Expert.");
-    return;
+  try {
+      // 1. Lấy chuyên gia
+      const expertsQuery = query(collection(db, 'users'), where('isExpert', '==', true));
+      const expertsSnapshot = await getDocs(expertsQuery);
+      
+      if (expertsSnapshot.empty) {
+        onLog("❌ Lỗi: Không tìm thấy Expert.");
+        return;
+      }
+      const experts = expertsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+
+      // 2. Tạo Category Doc
+      const batchCat = writeBatch(db);
+      const docCatIds = ['cat_doc_tailieu', 'cat_doc_ebook', 'cat_doc_media'];
+      
+      const categories = [
+        { id: 'cat_doc_tailieu', name: "Tài liệu học tập", slug: "tai-lieu" },
+        { id: 'cat_doc_ebook', name: "Ebook - Sách", slug: "ebook" },
+        { id: 'cat_doc_media', name: "Âm nhạc & Video", slug: "media" }
+      ];
+
+      categories.forEach(cat => {
+          // Ghi vào documentCategories (chuẩn theo DB của bạn)
+          batchCat.set(doc(db, 'documentCategories', cat.id), cat);
+      });
+      
+      await batchCat.commit();
+
+      // 3. Tạo Documents
+      const batchData = writeBatch(db);
+      for (let i = 0; i < 20; i++) {
+        const expert = getRandomItem(experts);
+        const template = getRandomItem(DOC_DATASET);
+        const docId = `seed_doc_${Date.now()}_${i}`;
+        const title = `${template.title} #${i + 1}`;
+
+        batchData.set(doc(db, 'documents', docId), {
+          id: docId,
+          title: title,
+          description: template.desc,
+          fileUrl: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+          thumbnail: `https://picsum.photos/seed/doc${i}/300/400`,
+          fileType: template.type,
+          price: Math.random() > 0.7 ? getRandomInt(10, 50) : 0,
+          
+          authorId: expert.id, // Lỗi sẽ xảy ra ở đây nếu bạn không phải Admin
+          authorName: expert.name,
+          authorAvatar: expert.avatar,
+          
+          categoryId: getRandomItem(docCatIds),
+          downloads: getRandomInt(10, 200),
+          views: getRandomInt(50, 1000),
+          rating: getRandomInt(4, 5),
+          ratingCount: getRandomInt(1, 15),
+          pages: template.pages,
+          isApproved: true,
+          createdAt: serverTimestamp(),
+          isFake: true
+        });
+      }
+
+      await batchData.commit();
+      onLog("✅ Đã tạo xong 20 Tài liệu từ chuyên gia.");
+
+  } catch (error: any) {
+      console.error("Lỗi tạo Document:", error);
+      if (error.code === 'permission-denied') {
+          onLog("❌ LỖI QUYỀN (Permission Denied): Chỉ Admin mới được tạo tài liệu cho Expert khác.");
+          onLog("👉 Giải pháp: Hãy đăng nhập bằng tài khoản có 'isAdmin: true' rồi thử lại.");
+      } else {
+          onLog(`❌ Lỗi: ${error.message}`);
+      }
   }
-  const experts = expertsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
-
-  // 2. Tạo Category Doc
-  const batchCat = writeBatch(db);
-  const docCatIds = ['cat_doc_tailieu', 'cat_doc_ebook', 'cat_doc_media'];
-  
-  // Hỗ trợ cả 2 tên collection để tránh lỗi
-  const categories = [
-    { id: 'cat_doc_tailieu', name: "Tài liệu học tập", slug: "tai-lieu" },
-    { id: 'cat_doc_ebook', name: "Ebook - Sách", slug: "ebook" },
-    { id: 'cat_doc_media', name: "Âm nhạc & Video", slug: "media" }
-  ];
-
-  categories.forEach(cat => {
-      // Ghi vào documentCategories (chuẩn)
-      batchCat.set(doc(db, 'documentCategories', cat.id), cat);
-      // Ghi dự phòng vào document_categories (nếu code cũ dùng)
-      batchCat.set(doc(db, 'document_categories', cat.id), cat);
-  });
-  
-  await batchCat.commit();
-
-  // 3. Tạo Documents
-  const batchData = writeBatch(db);
-  for (let i = 0; i < 20; i++) {
-    const expert = getRandomItem(experts);
-    const template = getRandomItem(DOC_DATASET);
-    const docId = `seed_doc_${Date.now()}_${i}`;
-    const title = `${template.title} #${i + 1}`;
-
-    batchData.set(doc(db, 'documents', docId), {
-      id: docId,
-      title: title,
-      description: template.desc,
-      fileUrl: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-      thumbnail: `https://picsum.photos/seed/doc${i}/300/400`,
-      fileType: template.type,
-      price: Math.random() > 0.7 ? getRandomInt(10, 50) : 0,
-      authorId: expert.id,
-      authorName: expert.name,
-      authorAvatar: expert.avatar,
-      categoryId: getRandomItem(docCatIds),
-      downloads: getRandomInt(10, 200),
-      views: getRandomInt(50, 1000),
-      rating: getRandomInt(4, 5),
-      ratingCount: getRandomInt(1, 15),
-      pages: template.pages,
-      isApproved: true,
-      createdAt: serverTimestamp(),
-      isFake: true
-    });
-  }
-
-  await batchData.commit();
-  onLog("✅ Đã tạo xong 20 Tài liệu từ chuyên gia.");
 };
 
 // === HÀM 3: XÓA DỮ LIỆU ===
@@ -218,23 +256,33 @@ export const clearFakeBlogDocs = async (onLog: (msg: string) => void) => {
   if (!db) return;
   onLog("🗑 Đang xóa Blog & Tài liệu giả...");
 
-  const batch = writeBatch(db);
-  let count = 0;
+  const auth = getAuth();
+  if (!auth.currentUser) {
+      onLog("❌ Bạn chưa đăng nhập. Cần quyền Admin để xóa.");
+      return;
+  }
 
-  // Xóa Blog
-  const bQuery = query(collection(db, 'blogPosts'), where('isFake', '==', true));
-  const bSnap = await getDocs(bQuery);
-  bSnap.forEach(d => { batch.delete(d.ref); count++; });
+  try {
+      const batch = writeBatch(db);
+      let count = 0;
 
-  // Xóa Docs
-  const dQuery = query(collection(db, 'documents'), where('isFake', '==', true));
-  const dSnap = await getDocs(dQuery);
-  dSnap.forEach(d => { batch.delete(d.ref); count++; });
+      // Xóa Blog
+      const bQuery = query(collection(db, 'blogPosts'), where('isFake', '==', true));
+      const bSnap = await getDocs(bQuery);
+      bSnap.forEach(d => { batch.delete(d.ref); count++; });
 
-  if (count > 0) {
-      await batch.commit();
-      onLog(`✨ Đã xóa ${count} mục (Blog + Docs).`);
-  } else {
-      onLog("ℹ️ Không tìm thấy dữ liệu giả nào để xóa.");
+      // Xóa Docs
+      const dQuery = query(collection(db, 'documents'), where('isFake', '==', true));
+      const dSnap = await getDocs(dQuery);
+      dSnap.forEach(d => { batch.delete(d.ref); count++; });
+
+      if (count > 0) {
+          await batch.commit();
+          onLog(`✨ Đã xóa ${count} mục (Blog + Docs).`);
+      } else {
+          onLog("ℹ️ Không tìm thấy dữ liệu giả nào để xóa.");
+      }
+  } catch (error: any) {
+      onLog(`❌ Lỗi khi xóa: ${error.message}`);
   }
 };
