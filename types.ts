@@ -25,8 +25,12 @@ export interface User {
   savedQuestions?: string[];
   isOnline?: boolean;
   lastActiveAt?: string;
+  lastActive?: any;
   email?: string;
-  isFake?: boolean;
+  
+
+// Push notification
+fcmTokens?: string[];
 }
 
 export interface Answer {
@@ -83,25 +87,60 @@ export interface Notification {
 
 export interface Message {
   id: string;
+
   senderId: string;
-  receiverId: string; // Đã thêm bắt buộc theo yêu cầu
+  receiverId?: string; // giữ để không vỡ code cũ
+
   content: string;
-  createdAt: string;
-  isRead: boolean;
+
+  // Firestore v2 dùng Timestamp, nhưng để any cho linh hoạt
+  createdAt: any;
+
+  // V1
+  isRead?: boolean;
+
+  // V2 (chuẩn FB)
+  readBy?: string[];
+
   type: 'text' | 'image' | 'story_reply'; 
+
   storyId?: string;       
   storySnapshotUrl?: string; 
 }
 
+
 export interface ChatSession {
   id: string;
-  participants: string[]; 
-  participantData: { [uid: string]: { name: string; avatar: string; isExpert?: boolean } };
+
+  participants: string[];
+
+  participantData?: {
+    [uid: string]: {
+      name: string;
+      avatar: string;
+      isExpert?: boolean;
+    };
+  };
+
   lastMessage: string;
-  lastMessageTime: string;
-  updatedAt: string;
-  unreadCount: { [uid: string]: number };
+
+  // Firestore v2
+  lastMessageAt?: any;
+
+  // Giữ cho code cũ
+  lastMessageTime?: string;
+  updatedAt?: string;
+
+  // V2
+  unread?: { [uid: string]: number };
+
+  // V1
+  unreadCount?: { [uid: string]: number };
+
+  // Soft delete
+  deletedFor?: { [uid: string]: boolean };
 }
+
 
 export interface Story {
   id: string;
