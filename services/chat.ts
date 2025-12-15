@@ -1,5 +1,5 @@
 import { Message } from '../types';
-// SỬA ĐÚNG TÊN FILE CẤU HÌNH CỦA BẠN
+// SỬA ĐÚNG TÊN FILE CẤU HÌNH CỦA BẠN NẾU CẦN
 import { db } from '../firebaseConfig'; 
 import { 
   collection, addDoc, query, where, orderBy, getDocs, writeBatch
@@ -57,10 +57,12 @@ export const sendMessage = async (
   return { id: docRef.id, ...newMessageData } as Message;
 };
 
-// --- TÍNH NĂNG MỚI: XÓA CUỘC TRÒ CHUYỆN ---
+// --- TÍNH NĂNG MỚI: XÓA CUỘC TRÒ CHUYỆN (CÓ LOG DEBUG) ---
 export const deleteConversation = async (currentUserId: string, otherUserId: string): Promise<void> => {
     try {
         const conversationId = getConversationId(currentUserId, otherUserId);
+        console.log("1. Bắt đầu quy trình xóa. ID cuộc trò chuyện:", conversationId);
+
         const messagesRef = collection(db, 'messages');
         
         // 1. Tìm tất cả tin nhắn thuộc cuộc hội thoại này
@@ -70,8 +72,12 @@ export const deleteConversation = async (currentUserId: string, otherUserId: str
         );
 
         const snapshot = await getDocs(q);
+        console.log("2. Tìm thấy số lượng tin nhắn cần xóa:", snapshot.size);
 
-        if (snapshot.empty) return;
+        if (snapshot.empty) {
+            console.warn("!!! Không tìm thấy tin nhắn nào khớp ID này để xóa.");
+            return;
+        }
 
         // 2. Firestore chỉ cho phép xóa tối đa 500 docs mỗi batch
         // Chia nhỏ mảng tin nhắn thành các batch 500
@@ -83,6 +89,8 @@ export const deleteConversation = async (currentUserId: string, otherUserId: str
             chunks.push(docs.slice(i, i + batchSize));
         }
 
+        console.log(`3. Đang chia thành ${chunks.length} đợt xóa (batch)...`);
+
         // 3. Thực thi xóa từng batch
         for (const chunk of chunks) {
             const batch = writeBatch(db);
@@ -92,9 +100,9 @@ export const deleteConversation = async (currentUserId: string, otherUserId: str
             await batch.commit();
         }
         
-        console.log(`Đã xóa thành công cuộc trò chuyện: ${conversationId}`);
+        console.log("4. Đã xóa thành công toàn bộ tin nhắn trên Database.");
     } catch (error) {
-        console.error("Lỗi khi xóa cuộc trò chuyện:", error);
+        console.error("LỖI CRITICAL KHI XÓA:", error);
         throw error;
     }
 };
