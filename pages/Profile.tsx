@@ -50,11 +50,10 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
         }
     }, [userId, user, navigate]);
 
-    // --- 2. TẢI DỮ LIỆU PROFILE & XỬ LÝ REDIRECT (ĐÃ SỬA LỖI TRẮNG TRANG) ---
+    // --- 2. TẢI DỮ LIỆU PROFILE & XỬ LÝ REDIRECT ---
     useEffect(() => {
         if (!userId) return;
         
-        // Cờ kiểm tra để ngăn chặn cập nhật state nếu component đã unmount
         let isMounted = true; 
         
         const fetchProfileAndRedirect = async () => {
@@ -68,8 +67,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
                 const docSnap = await getDoc(docRef);
 
                 if (docSnap.exists()) {
-                    // @ts-ignore
-                    targetUserData = { id: docSnap.id, ...docSnap.data() };
+                    targetUserData = { id: docSnap.id, ...docSnap.data() } as User;
                 } else {
                     // B. Nếu không thấy ID, thử tìm bằng Username
                     const q = query(
@@ -80,8 +78,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
                     const querySnap = await getDocs(q);
                     if (!querySnap.empty) {
                         const d = querySnap.docs[0];
-                        // @ts-ignore
-                        targetUserData = { id: d.id, ...d.data() };
+                        targetUserData = { id: d.id, ...d.data() } as User;
                     }
                 }
 
@@ -95,11 +92,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
                     const currentSlug = userId.toLowerCase();
                     const canonicalSlug = (targetUserData.username || targetUserData.id).toLowerCase();
 
-                    // Nếu URL hiện tại khác URL chuẩn (Ví dụ đang là ID mà user có username)
-                    // Thì thực hiện chuyển hướng.
                     if (canonicalSlug && currentSlug !== canonicalSlug) {
-                        // Dùng replace: true để thay thế lịch sử duyệt web
-                        // navigate sẽ kích hoạt lại useEffect này với userId mới, nên ta return luôn
                         navigate(`/profile/${canonicalSlug}`, { replace: true });
                         return; 
                     }
@@ -110,7 +103,6 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
                 console.error("Lỗi tải profile:", err);
                 if (isMounted) setProfileData(null);
             } finally {
-                // Chỉ tắt loading nếu component vẫn còn mount
                 if (isMounted) setLoadingProfile(false);
             }
         };
@@ -118,7 +110,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
         fetchProfileAndRedirect();
         
         return () => { isMounted = false; };
-    }, [userId, navigate]); // Chỉ chạy lại khi userId thay đổi
+    }, [userId, navigate]);
 
     const isViewingSelf = user && profileData && user.id === profileData.id;
 
@@ -128,7 +120,9 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
             const unsub = onSnapshot(doc(db, 'users', user.id), (docSnap) => {
                 if (docSnap.exists()) {
                     const userData = docSnap.data();
-                    setIsFollowing((userData.following || []).includes(profileData.id));
+                    // Check if current user is following the profile user
+                    const followingList = Array.isArray(userData.following) ? userData.following : [];
+                    setIsFollowing(followingList.includes(profileData.id));
                 }
             });
             return () => unsub();
@@ -143,12 +137,17 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
         if (user.isGuest) return onOpenAuth();
         if (!profileData) return;
         try {
-            if (isFollowing) await unfollowUser(user.id, profileData.id);
-            else {
+            if (isFollowing) {
+                await unfollowUser(user.id, profileData.id);
+                // Optimistic update handled by snapshot listener
+            } else {
                 await followUser(user.id, profileData);
-                await sendNotification(profileData.id, user, 'FOLLOW', 'đã theo dõi bạn.', `/profile/${user.id}`); 
+                // Optimistic update handled by snapshot listener
             }
-        } catch (e) { alert("Lỗi kết nối."); }
+        } catch (e) { 
+            console.error("Follow toggle error", e);
+            alert("Lỗi kết nối."); 
+        }
     };
 
     const openEditModal = () => {
@@ -273,6 +272,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
     // Stats
     const userQuestions = questions.filter(q => q.author.id === profileData.id);
     const userAnswersCount = questions.reduce((acc, q) => acc + q.answers.filter(a => a.author.id === profileData.id).length, 0);
+    // Use fallback for reputation points if not present on user object
     const reputationPoints = profileData.points || (userQuestions.length * 10) + (userAnswersCount * 20);
 
     const hasCover = !!profileData.coverUrl;
@@ -301,7 +301,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
                     {/* 2. AVATAR */}
                     <div className="relative group z-20">
                         <div className="p-1.5 bg-white dark:bg-dark-bg rounded-full shadow-lg transition-colors">
-                            <img src={profileData.avatar} className="w-32 h-32 sm:w-40 sm:h-40 rounded-full object-cover border-4 border-white dark:border-dark-bg bg-gray-100 dark:bg-slate-700" />
+                            <img src={profileData.avatar || "https://via.placeholder.com/150"} className="w-32 h-32 sm:w-40 sm:h-40 rounded-full object-cover border-4 border-white dark:border-dark-bg bg-gray-100 dark:bg-slate-700" alt="Avatar" />
                         </div>
                         {profileData.isExpert && <div className="absolute bottom-2 right-2 bg-blue-500 text-white p-1.5 rounded-full border-4 border-white dark:border-dark-bg shadow-sm"><ShieldCheck size={20} /></div>}
                     </div>
@@ -412,7 +412,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
                 </div>
             </div>
 
-            {/* EDIT MODAL - ĐÃ SỬA: Z-Index cao và Fullscreen trên mobile để che footer */}
+            {/* EDIT MODAL */}
             {showEditModal && (
                 <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4 animate-fade-in">
                     <div className="bg-white dark:bg-dark-card w-full h-[100dvh] sm:h-auto sm:max-h-[90vh] sm:rounded-2xl shadow-2xl sm:max-w-md animate-slide-up sm:animate-pop-in relative flex flex-col transition-colors">
@@ -445,7 +445,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
                                 <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2 flex items-center gap-1">Ảnh đại diện</label>
                                 <div className="flex gap-4 items-center">
                                     <div className="relative group w-16 h-16 rounded-full overflow-hidden border border-gray-200 dark:border-slate-600 shrink-0 cursor-pointer bg-gray-100 dark:bg-slate-700">
-                                        <img src={editForm.avatar || 'https://via.placeholder.com/100'} className="w-full h-full object-cover"/>
+                                        <img src={editForm.avatar || 'https://via.placeholder.com/100'} className="w-full h-full object-cover" alt="Avatar Preview"/>
                                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                             <Camera size={16} className="text-white"/>
                                         </div>
@@ -513,7 +513,8 @@ const Badge: React.FC<{ text: string; color: 'blue' | 'red' }> = ({ text, color 
 const StatCard: React.FC<{ icon: React.ReactNode; value: number; label: string }> = ({ icon, value, label }) => (
     <div className="p-4 rounded-2xl bg-gray-50 dark:bg-dark-card border border-gray-100 dark:border-dark-border flex flex-col items-center justify-center text-center transition-colors">
         <div className="mb-2 p-2 bg-white dark:bg-slate-800 rounded-full shadow-sm">{icon}</div>
-        <span className="text-xl font-black text-gray-900 dark:text-white">{value}</span>
+        {/* Use break-all or truncate to prevent overflow for long numbers */}
+        <span className="text-xl font-black text-gray-900 dark:text-white break-all">{value}</span>
         <span className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">{label}</span>
     </div>
 );
