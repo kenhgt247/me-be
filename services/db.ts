@@ -390,3 +390,9 @@ export const sendReport = async (
     throw e;
   }
 };
+// ... (Các phần code cũ giữ nguyên)
+
+// --- CHAT HELPERS (Thêm lại để tránh lỗi import ở các file cũ) ---
+export const getChatId = (uid1: string, uid2: string) => {
+  return [uid1, uid2].sort().join('_');
+};
