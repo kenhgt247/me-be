@@ -96,3 +96,27 @@ export const markChatAsRead = async (meId: string, otherId: string) => {
     // Bỏ qua lỗi nếu chat doc chưa tồn tại
   });
 };
+// Thêm vào cuối file services/chat.ts
+
+/* ================= UNREAD COUNT (BADGE) ================= */
+export const subscribeUnreadCount = (userId: string, callback: (count: number) => void) => {
+  if (!userId) return () => {};
+
+  const q = query(
+    collection(db, 'chats'),
+    where('participants', 'array-contains', userId)
+  );
+
+  return onSnapshot(q, (snap) => {
+    let totalUnread = 0;
+    snap.docs.forEach(doc => {
+      const data = doc.data();
+      // Bỏ qua nếu chat này đã bị user xóa
+      if (data.deletedFor?.[userId]) return;
+      
+      // Cộng dồn số tin chưa đọc
+      totalUnread += (data.unread?.[userId] || 0);
+    });
+    callback(totalUnread);
+  });
+};
