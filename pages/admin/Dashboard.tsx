@@ -8,7 +8,7 @@ import {
   fetchAllQuestionsAdmin, 
   fetchAllBlogs, 
   fetchAllDocuments 
-} from '../services/admin'; // Đảm bảo đường dẫn import đúng file admin.ts của bạn
+} from '../../services/admin'; // Đảm bảo đường dẫn import đúng file admin.ts của bạn
 
 export const Dashboard = () => {
   const [stats, setStats] = useState({
