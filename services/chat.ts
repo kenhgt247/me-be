@@ -9,8 +9,7 @@ const getConversationId = (uid1: string, uid2: string) => {
   return [uid1, uid2].sort().join('_');
 };
 
-// --- 1. LẤY TIN NHẮN REAL-TIME (MỚI - THAY THẾ GETMESSAGES CŨ) ---
-// Hàm này sẽ tự động chạy callback mỗi khi có tin nhắn mới
+// --- 1. LẤY TIN NHẮN REAL-TIME ---
 export const subscribeToMessages = (
   currentUserId: string, 
   otherUserId: string, 
@@ -20,15 +19,15 @@ export const subscribeToMessages = (
     const conversationId = getConversationId(currentUserId, otherUserId);
     const messagesRef = collection(db, 'messages');
     
-    // Query chuẩn khớp với Security Rules
+    // QUAN TRỌNG: Query này YÊU CẦU INDEX trên Firestore
+    // (Collection: messages, Fields: conversationId ASC, createdAt ASC)
     const q = query(
       messagesRef,
       where('conversationId', '==', conversationId),
       orderBy('createdAt', 'asc'),
-      limit(100) // Lấy 100 tin gần nhất để load cho nhanh
+      limit(100)
     );
 
-    // Lắng nghe thay đổi
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const messages = snapshot.docs.map(doc => {
         const data = doc.data();
@@ -39,7 +38,7 @@ export const subscribeToMessages = (
       console.error("Lỗi Real-time:", error);
     });
 
-    return unsubscribe; // Trả về hàm hủy đăng ký
+    return unsubscribe;
   } catch (error) {
     console.error("Lỗi setup listener:", error);
     return () => {};
@@ -70,23 +69,24 @@ export const sendMessage = async (
     storySnapshotUrl: storyData?.snapshotUrl || null
   };
 
-  // Lưu tin nhắn
+  // 1. Lưu tin nhắn vào collection 'messages'
   const docRef = await addDoc(collection(db, 'messages'), newMessageData);
 
-  // Cập nhật danh sách chat bên ngoài (Last message)
+  // 2. Cập nhật thông tin tóm tắt vào collection 'chats'
   try {
       const chatDocRef = doc(db, 'chats', conversationId);
       const chatSnap = await getDoc(chatDocRef);
       const lastMessagePreview = type === 'image' ? '[Hình ảnh]' : (type === 'story_reply' ? '[Phản hồi story]' : content);
 
       if (chatSnap.exists()) {
+          // Nếu đã có chat -> update
           await updateDoc(chatDocRef, {
               lastMessage: lastMessagePreview,
               lastMessageTime: createdAt,
               [`unreadCount.${receiverId}`]: increment(1)
           });
       } else {
-          // Tạo chat mới nếu chưa có
+          // Nếu chưa có -> tạo mới (kèm thông tin user để hiển thị nhanh)
           const [senderSnap, receiverSnap] = await Promise.all([
               getDoc(doc(db, 'users', senderId)),
               getDoc(doc(db, 'users', receiverId))
@@ -108,29 +108,33 @@ export const sendMessage = async (
           });
       }
   } catch (error) {
+      // Log lỗi nhưng không chặn UI (tin nhắn vẫn gửi thành công)
       console.error("Lỗi cập nhật danh sách chat:", error);
   }
 
   return { id: docRef.id, ...newMessageData } as Message;
 };
 
-// --- 3. XÓA CUỘC TRÒ CHUYỆN ---
+// --- 3. XÓA CUỘC TRÒ CHUYỆN (ĐÃ NÂNG CẤP CHIA BATCH) ---
 export const deleteConversation = async (currentUserId: string, otherUserId: string): Promise<void> => {
     try {
         const conversationId = getConversationId(currentUserId, otherUserId);
-        
-        // 1. Xóa tin nhắn (Batch delete)
         const messagesRef = collection(db, 'messages');
         const q = query(messagesRef, where('conversationId', '==', conversationId));
+        
         const snapshot = await getDocs(q);
+        const docs = snapshot.docs;
+
+        // Firebase giới hạn 500 lệnh/batch, nên phải chia nhỏ nếu nhiều tin nhắn
+        const CHUNK_SIZE = 400; 
+        for (let i = 0; i < docs.length; i += CHUNK_SIZE) {
+            const chunk = docs.slice(i, i + CHUNK_SIZE);
+            const batch = writeBatch(db);
+            chunk.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+        }
         
-        const batch = writeBatch(db);
-        snapshot.docs.forEach((doc) => {
-            batch.delete(doc.ref);
-        });
-        await batch.commit();
-        
-        // 2. Xóa document trong 'chats'
+        // Cuối cùng xóa document trong 'chats'
         const chatDocRef = doc(db, 'chats', conversationId);
         await import('firebase/firestore').then(mod => mod.deleteDoc(chatDocRef));
     } catch (error) {
