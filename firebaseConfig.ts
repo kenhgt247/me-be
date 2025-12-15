@@ -1,10 +1,9 @@
-
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore, initializeFirestore } from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
-// Safe environment variable access
+// Hàm lấy biến môi trường an toàn (giữ nguyên logic của bạn)
 const getEnv = (key: string, fallback: string): string => {
   if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
     return (import.meta as any).env[key] || fallback;
@@ -12,7 +11,7 @@ const getEnv = (key: string, fallback: string): string => {
   return fallback;
 };
 
-// Configuration with Fallbacks for Preview
+// Cấu hình Firebase
 const firebaseConfig = {
   apiKey: getEnv('VITE_FIREBASE_API_KEY', "AIzaSyD4BcKMNU54sbRVIz9qlA5lccyHJg730NA"),
   authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN', "askingkisd.firebaseapp.com"),
@@ -23,16 +22,16 @@ const firebaseConfig = {
   measurementId: getEnv('VITE_FIREBASE_MEASUREMENT_ID', "G-QZTM2MTNS2"),
 };
 
-// Initialize Firebase (Singleton pattern)
+// Khởi tạo App (Singleton Pattern)
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
 const auth = getAuth(app);
 
-// FIX: Use initializeFirestore with experimentalForceLongPolling to prevent connection timeouts
-// in certain environments (like WebContainers or restrictive corporate networks)
-const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
-});
+// --- QUAN TRỌNG: Đã sửa lại phần khởi tạo Database ---
+// Sử dụng getFirestore mặc định để dùng kết nối WebSockets (nhanh và ổn định hơn).
+// Đã loại bỏ 'experimentalForceLongPolling' vì nó gây lỗi mất quyền truy cập (Permission Denied)
+// khi chạy trên môi trường thực tế.
+const db = getFirestore(app);
 
 const storage = getStorage(app);
 const googleProvider = new GoogleAuthProvider();
