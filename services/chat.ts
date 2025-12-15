@@ -12,12 +12,10 @@ import {
   increment,
   getDoc,
   Timestamp,
-  where // <--- BẠN ĐANG THIẾU CÁI NÀY
+  where // 👈 BẮT BUỘC PHẢI CÓ CÁI NÀY
 } from 'firebase/firestore';
-// ... giữ nguyên phần còn lại của file
 import { db } from '../firebaseConfig';
 import { Message, ChatSession, User } from '../types';
-
 /* ================= HELPER ================= */
 export const getChatId = (uid1: string, uid2: string) => 
   [uid1, uid2].sort().join('_');
