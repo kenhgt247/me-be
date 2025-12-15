@@ -14,6 +14,9 @@ import { uploadFile } from '../services/storage';
 import { ShareModal } from '../components/ShareModal';
 import { ExpertPromoBox } from '../components/ExpertPromoBox';
 
+// --- HẰNG SỐ: ẢNH ĐẠI DIỆN DỄ THƯƠNG MẶC ĐỊNH ---
+const CUTE_AVATAR = "https://cdn-icons-png.flaticon.com/512/4322/4322991.png"; // Hình mèo cute
+
 interface ProfileProps {
     user: User;
     questions: Question[];
@@ -244,15 +247,22 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
     };
 
     // --- RENDER VIEWS ---
+    
+    // VIEW DÀNH CHO KHÁCH (GUEST)
     if (user.isGuest && (!userId || userId === user.id)) {
         return (
             <div className="min-h-screen bg-white dark:bg-dark-bg flex flex-col items-center justify-center p-6 text-center animate-fade-in pt-safe-top pb-24 transition-colors">
-                <div className="w-24 h-24 bg-blue-50 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <LogIn size={40} className="text-blue-500" />
+                <div className="w-28 h-28 mb-6 relative group">
+                    <div className="absolute inset-0 bg-blue-100 dark:bg-blue-900/30 rounded-full blur-xl opacity-60"></div>
+                    <img 
+                        src={CUTE_AVATAR} 
+                        className="w-full h-full rounded-full shadow-lg border-4 border-white dark:border-dark-bg object-cover relative z-10 bg-white dark:bg-slate-700" 
+                        alt="Guest Avatar"
+                    />
                 </div>
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Chào bạn mới! 👋</h1>
                 <p className="text-gray-500 dark:text-gray-400 mb-8 text-sm">Đăng nhập để lưu hồ sơ và tham gia cộng đồng.</p>
-                <button onClick={onOpenAuth} className="px-8 py-3 bg-primary text-white font-bold rounded-full shadow-lg hover:bg-[#25A99C]">Đăng nhập / Đăng ký</button>
+                <button onClick={onOpenAuth} className="px-8 py-3 bg-primary text-white font-bold rounded-full shadow-lg hover:bg-[#25A99C] transition-all transform hover:scale-105">Đăng nhập / Đăng ký</button>
             </div>
         );
     }
@@ -267,14 +277,12 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
         </div>
     );
 
-    // --- TÍNH TOÁN THỐNG KÊ (ĐÃ SỬA LỖI HIỂN THỊ LIKE) ---
+    // --- TÍNH TOÁN THỐNG KÊ ---
     const userQuestions = questions.filter(q => q.author.id === profileData.id);
     const userAnswersCount = questions.reduce((acc, q) => acc + q.answers.filter(a => a.author.id === profileData.id).length, 0);
     
-    // Tính tổng lượt thích (Fix lỗi hiển thị chuỗi dài)
     const totalLikes = questions.reduce((acc, q) => {
         if (q.author.id !== profileData.id) return acc;
-        // Kiểm tra nếu likes là mảng thì lấy length, nếu là số thì lấy số, nếu không thì 0
         const likesCount = Array.isArray(q.likes) ? q.likes.length : (typeof q.likes === 'number' ? q.likes : 0);
         return acc + likesCount;
     }, 0);
@@ -304,10 +312,15 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
             <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="relative -mt-16 sm:-mt-20 mb-6 flex flex-col sm:flex-row items-center sm:items-end gap-4 sm:gap-6">
                     
-                    {/* 2. AVATAR */}
+                    {/* 2. AVATAR (MAIN PROFILE) */}
                     <div className="relative group z-20">
                         <div className="p-1.5 bg-white dark:bg-dark-bg rounded-full shadow-lg transition-colors">
-                            <img src={profileData.avatar || "https://via.placeholder.com/150"} className="w-32 h-32 sm:w-40 sm:h-40 rounded-full object-cover border-4 border-white dark:border-dark-bg bg-gray-100 dark:bg-slate-700" alt="Avatar" />
+                            <img 
+                                src={profileData.avatar || CUTE_AVATAR} 
+                                onError={(e) => { e.currentTarget.src = CUTE_AVATAR; }}
+                                className="w-32 h-32 sm:w-40 sm:h-40 rounded-full object-cover border-4 border-white dark:border-dark-bg bg-gray-100 dark:bg-slate-700" 
+                                alt="Avatar" 
+                            />
                         </div>
                         {profileData.isExpert && <div className="absolute bottom-2 right-2 bg-blue-500 text-white p-1.5 rounded-full border-4 border-white dark:border-dark-bg shadow-sm"><ShieldCheck size={20} /></div>}
                     </div>
@@ -389,7 +402,6 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-fade-in">
                             <StatCard icon={<Star className="text-yellow-500" />} label="Điểm uy tín" value={reputationPoints} />
                             
-                            {/* ĐÃ SỬA LỖI Ở ĐÂY: DÙNG totalLikes ĐÃ TÍNH TOÁN */}
                             <StatCard icon={<Heart className="text-red-500" />} label="Được yêu thích" value={totalLikes} />
                             
                             <StatCard icon={<HelpCircle className="text-blue-500" />} label="Câu hỏi" value={userQuestions.length} />
@@ -401,7 +413,6 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
                         <div className="space-y-4 animate-fade-in">
                             {userQuestions.length > 0 ? (
                                 userQuestions.map(q => {
-                                    // Sửa lỗi hiển thị like trong danh sách bài viết
                                     const likesCount = Array.isArray(q.likes) ? q.likes.length : (typeof q.likes === 'number' ? q.likes : 0);
                                     
                                     return (
@@ -454,12 +465,17 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
                                 </div>
                             </div>
 
-                            {/* Avatar */}
+                            {/* Avatar (TRONG EDIT MODAL) */}
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2 flex items-center gap-1">Ảnh đại diện</label>
                                 <div className="flex gap-4 items-center">
                                     <div className="relative group w-16 h-16 rounded-full overflow-hidden border border-gray-200 dark:border-slate-600 shrink-0 cursor-pointer bg-gray-100 dark:bg-slate-700">
-                                        <img src={editForm.avatar || 'https://via.placeholder.com/100'} className="w-full h-full object-cover" alt="Avatar Preview"/>
+                                        <img 
+                                            src={editForm.avatar || CUTE_AVATAR} 
+                                            onError={(e) => { e.currentTarget.src = CUTE_AVATAR; }}
+                                            className="w-full h-full object-cover" 
+                                            alt="Avatar Preview"
+                                        />
                                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                             <Camera size={16} className="text-white"/>
                                         </div>
