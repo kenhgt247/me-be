@@ -189,3 +189,60 @@ export const deleteChatForUser = async (userId: string, otherUserId: string) => 
     console.error("Lỗi xóa đoạn chat:", error);
   }
 };
+/* ================= SEND STORY REPLY (NEW) ================= */
+// Hàm gửi tin nhắn phản hồi từ Story (có kèm ảnh thumbnail story)
+export const sendStoryReply = async (
+  sender: User,
+  receiverId: string,
+  text: string,
+  story: { id: string; url: string }
+) => {
+  if (!sender?.id || !receiverId) return;
+
+  const chatId = getChatId(sender.id, receiverId);
+  const batch = writeBatch(db);
+
+  // 1️⃣ Tạo nội dung tin nhắn
+  const msgRef = doc(collection(db, 'chats', chatId, 'messages'));
+  
+  const messageData = {
+    senderId: sender.id,
+    content: text,          // Nội dung text người dùng nhập
+    type: 'story_reply',    // Đánh dấu đây là loại tin reply story
+    storyId: story.id,      // ID của story đang xem
+    storyUrl: story.url,    // URL ảnh story (để hiện thumbnail bé xíu trong đoạn chat)
+    createdAt: serverTimestamp(),
+    readBy: [sender.id]
+  };
+
+  batch.set(msgRef, messageData);
+
+  // 2️⃣ Update chat session (Inbox bên ngoài)
+  const chatRef = doc(db, 'chats', chatId);
+
+  const chatUpdate: Partial<ChatSession> = {
+    participants: [sender.id, receiverId],
+    // Hiển thị preview ở danh sách tin nhắn giống Messenger
+    lastMessage: `Đã phản hồi story: ${text}`, 
+    lastMessageAt: serverTimestamp(),
+    deletedFor: {
+      [sender.id]: false,
+      [receiverId]: false
+    },
+    unread: {
+      [receiverId]: increment(1) // Tăng số tin chưa đọc cho người nhận
+    },
+    // Cập nhật thông tin người gửi (đề phòng chat mới tạo chưa có info)
+    participantData: {
+      [sender.id]: {
+        name: sender.name,
+        avatar: sender.avatar || '',
+        isExpert: !!sender.isExpert
+      }
+    }
+  };
+
+  batch.set(chatRef, chatUpdate, { merge: true });
+
+  await batch.commit();
+};
