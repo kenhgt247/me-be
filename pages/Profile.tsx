@@ -88,7 +88,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
                 if (targetUserData) {
                     setProfileData(targetUserData);
 
-                    // LOGIC QUAN TRỌNG: Kiểm tra Canonical URL
+                    // Kiểm tra Canonical URL
                     const currentSlug = userId.toLowerCase();
                     const canonicalSlug = (targetUserData.username || targetUserData.id).toLowerCase();
 
@@ -120,7 +120,6 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
             const unsub = onSnapshot(doc(db, 'users', user.id), (docSnap) => {
                 if (docSnap.exists()) {
                     const userData = docSnap.data();
-                    // Check if current user is following the profile user
                     const followingList = Array.isArray(userData.following) ? userData.following : [];
                     setIsFollowing(followingList.includes(profileData.id));
                 }
@@ -139,10 +138,9 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
         try {
             if (isFollowing) {
                 await unfollowUser(user.id, profileData.id);
-                // Optimistic update handled by snapshot listener
             } else {
                 await followUser(user.id, profileData);
-                // Optimistic update handled by snapshot listener
+                await sendNotification(profileData.id, user, 'FOLLOW', 'đã theo dõi bạn.', `/profile/${user.id}`); 
             }
         } catch (e) { 
             console.error("Follow toggle error", e);
@@ -269,10 +267,18 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
         </div>
     );
 
-    // Stats
+    // --- TÍNH TOÁN THỐNG KÊ (ĐÃ SỬA LỖI HIỂN THỊ LIKE) ---
     const userQuestions = questions.filter(q => q.author.id === profileData.id);
     const userAnswersCount = questions.reduce((acc, q) => acc + q.answers.filter(a => a.author.id === profileData.id).length, 0);
-    // Use fallback for reputation points if not present on user object
+    
+    // Tính tổng lượt thích (Fix lỗi hiển thị chuỗi dài)
+    const totalLikes = questions.reduce((acc, q) => {
+        if (q.author.id !== profileData.id) return acc;
+        // Kiểm tra nếu likes là mảng thì lấy length, nếu là số thì lấy số, nếu không thì 0
+        const likesCount = Array.isArray(q.likes) ? q.likes.length : (typeof q.likes === 'number' ? q.likes : 0);
+        return acc + likesCount;
+    }, 0);
+
     const reputationPoints = profileData.points || (userQuestions.length * 10) + (userAnswersCount * 20);
 
     const hasCover = !!profileData.coverUrl;
@@ -382,7 +388,10 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
                     {activeTab === 'overview' && (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-fade-in">
                             <StatCard icon={<Star className="text-yellow-500" />} label="Điểm uy tín" value={reputationPoints} />
-                            <StatCard icon={<Heart className="text-red-500" />} label="Được yêu thích" value={questions.reduce((acc, q) => acc + (q.author.id === profileData.id ? q.likes : 0), 0)} />
+                            
+                            {/* ĐÃ SỬA LỖI Ở ĐÂY: DÙNG totalLikes ĐÃ TÍNH TOÁN */}
+                            <StatCard icon={<Heart className="text-red-500" />} label="Được yêu thích" value={totalLikes} />
+                            
                             <StatCard icon={<HelpCircle className="text-blue-500" />} label="Câu hỏi" value={userQuestions.length} />
                             <StatCard icon={<MessageCircle className="text-green-500" />} label="Câu trả lời" value={userAnswersCount} />
                         </div>
@@ -391,19 +400,24 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
                     {activeTab === 'questions' && (
                         <div className="space-y-4 animate-fade-in">
                             {userQuestions.length > 0 ? (
-                                userQuestions.map(q => (
-                                    <Link to={`/question/${toSlug(q.title, q.id)}`} key={q.id} className="block bg-white dark:bg-dark-card p-5 rounded-2xl border border-gray-100 dark:border-dark-border shadow-sm hover:shadow-md transition-all group">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <span className="text-[10px] font-bold text-primary bg-teal-50 dark:bg-teal-900/30 px-2 py-1 rounded-lg uppercase tracking-wide">{q.category}</span>
-                                            <span className="text-[10px] text-gray-400">{new Date(q.createdAt).toLocaleDateString('vi-VN')}</span>
-                                        </div>
-                                        <h3 className="font-bold text-gray-900 dark:text-white text-lg mb-2 group-hover:text-primary transition-colors line-clamp-2">{q.title}</h3>
-                                        <div className="flex items-center gap-4 text-xs font-medium text-gray-500 dark:text-gray-400">
-                                            <span className="flex items-center gap-1"><Heart size={14} className="text-red-400"/> {q.likes} yêu thích</span>
-                                            <span className="flex items-center gap-1"><MessageCircle size={14} className="text-blue-400"/> {q.answers.length} thảo luận</span>
-                                        </div>
-                                    </Link>
-                                ))
+                                userQuestions.map(q => {
+                                    // Sửa lỗi hiển thị like trong danh sách bài viết
+                                    const likesCount = Array.isArray(q.likes) ? q.likes.length : (typeof q.likes === 'number' ? q.likes : 0);
+                                    
+                                    return (
+                                        <Link to={`/question/${toSlug(q.title, q.id)}`} key={q.id} className="block bg-white dark:bg-dark-card p-5 rounded-2xl border border-gray-100 dark:border-dark-border shadow-sm hover:shadow-md transition-all group">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <span className="text-[10px] font-bold text-primary bg-teal-50 dark:bg-teal-900/30 px-2 py-1 rounded-lg uppercase tracking-wide">{q.category}</span>
+                                                <span className="text-[10px] text-gray-400">{new Date(q.createdAt).toLocaleDateString('vi-VN')}</span>
+                                            </div>
+                                            <h3 className="font-bold text-gray-900 dark:text-white text-lg mb-2 group-hover:text-primary transition-colors line-clamp-2">{q.title}</h3>
+                                            <div className="flex items-center gap-4 text-xs font-medium text-gray-500 dark:text-gray-400">
+                                                <span className="flex items-center gap-1"><Heart size={14} className="text-red-400"/> {likesCount} yêu thích</span>
+                                                <span className="flex items-center gap-1"><MessageCircle size={14} className="text-blue-400"/> {q.answers.length} thảo luận</span>
+                                            </div>
+                                        </Link>
+                                    );
+                                })
                             ) : (
                                 <div className="py-12 text-center border-2 border-dashed border-gray-200 dark:border-slate-700 rounded-2xl"><p className="text-gray-400 dark:text-gray-500 font-medium">Chưa có bài viết nào.</p></div>
                             )}
@@ -513,7 +527,6 @@ const Badge: React.FC<{ text: string; color: 'blue' | 'red' }> = ({ text, color 
 const StatCard: React.FC<{ icon: React.ReactNode; value: number; label: string }> = ({ icon, value, label }) => (
     <div className="p-4 rounded-2xl bg-gray-50 dark:bg-dark-card border border-gray-100 dark:border-dark-border flex flex-col items-center justify-center text-center transition-colors">
         <div className="mb-2 p-2 bg-white dark:bg-slate-800 rounded-full shadow-sm">{icon}</div>
-        {/* Use break-all or truncate to prevent overflow for long numbers */}
         <span className="text-xl font-black text-gray-900 dark:text-white break-all">{value}</span>
         <span className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">{label}</span>
     </div>
