@@ -1,9 +1,20 @@
-// services/chat.ts
 import {
-  collection, doc, addDoc, updateDoc, serverTimestamp,
-  onSnapshot, query, orderBy, limit, writeBatch, increment,
-  getDoc, Timestamp
+  collection,
+  doc,
+  addDoc,
+  updateDoc,
+  serverTimestamp,
+  onSnapshot,
+  query,
+  orderBy,
+  limit,
+  writeBatch,
+  increment,
+  getDoc,
+  Timestamp,
+  where // <--- BẠN ĐANG THIẾU CÁI NÀY
 } from 'firebase/firestore';
+// ... giữ nguyên phần còn lại của file
 import { db } from '../firebaseConfig';
 import { Message, ChatSession, User } from '../types';
 
