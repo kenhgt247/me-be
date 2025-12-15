@@ -6,6 +6,7 @@ import {
   deleteDoc,
   onSnapshot,
   query,
+  orderBy,
   getDoc,
   arrayUnion,
   arrayRemove,
@@ -21,6 +22,8 @@ import {
   Answer,
   Notification,
   User,
+  ChatSession,
+  Message,
   toSlug
 } from '../types';
 
@@ -28,8 +31,9 @@ import {
    CONSTANTS
 ======================= */
 const QUESTIONS_COLLECTION = 'questions';
-const USERS_COLLECTION = 'users';
 const NOTIFICATIONS_COLLECTION = 'notifications';
+const USERS_COLLECTION = 'users';
+const CHATS_COLLECTION = 'chats';
 const EXPERT_APPS_COLLECTION = 'expert_applications';
 
 /* =======================
@@ -63,22 +67,35 @@ const ensureUserDoc = async (user: Partial<User>) => {
 };
 
 /* =======================
-   USER
+   USER UTILS
 ======================= */
-export const updateUserStatus = async (
-  userId: string,
-  isOnline: boolean
-) => {
-  if (!db || !userId) return;
+export const getUsersByIds = async (userIds: string[]): Promise<User[]> => {
+  if (!db || !userIds?.length) return [];
+  try {
+    const snaps = await Promise.all(
+      userIds.map(id => getDoc(doc(db, USERS_COLLECTION, id)))
+    );
+    return snaps
+      .filter(s => s.exists())
+      .map(s => ({ id: s.id, ...s.data() } as User));
+  } catch (e) {
+    console.error('getUsersByIds error:', e);
+    return [];
+  }
+};
 
-  await setDoc(
-    doc(db, USERS_COLLECTION, userId),
-    {
-      isOnline,
-      lastActiveAt: new Date().toISOString()
-    },
-    { merge: true }
-  );
+export const updateUserStatus = async (userId: string, isOnline: boolean) => {
+  if (!db || !userId) return;
+  try {
+    await setDoc(
+      doc(db, USERS_COLLECTION, userId),
+      {
+        isOnline,
+        lastActiveAt: new Date().toISOString()
+      },
+      { merge: true }
+    );
+  } catch {}
 };
 
 export const subscribeToUser = (
@@ -101,6 +118,58 @@ export const subscribeToUser = (
     },
     () => callback(null)
   );
+};
+
+/* =======================
+   FOLLOW / UNFOLLOW
+======================= */
+export const followUser = async (
+  currentUserId: string,
+  targetUser: User
+) => {
+  if (!db || !currentUserId || !targetUser?.id) return;
+
+  await ensureUserDoc({ id: currentUserId });
+  await ensureUserDoc(targetUser);
+
+  const batch = writeBatch(db);
+
+  batch.set(
+    doc(db, USERS_COLLECTION, currentUserId),
+    { following: arrayUnion(targetUser.id) },
+    { merge: true }
+  );
+
+  batch.set(
+    doc(db, USERS_COLLECTION, targetUser.id),
+    { followers: arrayUnion(currentUserId) },
+    { merge: true }
+  );
+
+  await batch.commit();
+};
+
+export const unfollowUser = async (
+  currentUserId: string,
+  targetUserId: string
+) => {
+  if (!db || !currentUserId || !targetUserId) return;
+
+  const batch = writeBatch(db);
+
+  batch.set(
+    doc(db, USERS_COLLECTION, currentUserId),
+    { following: arrayRemove(targetUserId) },
+    { merge: true }
+  );
+
+  batch.set(
+    doc(db, USERS_COLLECTION, targetUserId),
+    { followers: arrayRemove(currentUserId) },
+    { merge: true }
+  );
+
+  await batch.commit();
 };
 
 /* =======================
@@ -129,14 +198,12 @@ export const sendNotification = async (
       isRead: false,
       createdAt: new Date().toISOString()
     });
-  } catch {
-    /* ignore */
-  }
+  } catch {}
 };
 
 export const subscribeToNotifications = (
   userId: string,
-  callback: (items: Notification[]) => void
+  callback: (notifs: Notification[]) => void
 ) => {
   if (!db || !userId) {
     callback([]);
@@ -155,13 +222,11 @@ export const subscribeToNotifications = (
       const items = snap.docs.map(
         d => ({ id: d.id, ...d.data() } as Notification)
       );
-
       items.sort(
         (a, b) =>
           new Date(b.createdAt).getTime() -
           new Date(a.createdAt).getTime()
       );
-
       callback(items);
     },
     () => callback([])
@@ -181,10 +246,7 @@ export const markNotificationAsRead = async (notifId: string) => {
 ======================= */
 export const addQuestionToDb = async (q: Question) => {
   if (!db) return;
-  await setDoc(
-    doc(db, QUESTIONS_COLLECTION, q.id),
-    sanitizeData(q)
-  );
+  await setDoc(doc(db, QUESTIONS_COLLECTION, q.id), sanitizeData(q));
 };
 
 export const updateQuestionInDb = async (
@@ -192,10 +254,7 @@ export const updateQuestionInDb = async (
   data: Partial<Question>
 ) => {
   if (!db) return;
-  await updateDoc(
-    doc(db, QUESTIONS_COLLECTION, id),
-    sanitizeData(data)
-  );
+  await updateDoc(doc(db, QUESTIONS_COLLECTION, id), sanitizeData(data));
 };
 
 export const deleteQuestionFromDb = async (id: string) => {
@@ -217,32 +276,32 @@ export const subscribeToQuestions = (
     const items = snap.docs.map(
       d => ({ id: d.id, ...d.data() } as Question)
     );
-
     items.sort(
       (a, b) =>
         new Date(b.createdAt).getTime() -
         new Date(a.createdAt).getTime()
     );
-
     callback(items);
   });
 };
 
-/* =======================
-   QUESTION LIKE / SAVE
-======================= */
 export const toggleQuestionLikeDb = async (
   q: Question,
   user: User
 ) => {
   if (!db || !user?.id) return;
 
-  await updateDoc(
-    doc(db, QUESTIONS_COLLECTION, q.id),
-    {
-      likes: arrayUnion(user.id)
-    }
-  );
+  const ref = doc(db, QUESTIONS_COLLECTION, q.id);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+
+  const data = snap.data() as Question;
+  const likes = Array.isArray(data.likes) ? data.likes : [];
+  const next = likes.includes(user.id)
+    ? arrayRemove(user.id)
+    : arrayUnion(user.id);
+
+  await updateDoc(ref, { likes: next });
 
   await sendNotification(
     q.author.id,
@@ -274,10 +333,7 @@ export const toggleSaveQuestion = async (
 /* =======================
    ANSWERS
 ======================= */
-export const addAnswerToDb = async (
-  q: Question,
-  a: Answer
-) => {
+export const addAnswerToDb = async (q: Question, a: Answer) => {
   if (!db) return;
 
   await updateDoc(
@@ -294,6 +350,34 @@ export const addAnswerToDb = async (
   );
 };
 
+export const toggleAnswerUseful = async (
+  qId: string,
+  aId: string,
+  userId: string
+) => {
+  if (!db || !userId) return;
+
+  const ref = doc(db, QUESTIONS_COLLECTION, qId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+
+  const q = snap.data() as Question;
+
+  const answers = q.answers.map(a => {
+    if (a.id !== aId) return a;
+    const usefulBy = a.usefulBy || [];
+    const next = usefulBy.includes(userId)
+      ? usefulBy.filter(id => id !== userId)
+      : [...usefulBy, userId];
+    return { ...a, usefulBy: next, likes: next.length };
+  });
+
+  await updateDoc(ref, { answers });
+};
+
+/* =======================
+   ANSWER CRUD
+======================= */
 export const updateAnswerInDb = async (
   qId: string,
   aId: string,
@@ -306,7 +390,6 @@ export const updateAnswerInDb = async (
   if (!snap.exists()) return;
 
   const q = snap.data() as Question;
-
   const answers = q.answers.map(a =>
     a.id === aId ? { ...a, ...updates } : a
   );
@@ -328,70 +411,6 @@ export const deleteAnswerFromDb = async (
   const answers = q.answers.filter(a => a.id !== aId);
 
   await updateDoc(ref, { answers });
-};
-
-export const toggleAnswerUseful = async (
-  qId: string,
-  aId: string,
-  userId: string
-) => {
-  if (!db || !userId) return;
-
-  const ref = doc(db, QUESTIONS_COLLECTION, qId);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) return;
-
-  const q = snap.data() as Question;
-
-  const answers = q.answers.map(a => {
-    if (a.id !== aId) return a;
-
-    const usefulBy = a.usefulBy || [];
-    const next = usefulBy.includes(userId)
-      ? usefulBy.filter(id => id !== userId)
-      : [...usefulBy, userId];
-
-    return {
-      ...a,
-      usefulBy: next,
-      likes: next.length
-    };
-  });
-
-  await updateDoc(ref, { answers });
-};
-
-/* =======================
-   EXPERT APPLICATION
-======================= */
-export const submitExpertApplication = async (
-  user: User,
-  data: any
-) => {
-  if (!db || !user?.id) return;
-
-  await ensureUserDoc(user);
-
-  await addDoc(collection(db, EXPERT_APPS_COLLECTION), {
-    userId: user.id,
-    fullName: data.fullName,
-    phone: data.phone,
-    workplace: data.workplace,
-    specialty: data.specialty,
-    proofImages: [],
-    status: 'pending',
-    createdAt: new Date().toISOString()
-  });
-
-  await setDoc(
-    doc(db, USERS_COLLECTION, user.id),
-    {
-      expertStatus: 'pending',
-      specialty: data.specialty,
-      workplace: data.workplace
-    },
-    { merge: true }
-  );
 };
 
 /* =======================
