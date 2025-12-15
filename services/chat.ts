@@ -3,6 +3,7 @@ import {
   doc,
   addDoc,
   updateDoc,
+  setDoc, // Thêm setDoc
   serverTimestamp,
   onSnapshot,
   query,
@@ -12,10 +13,11 @@ import {
   increment,
   getDoc,
   Timestamp,
-  where // 👈 BẮT BUỘC PHẢI CÓ CÁI NÀY
+  where // 👈 ĐÃ CÓ WHERE NHƯ YÊU CẦU
 } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { Message, ChatSession, User } from '../types';
+
 /* ================= HELPER ================= */
 export const getChatId = (uid1: string, uid2: string) => 
   [uid1, uid2].sort().join('_');
@@ -56,6 +58,8 @@ export const sendMessage = async (
 
   // 1. Tạo message mới trong subcollection
   const msgRef = doc(collection(db, 'chats', chatId, 'messages'));
+  
+  // Lưu message
   batch.set(msgRef, {
     senderId: sender.id,
     content,
@@ -64,10 +68,7 @@ export const sendMessage = async (
     readBy: [sender.id] // Người gửi auto xem
   });
 
-  // 2. Lấy thông tin người nhận để cập nhật snapshot (Optional nhưng tốt cho UX)
-  // Trong thực tế, bạn có thể truyền receiverUser vào hàm này để đỡ tốn 1 lần đọc DB
-  // Ở đây tôi giả định chỉ update info người gửi để tối ưu
-  
+  // 2. Cập nhật thông tin chat session (để hiển thị ở danh sách chat)
   const chatRef = doc(db, 'chats', chatId);
   
   // Dữ liệu update cho chat session
@@ -85,6 +86,7 @@ export const sendMessage = async (
         avatar: sender.avatar || '',
         isExpert: !!sender.isExpert
     }
+    // Lưu ý: Không update info người nhận ở đây để tránh ghi đè dữ liệu cũ nếu họ offline
   };
 
   // Sử dụng set với merge: true để tạo chat doc nếu chưa có
@@ -102,10 +104,9 @@ export const markChatAsRead = async (meId: string, otherId: string) => {
   await updateDoc(chatRef, {
     [`unread.${meId}`]: 0
   }).catch(() => {
-    // Bỏ qua lỗi nếu chat doc chưa tồn tại
+    // Bỏ qua lỗi nếu chat doc chưa tồn tại (trường hợp chat mới tinh)
   });
 };
-// Thêm vào cuối file services/chat.ts
 
 /* ================= UNREAD COUNT (BADGE) ================= */
 export const subscribeUnreadCount = (userId: string, callback: (count: number) => void) => {
