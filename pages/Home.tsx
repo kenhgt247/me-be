@@ -116,54 +116,68 @@ const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ currentUser, onClos
   );
 };
 
-// --- 2. COMPONENT: STORY VIEWER ---
+// --- 2. COMPONENT: STORY VIEWER (FULL TÍNH NĂNG: CHAT + TIM) ---
 const StoryViewer = ({ story, currentUser, onClose }: { story: Story, currentUser?: User | null, onClose: () => void }) => {
   const [progress, setProgress] = useState(0);
   const [replyText, setReplyText] = useState('');
-  const [isSending, setIsSending] = useState(false); // Thêm trạng thái đang gửi để tránh spam
+  const [isSending, setIsSending] = useState(false);
+  
+  // STATE MỚI: Quản lý trạng thái Like
+  const [isLiked, setIsLiked] = useState(false);
 
-  // Đánh dấu đã xem khi mở story
+  // 1. Khởi tạo: Đánh dấu đã xem & Kiểm tra đã Like chưa
   useEffect(() => {
     if (currentUser && story.id) { 
         markStoryViewed(story.id, currentUser.id); 
+        
+        // Kiểm tra xem ID của mình có trong mảng likes của story không
+        const userHasLiked = story.likes?.includes(currentUser.id) || false;
+        setIsLiked(userHasLiked);
     }
-  }, [story.id, currentUser]);
+  }, [story, currentUser]);
 
-  // Thanh thời gian chạy tự động (5 giây)
+  // 2. Timer chạy thanh thời gian
   useEffect(() => {
     const timer = setInterval(() => {
       setProgress((prev) => {
-        if (prev >= 100) { 
-            clearInterval(timer); 
-            onClose(); 
-            return 100; 
-        }
+        if (prev >= 100) { clearInterval(timer); onClose(); return 100; }
         return prev + 1; 
       });
-    }, 50); // 50ms * 100 = 5000ms = 5 giây
+    }, 50); 
     return () => clearInterval(timer);
   }, [onClose]);
 
-  // --- HÀM GỬI TIN NHẮN (ĐÃ CẬP NHẬT) ---
+  // --- HÀM XỬ LÝ THẢ TIM (MỚI) ---
+  const handleToggleLike = async () => {
+    if (!currentUser) return;
+
+    // Optimistic UI: Đổi màu ngay lập tức cho mượt
+    setIsLiked(!isLiked);
+
+    try {
+      await toggleStoryLike(story.id, currentUser.id);
+    } catch (error) {
+      console.error("Lỗi like story:", error);
+      // Nếu lỗi thì revert lại state (tùy chọn)
+      setIsLiked(!isLiked); 
+    }
+  };
+
+  // --- HÀM GỬI TIN NHẮN ---
   const handleSendReply = async () => {
-      // Kiểm tra kỹ dữ liệu đầu vào
       if(!replyText.trim() || !currentUser || isSending) return;
-      
       setIsSending(true);
       try {
-        // Dùng hàm sendStoryReply chuyên biệt (đã viết trong chat.ts)
         await sendStoryReply(
-            currentUser,         // Object người gửi
-            story.userId,        // ID người nhận (Lưu ý: check kỹ field này trong type Story của bạn là userId hay author.id)
-            replyText,           // Nội dung tin nhắn
-            { id: story.id, url: story.mediaUrl } // Object chứa ảnh thumbnail story
+            currentUser, 
+            story.userId, // Hoặc story.author.id tùy vào data của bạn
+            replyText, 
+            { id: story.id, url: story.mediaUrl }
         );
-        
         setReplyText(''); 
         alert('Đã gửi phản hồi!'); 
       } catch (error) {
         console.error("Lỗi gửi tin:", error);
-        alert("Không thể gửi tin nhắn lúc này");
       } finally {
         setIsSending(false);
       }
@@ -173,14 +187,14 @@ const StoryViewer = ({ story, currentUser, onClose }: { story: Story, currentUse
     <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center animate-fade-in">
       <div className="relative w-full h-full md:max-w-md md:h-[90vh] md:rounded-2xl overflow-hidden bg-gray-900 shadow-2xl">
         
-        {/* Thanh Progress Bar */}
+        {/* Progress Bar */}
         <div className="absolute top-4 left-2 right-2 flex gap-1 z-20">
             <div className="h-1 flex-1 bg-white/30 rounded-full overflow-hidden">
                 <div className="h-full bg-white transition-all duration-100 ease-linear" style={{ width: `${progress}%` }} />
             </div>
         </div>
 
-        {/* Header: Avatar & Tên & Nút đóng */}
+        {/* Header */}
         <div className="absolute top-8 left-4 right-4 flex items-center justify-between z-20 text-white">
           <div className="flex items-center gap-2">
             <img src={story.userAvatar} className="w-9 h-9 rounded-full border border-white/50 object-cover" alt="" />
@@ -196,19 +210,21 @@ const StoryViewer = ({ story, currentUser, onClose }: { story: Story, currentUse
           </button>
         </div>
 
-        {/* Nội dung Ảnh Story */}
+        {/* Ảnh Story */}
         <div className="absolute inset-0 flex items-center justify-center bg-black">
              <img src={story.mediaUrl} className="w-full h-full object-cover" alt="story" />
              <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60 pointer-events-none"></div>
+             
+             {/* Hiệu ứng tim bay giữa màn hình (Optional: Có thể thêm sau) */}
         </div>
 
-        {/* Footer: Input Chat & Nút Gửi */}
+        {/* Footer Actions */}
         <div className="absolute bottom-0 left-0 right-0 z-30 p-4 pb-6 flex items-center gap-3">
           <div className="flex-1 relative">
             <input 
                 value={replyText} 
                 onChange={(e) => setReplyText(e.target.value)} 
-                onKeyDown={(e) => e.key === 'Enter' && handleSendReply()} // Bấm Enter để gửi
+                onKeyDown={(e) => e.key === 'Enter' && handleSendReply()}
                 placeholder={`Gửi tin nhắn cho ${story.userName}...`} 
                 className="w-full bg-transparent border border-white/60 rounded-full pl-5 pr-10 py-3 text-white placeholder-white/70 text-sm outline-none focus:border-white focus:bg-black/20 transition-all backdrop-blur-sm" 
             />
@@ -223,8 +239,15 @@ const StoryViewer = ({ story, currentUser, onClose }: { story: Story, currentUse
                 {isSending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} className="ml-0.5" />}
             </button>
           ) : (
-            <button className="p-3 hover:bg-white/10 rounded-full text-white transition-colors active:scale-90">
-                <Heart size={28} />
+            // NÚT THẢ TIM (ĐÃ SỬA)
+            <button 
+                onClick={handleToggleLike} 
+                className={`p-3 rounded-full transition-all active:scale-90 ${isLiked ? 'bg-red-500/20' : 'hover:bg-white/10'}`}
+            >
+                <Heart 
+                    size={28} 
+                    className={isLiked ? "text-red-500 fill-red-500 animate-bounce-custom" : "text-white"} 
+                />
             </button>
           )}
         </div>
