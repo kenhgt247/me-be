@@ -173,3 +173,19 @@ export const subscribeUnreadCount = (
     callback(total);
   });
 };
+// ... (các import cũ giữ nguyên)
+
+/* ================= DELETE CHAT (SOFT DELETE) ================= */
+export const deleteChatForUser = async (userId: string, otherUserId: string) => {
+  const chatId = getChatId(userId, otherUserId);
+  const chatRef = doc(db, 'chats', chatId);
+
+  try {
+    // Cập nhật trường deletedFor.{userId} = true
+    await updateDoc(chatRef, {
+      [`deletedFor.${userId}`]: true
+    });
+  } catch (error) {
+    console.error("Lỗi xóa đoạn chat:", error);
+  }
+};
