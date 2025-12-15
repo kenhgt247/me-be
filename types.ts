@@ -89,15 +89,23 @@ export interface Message {
   id: string;
   senderId: string;
   content: string;
-  createdAt: Timestamp; // Sử dụng Timestamp của Firestore
-  type: 'text' | 'image';
+  createdAt: Timestamp; // Thời gian từ Firestore
+  
+  // CẬP NHẬT: Thêm 'story_reply' vào danh sách type
+  type: 'text' | 'image' | 'story_reply';
+  
   readBy: string[]; // Mảng chứa ID những người đã xem
+
+  // CẬP NHẬT: Các trường bổ sung cho tính năng Story Reply (Optional)
+  storyId?: string;  // ID của story được reply
+  storyUrl?: string; // Link ảnh story (để hiện thumbnail bé xíu trong đoạn chat)
 }
 
 export interface ChatSession {
   id: string;
   participants: string[];
-  // Quan trọng: Lưu snapshot thông tin user để hiển thị nhanh ở danh sách
+  
+  // Snapshot thông tin user (để hiển thị nhanh ở danh sách inbox)
   participantData: {
     [uid: string]: {
       name: string;
@@ -105,6 +113,7 @@ export interface ChatSession {
       isExpert?: boolean;
     };
   };
+
   lastMessage: string;
   lastMessageAt: Timestamp;
   unread: { [uid: string]: number };
