@@ -3,7 +3,7 @@ import {
   doc,
   addDoc,
   updateDoc,
-  setDoc, // Thêm setDoc
+  setDoc,
   serverTimestamp,
   onSnapshot,
   query,
@@ -12,15 +12,29 @@ import {
   writeBatch,
   increment,
   getDoc,
-  Timestamp,
-  where // 👈 ĐÃ CÓ WHERE NHƯ YÊU CẦU
+  where
 } from 'firebase/firestore';
-import { db } from '../firebaseConfig';
+import {
+  ref,
+  uploadBytes,
+  getDownloadURL
+} from 'firebase/storage';
+import { db, storage } from '../firebaseConfig';
 import { Message, ChatSession, User } from '../types';
 
 /* ================= HELPER ================= */
-export const getChatId = (uid1: string, uid2: string) => 
+export const getChatId = (uid1: string, uid2: string) =>
   [uid1, uid2].sort().join('_');
+
+/* ================= UPLOAD IMAGE ================= */
+const uploadChatImage = async (file: File, chatId: string) => {
+  const fileRef = ref(
+    storage,
+    `chat_images/${chatId}/${Date.now()}_${file.name}`
+  );
+  await uploadBytes(fileRef, file);
+  return await getDownloadURL(fileRef);
+};
 
 /* ================= REALTIME MESSAGES ================= */
 export const subscribeMessages = (
@@ -28,88 +42,118 @@ export const subscribeMessages = (
   otherId: string,
   callback: (messages: Message[]) => void
 ) => {
+  if (!meId || !otherId) return () => {};
+
   const chatId = getChatId(meId, otherId);
   const q = query(
-    collection(db, 'chats', chatId, 'messages'), // Chuẩn hóa path sub-collection
+    collection(db, 'chats', chatId, 'messages'),
     orderBy('createdAt', 'asc'),
     limit(100)
   );
 
-  return onSnapshot(q, (snap) => {
-    const data = snap.docs.map(d => ({
-      id: d.id,
-      ...d.data()
-    })) as Message[];
-    callback(data);
-  });
+  return onSnapshot(
+    q,
+    snap => {
+      const data = snap.docs.map(
+        d => ({ id: d.id, ...d.data() } as Message)
+      );
+      callback(data);
+    },
+    err => {
+      if (err.code === 'permission-denied') {
+        callback([]);
+      }
+    }
+  );
 };
 
 /* ================= SEND MESSAGE ================= */
 export const sendMessage = async (
-  sender: User, // Truyền cả object User để lấy avatar/name
+  sender: User,
   receiverId: string,
-  content: string,
-  type: 'text' | 'image' = 'text'
+  content: string | File
 ) => {
-  if (!content.trim() && type === 'text') return;
+  if (!sender?.id || !receiverId) return;
 
   const chatId = getChatId(sender.id, receiverId);
   const batch = writeBatch(db);
 
-  // 1. Tạo message mới trong subcollection
+  let messageType: 'text' | 'image' = 'text';
+  let messageContent = '';
+
+  // 1️⃣ Upload image nếu là File
+  if (content instanceof File) {
+    messageType = 'image';
+    messageContent = await uploadChatImage(content, chatId);
+  } else {
+    if (!content.trim()) return;
+    messageContent = content;
+  }
+
+  // 2️⃣ Tạo message
   const msgRef = doc(collection(db, 'chats', chatId, 'messages'));
-  
-  // Lưu message
   batch.set(msgRef, {
     senderId: sender.id,
-    content,
-    type,
+    content: messageContent,
+    type: messageType,
     createdAt: serverTimestamp(),
-    readBy: [sender.id] // Người gửi auto xem
+    readBy: [sender.id]
   });
 
-  // 2. Cập nhật thông tin chat session (để hiển thị ở danh sách chat)
+  // 3️⃣ Update chat session
   const chatRef = doc(db, 'chats', chatId);
-  
-  // Dữ liệu update cho chat session
-  const updateData: any = {
+
+  const chatUpdate: Partial<ChatSession> = {
     participants: [sender.id, receiverId],
-    lastMessage: type === 'image' ? '[Hình ảnh]' : content,
+    lastMessage:
+      messageType === 'image' ? '[Hình ảnh]' : messageContent,
     lastMessageAt: serverTimestamp(),
-    [`unread.${receiverId}`]: increment(1), // Tăng biến đếm chưa đọc của người nhận
-    [`deletedFor.${sender.id}`]: false,     // Khôi phục chat nếu đã xóa
-    [`deletedFor.${receiverId}`]: false,
-    
-    // CẬP NHẬT THÔNG TIN NGƯỜI GỬI (để bên kia thấy avatar mới nhất)
-    [`participantData.${sender.id}`]: {
+    deletedFor: {
+      [sender.id]: false,
+      [receiverId]: false
+    },
+    unread: {
+      [receiverId]: increment(1)
+    },
+    participantData: {
+      [sender.id]: {
         name: sender.name,
         avatar: sender.avatar || '',
         isExpert: !!sender.isExpert
+      }
     }
-    // Lưu ý: Không update info người nhận ở đây để tránh ghi đè dữ liệu cũ nếu họ offline
   };
 
-  // Sử dụng set với merge: true để tạo chat doc nếu chưa có
-  batch.set(chatRef, updateData, { merge: true });
+  batch.set(chatRef, chatUpdate, { merge: true });
 
   await batch.commit();
 };
 
 /* ================= MARK READ ================= */
-export const markChatAsRead = async (meId: string, otherId: string) => {
-  const chatId = getChatId(meId, otherId);
-  const chatRef = doc(db, 'chats', chatId);
-  
-  // Reset biến đếm unread của mình về 0
-  await updateDoc(chatRef, {
-    [`unread.${meId}`]: 0
-  }).catch(() => {
-    // Bỏ qua lỗi nếu chat doc chưa tồn tại (trường hợp chat mới tinh)
-  });
+export const markChatAsRead = async (
+  meId: string,
+  otherId: string
+) => {
+  if (!meId || !otherId) return;
+
+  const chatRef = doc(db, 'chats', getChatId(meId, otherId));
+
+  await setDoc(
+    chatRef,
+    {
+      unread: {
+        [meId]: 0
+      }
+    },
+    { merge: true }
+  ).catch(() => {});
 };
 
-/* ================= UNREAD COUNT (BADGE) ================= */
-export const subscribeUnreadCount = (userId: string, callback: (count: number) => void) => {
+/* ================= UNREAD BADGE ================= */
+export const subscribeUnreadCount = (
+  userId: string,
+  callback: (count: number) => void
+) => {
   if (!userId) return () => {};
 
   const q = query(
@@ -117,16 +161,15 @@ export const subscribeUnreadCount = (userId: string, callback: (count: number) =
     where('participants', 'array-contains', userId)
   );
 
-  return onSnapshot(q, (snap) => {
-    let totalUnread = 0;
-    snap.docs.forEach(doc => {
-      const data = doc.data();
-      // Bỏ qua nếu chat này đã bị user xóa
+  return onSnapshot(q, snap => {
+    let total = 0;
+
+    snap.docs.forEach(d => {
+      const data = d.data();
       if (data.deletedFor?.[userId]) return;
-      
-      // Cộng dồn số tin chưa đọc
-      totalUnread += (data.unread?.[userId] || 0);
+      total += data.unread?.[userId] || 0;
     });
-    callback(totalUnread);
+
+    callback(total);
   });
 };
