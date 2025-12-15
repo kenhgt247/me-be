@@ -433,3 +433,55 @@ export const sendReport = async (
     createdAt: new Date().toISOString()
   });
 };
+/* =======================
+   EXPERT APPLICATION
+======================= */
+export const submitExpertApplication = async (
+  user: User,
+  data: {
+    fullName: string;
+    phone: string;
+    workplace?: string;
+    specialty?: string;
+  }
+) => {
+  if (!db || !user?.id) return;
+
+  // đảm bảo user tồn tại
+  const userRef = doc(db, USERS_COLLECTION, user.id);
+  const snap = await getDoc(userRef);
+
+  if (!snap.exists()) {
+    await setDoc(
+      userRef,
+      {
+        name: user.name || '',
+        avatar: user.avatar || '',
+        isAdmin: false,
+        isExpert: false,
+        createdAt: new Date().toISOString()
+      },
+      { merge: true }
+    );
+  }
+
+  // tạo đơn đăng ký chuyên gia
+  await addDoc(collection(db, EXPERT_APPS_COLLECTION), {
+    userId: user.id,
+    fullName: data.fullName,
+    phone: data.phone,
+    workplace: data.workplace || '',
+    specialty: data.specialty || '',
+    status: 'pending',
+    createdAt: new Date().toISOString()
+  });
+
+  // cập nhật trạng thái user
+  await setDoc(
+    userRef,
+    {
+      expertStatus: 'pending'
+    },
+    { merge: true }
+  );
+};
