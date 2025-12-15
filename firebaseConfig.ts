@@ -1,9 +1,10 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-// Sửa dòng import này
+// QUAN TRỌNG: Dùng getFirestore chuẩn thay vì initializeFirestore
 import { getFirestore } from 'firebase/firestore'; 
 import { getStorage } from 'firebase/storage';
 
+// Safe environment variable access
 const getEnv = (key: string, fallback: string): string => {
   if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
     return (import.meta as any).env[key] || fallback;
@@ -11,6 +12,7 @@ const getEnv = (key: string, fallback: string): string => {
   return fallback;
 };
 
+// Configuration
 const firebaseConfig = {
   apiKey: getEnv('VITE_FIREBASE_API_KEY', "AIzaSyD4BcKMNU54sbRVIz9qlA5lccyHJg730NA"),
   authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN', "askingkisd.firebaseapp.com"),
@@ -21,13 +23,15 @@ const firebaseConfig = {
   measurementId: getEnv('VITE_FIREBASE_MEASUREMENT_ID', "G-QZTM2MTNS2"),
 };
 
+// Initialize Firebase (Singleton pattern)
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
 const auth = getAuth(app);
 
-// --- SỬA LẠI ĐOẠN KHỞI TẠO DB ---
-// Dùng getFirestore mặc định để kết nối ổn định nhất
-const db = getFirestore(app); 
+// --- SỬA LỖI TẠI ĐÂY ---
+// Sử dụng getFirestore mặc định. Cấu hình cũ (experimentalForceLongPolling) 
+// làm mất token đăng nhập khiến bạn bị lỗi "Missing permissions".
+const db = getFirestore(app);
 
 const storage = getStorage(app);
 const googleProvider = new GoogleAuthProvider();
