@@ -72,9 +72,12 @@ export const ExpertRegistration: React.FC<ExpertRegistrationProps> = ({ currentU
             <p className="mb-8 text-blue-50">
                Hồ sơ của bạn đã được duyệt. Giờ đây bạn có thể chia sẻ kiến thức chuyên môn và giúp đỡ hàng nghìn bà mẹ Việt Nam với danh hiệu được xác thực.
             </p>
-            <Link to="/" className="inline-flex items-center gap-2 bg-white text-blue-600 font-bold px-8 py-3 rounded-full shadow-lg hover:bg-gray-50 transition-colors">
-               Bắt đầu chia sẻ <ChevronRight size={20} />
-            </Link>
+           <Link 
+  to="/" 
+  className="relative z-10 inline-flex items-center gap-2 bg-white text-blue-600 font-bold px-8 py-3 rounded-full shadow-lg hover:bg-gray-50 transition-colors"
+>
+  Bắt đầu chia sẻ <ChevronRight size={20} />
+</Link>
          </div>
       </div>
     );
