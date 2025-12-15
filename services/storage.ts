@@ -1,137 +1,80 @@
-import { Story, User } from '../types';
-import { db } from '../firebaseConfig'; 
-import { uploadFile } from './storage';
 import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  query, 
-  where, 
-  orderBy, 
-  doc, 
-  updateDoc, 
-  arrayUnion, 
-  deleteDoc,
-  arrayRemove,
-  getDoc,
-  serverTimestamp
-} from 'firebase/firestore';
+  getStorage, 
+  ref, 
+  uploadBytes, 
+  getDownloadURL, 
+  deleteObject 
+} from 'firebase/firestore'; 
+// LƯU Ý: Import đúng phải là từ 'firebase/storage' chứ không phải 'firestore'
+// Tôi sẽ sửa lại import chuẩn ngay bên dưới:
 
-// --- 1. LẤY DANH SÁCH STORY ---
-export const fetchStories = async (currentUser: User): Promise<Story[]> => {
+import { 
+  getStorage, 
+  ref, 
+  uploadBytes, 
+  getDownloadURL, 
+  deleteObject 
+} from 'firebase/storage';
+import { app } from '../firebaseConfig';
+
+// Khởi tạo Storage instance
+const storage = getStorage(app);
+
+/**
+ * Upload một file lên Firebase Storage
+ * @param file - File object từ input
+ * @param path - Đường dẫn lưu file (ví dụ: 'users/123/avatar.jpg')
+ * @returns Promise<string> - Trả về Download URL
+ */
+export const uploadFile = async (file: File, path: string): Promise<string> => {
+  if (!file) throw new Error("Không có file nào được chọn");
+
   try {
-    const now = new Date().toISOString();
-    const storiesRef = collection(db, 'stories');
-    
-    // Lấy các story chưa hết hạn
-    const q = query(
-      storiesRef, 
-      where('expiresAt', '>', now),
-      orderBy('expiresAt', 'asc') // Cần Index trong Firestore
-    );
+    // Tạo tham chiếu đến vị trí lưu
+    const storageRef = ref(storage, path);
 
-    const snapshot = await getDocs(q);
-    
-    const stories = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return { 
-            id: doc.id, 
-            ...data,
-            // Đảm bảo createdAt hiển thị đúng dù là Timestamp hay String
-            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt 
-        } as Story;
-    });
+    // Thực hiện upload
+    // uploadBytes phù hợp với file ảnh nhỏ/trung bình. 
+    // Nếu upload video lớn, nên dùng uploadBytesResumable
+    const snapshot = await uploadBytes(storageRef, file);
 
-    // Sắp xếp client-side: Mới nhất lên đầu
-    return stories.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    // Lấy URL để hiển thị
+    const downloadURL = await getDownloadURL(snapshot.ref);
+    return downloadURL;
+
   } catch (error) {
-    console.error("Lỗi lấy stories:", error);
-    return [];
+    console.error("Lỗi upload file:", error);
+    throw error;
   }
 };
 
-// --- 2. TẠO STORY MỚI (Đã thêm caption & author object) ---
-export const createStory = async (user: User, file: File, caption: string = ''): Promise<Story> => {
-  // Upload ảnh
-  const path = `stories/${user.id}/${Date.now()}_${file.name}`;
-  const mediaUrl = await uploadFile(file, path);
-
-  // Tạo object Story chuẩn
-  const newStoryData = {
-    // Gom nhóm thông tin tác giả vào object 'author' để đồng bộ với Chat/Question
-    author: {
-        id: user.id,
-        name: user.name,
-        avatar: user.avatar,
-        isExpert: !!user.isExpert
-    },
-    mediaUrl: mediaUrl,
-    mediaType: 'image',
-    caption: caption, // Lưu lời dẫn
-    createdAt: new Date().toISOString(), // Dùng string ISO cho dễ xử lý ở UI
-    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Hết hạn sau 24h
-    viewers: [],
-    likes: [],
-    views: 0
-  };
-
-  // Lưu vào Firestore
-  // @ts-ignore
-  const docRef = await addDoc(collection(db, 'stories'), {
-      ...newStoryData,
-      createdAt: serverTimestamp() // Lưu serverTimestamp để sort chính xác
-  });
-
-  // Trả về dữ liệu để update UI ngay lập tức
-  // @ts-ignore
-  return { id: docRef.id, ...newStoryData };
-};
-
-// --- 3. ĐÁNH DẤU ĐÃ XEM ---
-export const markStoryViewed = async (storyId: string, userId: string) => {
-  if(!storyId || !userId) return;
+/**
+ * Xóa file dựa trên đường dẫn (Path)
+ * @param path - Ví dụ: 'stories/user123/anh_abc.jpg'
+ */
+export const deleteFile = async (path: string): Promise<void> => {
+  if (!path) return;
   try {
-    const storyRef = doc(db, 'stories', storyId);
-    // Chỉ update nếu user chưa xem (tối ưu write)
-    // Tuy nhiên arrayUnion tốn ít chi phí check nên có thể gọi trực tiếp
-    await updateDoc(storyRef, { 
-        viewers: arrayUnion(userId),
-        // views: increment(1) // Nếu muốn đếm tổng view
-    });
-  } catch (error) { 
-      // console.error("Lỗi mark view:", error); 
+    const storageRef = ref(storage, path);
+    await deleteObject(storageRef);
+  } catch (error) {
+    console.warn("Lỗi xóa file (có thể file không tồn tại):", error);
   }
 };
 
-// --- 4. THẢ TIM STORY (Mới) ---
-export const toggleStoryLike = async (storyId: string, userId: string) => {
-    if(!storyId || !userId) return;
-    const storyRef = doc(db, 'stories', storyId);
-    
-    try {
-        const snap = await getDoc(storyRef);
-        if (snap.exists()) {
-            const data = snap.data();
-            const likes = data.likes || [];
-            
-            if (likes.includes(userId)) {
-                await updateDoc(storyRef, { likes: arrayRemove(userId) });
-            } else {
-                await updateDoc(storyRef, { likes: arrayUnion(userId) });
-            }
-        }
-    } catch (error) {
-        console.error("Lỗi like story:", error);
-    }
-};
-
-// --- 5. XÓA STORY (Mới) ---
-export const deleteStory = async (storyId: string) => {
-    if(!storyId) return;
-    try {
-        await deleteDoc(doc(db, 'stories', storyId));
-    } catch (error) {
-        console.error("Lỗi xóa story:", error);
-        throw error;
-    }
+/**
+ * Xóa file dựa trên Download URL (Hữu ích khi xóa avatar cũ/ảnh cũ)
+ * @param url - Full URL của ảnh trên Firebase
+ */
+export const deleteFileFromUrl = async (url: string): Promise<void> => {
+  if (!url) return;
+  
+  try {
+    // Logic để lấy path từ URL của Firebase
+    // URL thường có dạng: .../o/users%2F123%2Favatar.jpg?alt=...
+    const storageRef = ref(storage, url);
+    await deleteObject(storageRef);
+  } catch (error) {
+    console.warn("Lỗi xóa file từ URL:", error);
+  }
 };
