@@ -217,3 +217,30 @@ export const syncCategoriesFromCode = async () => {
   }
   return count;
 };
+// ... (Giữ nguyên các code cũ)
+
+// --- BLOGS (Thêm mới) ---
+export const fetchAllBlogs = async () => {
+  if (!db) return [];
+  try {
+    // Giả sử collection tên là 'blogs'
+    const snapshot = await getDocs(collection(db, 'blogs'));
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    console.error("Error fetching blogs:", error);
+    return [];
+  }
+};
+
+// --- DOCUMENTS (Thêm mới) ---
+export const fetchAllDocuments = async () => {
+  if (!db) return [];
+  try {
+    // Giả sử collection tên là 'documents'
+    const snapshot = await getDocs(collection(db, 'documents'));
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    console.error("Error fetching documents:", error);
+    return [];
+  }
+};
