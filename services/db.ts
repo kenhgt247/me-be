@@ -427,3 +427,45 @@ export const sendReport = async (
     createdAt: new Date().toISOString()
   });
 };
+// ================= ANSWER CRUD (BỔ SUNG ĐỂ KHỚP APP.TSX) =================
+
+export const updateAnswerInDb = async (
+  qId: string,
+  aId: string,
+  updates: Partial<any>
+) => {
+  if (!db) return;
+
+  const ref = doc(db, 'questions', qId);
+  const snap = await getDoc(ref);
+
+  if (!snap.exists()) return;
+
+  const q = snap.data() as any;
+
+  const newAnswers = (q.answers || []).map((a: any) =>
+    a.id === aId ? { ...a, ...updates } : a
+  );
+
+  await updateDoc(ref, { answers: newAnswers });
+};
+
+export const deleteAnswerFromDb = async (
+  qId: string,
+  aId: string
+) => {
+  if (!db) return;
+
+  const ref = doc(db, 'questions', qId);
+  const snap = await getDoc(ref);
+
+  if (!snap.exists()) return;
+
+  const q = snap.data() as any;
+
+  const newAnswers = (q.answers || []).filter(
+    (a: any) => a.id !== aId
+  );
+
+  await updateDoc(ref, { answers: newAnswers });
+};
