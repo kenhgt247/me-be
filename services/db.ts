@@ -9,7 +9,7 @@ import {
   getDoc,
   arrayUnion,
   arrayRemove,
-  where, // ✅ Đã thêm import where
+  where,
   addDoc,
   limit,
   writeBatch
@@ -83,6 +83,57 @@ export const subscribeToUser = (userId: string, callback: (user: User | null) =>
 };
 
 /* =======================
+   SOCIAL (FOLLOW / UNFOLLOW) - ĐÃ CÓ ĐỦ
+======================= */
+export const followUser = async (currentUserId: string, targetUser: User) => {
+  if (!db || !currentUserId || !targetUser.id) return;
+  try {
+    const batch = writeBatch(db);
+    
+    // Cập nhật người đi follow (mình)
+    const currentUserRef = doc(db, USERS_COLLECTION, currentUserId);
+    batch.update(currentUserRef, { following: arrayUnion(targetUser.id) });
+    
+    // Cập nhật người được follow (họ)
+    const targetUserRef = doc(db, USERS_COLLECTION, targetUser.id);
+    batch.update(targetUserRef, { followers: arrayUnion(currentUserId) });
+    
+    await batch.commit();
+    
+    // Gửi thông báo
+    await sendNotification(
+      targetUser.id,
+      { id: currentUserId, name: 'Người dùng', avatar: '' } as User, // Lấy info thật ở UI truyền vào tốt hơn
+      'FOLLOW',
+      'đã bắt đầu theo dõi bạn.',
+      `/profile/${currentUserId}`
+    );
+  } catch (e) {
+    console.error("Follow error:", e);
+    throw e;
+  }
+};
+
+// ✅ HÀM NÀY ĐANG BỊ THIẾU Ở FILE CŨ CỦA BẠN
+export const unfollowUser = async (currentUserId: string, targetUserId: string) => {
+  if (!db || !currentUserId || !targetUserId) return;
+  try {
+    const batch = writeBatch(db);
+    
+    const currentUserRef = doc(db, USERS_COLLECTION, currentUserId);
+    batch.update(currentUserRef, { following: arrayRemove(targetUserId) });
+    
+    const targetUserRef = doc(db, USERS_COLLECTION, targetUserId);
+    batch.update(targetUserRef, { followers: arrayRemove(currentUserId) });
+    
+    await batch.commit();
+  } catch (e) {
+    console.error("Unfollow error:", e);
+    throw e;
+  }
+};
+
+/* =======================
    NOTIFICATIONS
 ======================= */
 export const sendNotification = async (
@@ -136,7 +187,31 @@ export const markNotificationAsRead = async (notifId: string) => {
 };
 
 /* =======================
-   QUESTIONS & ANSWERS (FIXED LIKE LOGIC)
+   EXPERT REGISTRATION
+======================= */
+export const submitExpertApplication = async (user: User, data: any) => {
+    if (!db) return;
+    const app = {
+        userId: user.id,
+        fullName: data.fullName,
+        phone: data.phone,
+        workplace: data.workplace,
+        specialty: data.specialty,
+        proofImages: [], 
+        status: 'pending',
+        createdAt: new Date().toISOString()
+    };
+    await addDoc(collection(db, EXPERT_APPS_COLLECTION), app);
+    
+    await updateDoc(doc(db, USERS_COLLECTION, user.id), { 
+        expertStatus: 'pending', 
+        specialty: data.specialty,
+        workplace: data.workplace
+    });
+};
+
+/* =======================
+   QUESTIONS & ANSWERS
 ======================= */
 
 export const addQuestionToDb = async (q: Question) => {
@@ -165,7 +240,6 @@ export const subscribeToQuestions = (callback: (qs: Question[]) => void) => {
     });
 };
 
-// ✅ FIX: Logic Like Câu hỏi chuẩn
 export const toggleQuestionLikeDb = async (q: Question, user: User) => {
     if (!db || !q.id || !user.id) return;
     
@@ -176,15 +250,12 @@ export const toggleQuestionLikeDb = async (q: Question, user: User) => {
         if (!snap.exists()) return;
         
         const data = snap.data();
-        // Đảm bảo likes luôn là mảng, tránh lỗi undefined
         const currentLikes: string[] = Array.isArray(data.likes) ? data.likes : [];
         const isLiked = currentLikes.includes(user.id);
 
         if (isLiked) {
-            // Nếu đã thích -> XÓA
             await updateDoc(qRef, { likes: arrayRemove(user.id) });
         } else {
-            // Nếu chưa thích -> THÊM
             await updateDoc(qRef, { likes: arrayUnion(user.id) });
             
             if (q.author.id !== user.id) {
@@ -217,7 +288,53 @@ export const addAnswerToDb = async (q: Question, a: Answer) => {
     await sendNotification(q.author.id, a.author, 'ANSWER', `trả lời: ${q.title}`, `/question/${toSlug(q.title, q.id)}`);
 };
 
-// ✅ FIX: Logic Like Câu trả lời chuẩn
+export const updateAnswerInDb = async (qId: string, aId: string, updates: Partial<Answer>) => {
+    if (!db) return;
+    const ref = doc(db, QUESTIONS_COLLECTION, qId);
+    
+    try {
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+            const q = snap.data() as Question;
+            
+            // Tìm answer cần update (để lấy info cũ nếu cần)
+            const targetAnswer = q.answers.find(a => a.id === aId);
+            
+            // Cập nhật mảng answers
+            const newAnswers = q.answers.map(a => a.id === aId ? { ...a, ...updates } : a);
+            
+            await updateDoc(ref, { answers: newAnswers });
+            
+            // Gửi thông báo
+            if (targetAnswer && (updates.isExpertVerified || updates.isBestAnswer)) {
+                const type = updates.isExpertVerified ? 'VERIFY' : 'BEST_ANSWER';
+                const content = updates.isExpertVerified ? 'đã xác thực câu trả lời.' : 'đã chọn câu trả lời hay nhất.';
+                
+                await sendNotification(
+                    targetAnswer.author.id, 
+                    { name: 'Hệ thống', avatar: '/icon-system.png', id: 'system' } as User, 
+                    type, 
+                    content, 
+                    `/question/${toSlug(q.title, q.id)}`
+                );
+            }
+        }
+    } catch (e) {
+        console.error("Update answer error:", e);
+    }
+};
+
+export const deleteAnswerFromDb = async (qId: string, aId: string) => {
+    if (!db) return;
+    const ref = doc(db, QUESTIONS_COLLECTION, qId);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+        const q = snap.data() as Question;
+        const newAnswers = q.answers.filter(a => a.id !== aId);
+        await updateDoc(ref, { answers: newAnswers });
+    }
+};
+
 export const toggleAnswerUseful = async (qId: string, aId: string, userId: string) => {
     if (!db) return;
     const ref = doc(db, QUESTIONS_COLLECTION, qId);
@@ -239,7 +356,6 @@ export const toggleAnswerUseful = async (qId: string, aId: string, userId: strin
                          newUsefulBy = [...usefulBy, userId];
                     }
                     
-                    // Cập nhật cả mảng ID người like và số lượng
                     return { ...a, usefulBy: newUsefulBy, likes: newUsefulBy.length };
                 }
                 return a;
@@ -252,28 +368,25 @@ export const toggleAnswerUseful = async (qId: string, aId: string, userId: strin
     }
 };
 
-// --- CÁC HÀM KHÁC GIỮ NGUYÊN ---
-export const sendReport = async (targetId: string, targetType: 'question' | 'answer', reason: string, reportedBy: string) => {
+// --- REPORTING ---
+export const sendReport = async (
+  targetId: string,
+  targetType: 'question' | 'answer',
+  reason: string,
+  reportedBy: string
+) => {
   if (!db) return;
-  await addDoc(collection(db, 'reports'), {
-    targetId, targetType, reason, reportedBy, status: 'open', createdAt: new Date().toISOString()
-  });
-};
-
-export const submitExpertApplication = async (user: User, data: any) => {
-    if (!db) return;
-    const app = {
-        userId: user.id, fullName: data.fullName, phone: data.phone,
-        workplace: data.workplace, specialty: data.specialty,
-        proofImages: [], status: 'pending', createdAt: new Date().toISOString()
-    };
-    await addDoc(collection(db, EXPERT_APPS_COLLECTION), app);
-    await updateDoc(doc(db, USERS_COLLECTION, user.id), { 
-        expertStatus: 'pending', specialty: data.specialty, workplace: data.workplace
+  try {
+    await addDoc(collection(db, 'reports'), {
+      targetId,
+      targetType,
+      reason,
+      reportedBy,
+      status: 'open',
+      createdAt: new Date().toISOString()
     });
+  } catch (e) {
+    console.error("Error sending report", e);
+    throw e;
+  }
 };
-
-// --- CÁC HÀM CHAT (NẾU CẦN DÙNG CHUNG) ---
-// Nếu bạn tách file chat riêng thì có thể bỏ qua phần này, 
-// nhưng nếu dùng chung thì đảm bảo import đủ
-export const getChatId = (uid1: string, uid2: string) => [uid1, uid2].sort().join('_');
