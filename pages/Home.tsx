@@ -16,7 +16,8 @@ import { fetchDocuments } from '../services/documents';
 
 // --- KẾT NỐI SERVICE STORIES VÀ CHAT ---
 import { fetchStories, createStory, markStoryViewed } from '../services/stories';
-import { sendMessage } from '../services/chat';
+// Thay vì import sendMessage, hãy import sendStoryReply
+import { sendMessage, sendStoryReply } from '../services/chat';
 
 interface HomeProps {
   questions: Question[];
@@ -119,45 +120,113 @@ const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ currentUser, onClos
 const StoryViewer = ({ story, currentUser, onClose }: { story: Story, currentUser?: User | null, onClose: () => void }) => {
   const [progress, setProgress] = useState(0);
   const [replyText, setReplyText] = useState('');
+  const [isSending, setIsSending] = useState(false); // Thêm trạng thái đang gửi để tránh spam
 
+  // Đánh dấu đã xem khi mở story
   useEffect(() => {
-    if (currentUser && story.id) { markStoryViewed(story.id, currentUser.id); }
+    if (currentUser && story.id) { 
+        markStoryViewed(story.id, currentUser.id); 
+    }
   }, [story.id, currentUser]);
 
+  // Thanh thời gian chạy tự động (5 giây)
   useEffect(() => {
     const timer = setInterval(() => {
       setProgress((prev) => {
-        if (prev >= 100) { clearInterval(timer); onClose(); return 100; }
+        if (prev >= 100) { 
+            clearInterval(timer); 
+            onClose(); 
+            return 100; 
+        }
         return prev + 1; 
       });
-    }, 50); 
+    }, 50); // 50ms * 100 = 5000ms = 5 giây
     return () => clearInterval(timer);
   }, [onClose]);
 
+  // --- HÀM GỬI TIN NHẮN (ĐÃ CẬP NHẬT) ---
   const handleSendReply = async () => {
-      if(!replyText.trim() || !currentUser) return;
-      await sendMessage(currentUser.id, story.userId, replyText, 'story_reply', { storyId: story.id, snapshotUrl: story.mediaUrl });
-      setReplyText(''); alert('Đã gửi tin nhắn!'); 
+      // Kiểm tra kỹ dữ liệu đầu vào
+      if(!replyText.trim() || !currentUser || isSending) return;
+      
+      setIsSending(true);
+      try {
+        // Dùng hàm sendStoryReply chuyên biệt (đã viết trong chat.ts)
+        await sendStoryReply(
+            currentUser,         // Object người gửi
+            story.userId,        // ID người nhận (Lưu ý: check kỹ field này trong type Story của bạn là userId hay author.id)
+            replyText,           // Nội dung tin nhắn
+            { id: story.id, url: story.mediaUrl } // Object chứa ảnh thumbnail story
+        );
+        
+        setReplyText(''); 
+        alert('Đã gửi phản hồi!'); 
+      } catch (error) {
+        console.error("Lỗi gửi tin:", error);
+        alert("Không thể gửi tin nhắn lúc này");
+      } finally {
+        setIsSending(false);
+      }
   };
 
   return (
     <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center animate-fade-in">
       <div className="relative w-full h-full md:max-w-md md:h-[90vh] md:rounded-2xl overflow-hidden bg-gray-900 shadow-2xl">
-        <div className="absolute top-4 left-2 right-2 flex gap-1 z-20"><div className="h-1 flex-1 bg-white/30 rounded-full overflow-hidden"><div className="h-full bg-white transition-all duration-100 ease-linear" style={{ width: `${progress}%` }} /></div></div>
+        
+        {/* Thanh Progress Bar */}
+        <div className="absolute top-4 left-2 right-2 flex gap-1 z-20">
+            <div className="h-1 flex-1 bg-white/30 rounded-full overflow-hidden">
+                <div className="h-full bg-white transition-all duration-100 ease-linear" style={{ width: `${progress}%` }} />
+            </div>
+        </div>
+
+        {/* Header: Avatar & Tên & Nút đóng */}
         <div className="absolute top-8 left-4 right-4 flex items-center justify-between z-20 text-white">
           <div className="flex items-center gap-2">
             <img src={story.userAvatar} className="w-9 h-9 rounded-full border border-white/50 object-cover" alt="" />
-            <div className="flex flex-col"><span className="font-bold text-sm text-shadow">{story.userName}</span><span className="text-[10px] text-white/80">{new Date(story.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span></div>
+            <div className="flex flex-col">
+                <span className="font-bold text-sm text-shadow">{story.userName}</span>
+                <span className="text-[10px] text-white/80">
+                    {new Date(story.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                </span>
+            </div>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition-colors"><X size={24} /></button>
+          <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition-colors">
+            <X size={24} />
+          </button>
         </div>
+
+        {/* Nội dung Ảnh Story */}
         <div className="absolute inset-0 flex items-center justify-center bg-black">
              <img src={story.mediaUrl} className="w-full h-full object-cover" alt="story" />
              <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60 pointer-events-none"></div>
         </div>
+
+        {/* Footer: Input Chat & Nút Gửi */}
         <div className="absolute bottom-0 left-0 right-0 z-30 p-4 pb-6 flex items-center gap-3">
-          <div className="flex-1 relative"><input value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder={`Gửi tin nhắn cho ${story.userName}...`} className="w-full bg-transparent border border-white/60 rounded-full pl-5 pr-10 py-3 text-white placeholder-white/70 text-sm outline-none focus:border-white focus:bg-black/20 transition-all backdrop-blur-sm" /></div>
-          {replyText.trim() ? <button onClick={handleSendReply} className="p-3 bg-primary text-white rounded-full hover:bg-primary/90 transition-transform active:scale-95"><Send size={20} className="ml-0.5" /></button> : <button className="p-3 hover:bg-white/10 rounded-full text-white transition-colors active:scale-90"><Heart size={28} /></button>}
+          <div className="flex-1 relative">
+            <input 
+                value={replyText} 
+                onChange={(e) => setReplyText(e.target.value)} 
+                onKeyDown={(e) => e.key === 'Enter' && handleSendReply()} // Bấm Enter để gửi
+                placeholder={`Gửi tin nhắn cho ${story.userName}...`} 
+                className="w-full bg-transparent border border-white/60 rounded-full pl-5 pr-10 py-3 text-white placeholder-white/70 text-sm outline-none focus:border-white focus:bg-black/20 transition-all backdrop-blur-sm" 
+            />
+          </div>
+          
+          {replyText.trim() ? (
+            <button 
+                onClick={handleSendReply} 
+                disabled={isSending}
+                className="p-3 bg-primary text-white rounded-full hover:bg-primary/90 transition-transform active:scale-95 disabled:opacity-50"
+            >
+                {isSending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} className="ml-0.5" />}
+            </button>
+          ) : (
+            <button className="p-3 hover:bg-white/10 rounded-full text-white transition-colors active:scale-90">
+                <Heart size={28} />
+            </button>
+          )}
         </div>
       </div>
     </div>
