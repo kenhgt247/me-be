@@ -244,3 +244,88 @@ export const subscribeToQuestions = (cb: (qs: Question[]) => void) =>
           )
       )
   );
+// =====================================================
+// BỔ SUNG CÁC HÀM CŨ – ĐỂ KHÔNG LỖI BUILD
+// =====================================================
+
+export const toggleQuestionLikeDb = async (q: Question, user: User) => {
+  if (!db) return;
+
+  // Tăng like (đơn giản – giữ logic cũ)
+  await updateDoc(doc(db, QUESTIONS_COLLECTION, q.id), {
+    likes: q.likes + 1
+  });
+
+  // Gửi notification
+  await sendNotification(
+    q.author.id,
+    user,
+    'LIKE',
+    `thích câu hỏi: ${q.title}`,
+    `/question/${toSlug(q.title, q.id)}`
+  );
+};
+
+export const toggleSaveQuestion = async (
+  userId: string,
+  qId: string,
+  save: boolean
+) => {
+  if (!db) return;
+
+  await updateDoc(doc(db, USERS_COLLECTION, userId), {
+    savedQuestions: save
+      ? arrayUnion(qId)
+      : arrayRemove(qId)
+  });
+};
+
+export const toggleAnswerUseful = async (
+  qId: string,
+  aId: string,
+  userId: string
+) => {
+  if (!db) return;
+
+  const ref = doc(db, QUESTIONS_COLLECTION, qId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+
+  const q = snap.data() as Question;
+
+  const newAnswers = q.answers.map(a => {
+    if (a.id === aId) {
+      const usefulBy = a.usefulBy || [];
+      const updated = usefulBy.includes(userId)
+        ? usefulBy.filter(id => id !== userId)
+        : [...usefulBy, userId];
+
+      return {
+        ...a,
+        usefulBy: updated,
+        likes: updated.length
+      };
+    }
+    return a;
+  });
+
+  await updateDoc(ref, { answers: newAnswers });
+};
+
+export const sendReport = async (
+  targetId: string,
+  targetType: 'question' | 'answer',
+  reason: string,
+  reportedBy: string
+) => {
+  if (!db) return;
+
+  await addDoc(collection(db, 'reports'), {
+    targetId,
+    targetType,
+    reason,
+    reportedBy,
+    status: 'open',
+    createdAt: new Date().toISOString()
+  });
+};
