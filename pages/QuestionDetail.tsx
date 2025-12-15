@@ -337,14 +337,11 @@ export default function QuestionDetail({
   // ✅ SỬA LỖI HIỂN THỊ LIKE: Tính toán số lượng và trạng thái
   const likesCount = useMemo(() => {
       if (!question) return 0;
-      // Nếu là mảng (Logic mới) -> Lấy length
-      // Nếu là số (Logic cũ) -> Lấy số
       return Array.isArray(question.likes) ? question.likes.length : (typeof question.likes === 'number' ? question.likes : 0);
   }, [question]);
 
   const isLiked = useMemo(() => {
       if (!question || !currentUser) return false;
-      // Kiểm tra xem ID người dùng có trong mảng không
       return Array.isArray(question.likes) 
           ? question.likes.includes(currentUser.id) 
           : false; 
@@ -368,7 +365,6 @@ export default function QuestionDetail({
     if (!question) return;
     try {
       const user = await ensureAuth();
-      // Logic DB đã được sửa để xử lý Toggle
       toggleQuestionLikeDb(question, user);
     } catch (e) { /* ignore */ }
   }, [question, ensureAuth]);
@@ -621,10 +617,9 @@ export default function QuestionDetail({
               <div className="flex items-center justify-between py-3 border-t border-gray-50 dark:border-slate-800">
                 <div className="flex items-center gap-6">
                   
-                  {/* ✅ NÚT LIKE ĐÃ SỬA: CHỈ HIỂN THỊ SỐ LƯỢNG */}
+                  {/* ✅ NÚT LIKE: CHỈ HIỂN THỊ SỐ LƯỢNG */}
                   <button onClick={handleLike} className={`flex items-center gap-2 text-sm font-bold transition-all active:scale-90 ${isLiked ? 'text-red-500' : 'text-gray-500 dark:text-gray-400 hover:text-red-500'}`}>
                     <Heart size={20} className={isLiked ? "fill-red-500" : ""} />
-                    {/* 👇 SỬA LỖI Ở ĐÂY: Hiển thị likesCount thay vì render cả mảng */}
                     <span>{likesCount > 0 ? likesCount : 'Thích'}</span>
                   </button>
 
@@ -720,10 +715,19 @@ export default function QuestionDetail({
                       </div>
 
                       <div className="flex items-center gap-4 border-t border-gray-50 dark:border-slate-800 pt-3 mt-2">
-                        <button onClick={() => handleToggleUseful(ans)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all active:scale-95 group ${isUseful ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 font-bold' : 'text-gray-50 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 font-medium'}`}>
+                        {/* ✅ NÚT HỮU ÍCH ĐÃ SỬA: SỬA MÀU SẮC ĐỂ KHÔNG BỊ TỆP MÀU NỀN */}
+                        <button 
+                          onClick={() => handleToggleUseful(ans)} 
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all active:scale-95 group 
+                            ${isUseful 
+                              ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 font-bold' 
+                              : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 font-medium'}`}
+                        >
                           <ThumbsUp size={16} className={`group-hover:scale-110 transition-transform ${isUseful ? 'fill-current scale-110' : ''}`} /> 
-                          <span className="text-xs">Hữu ích {ans.likes > 0 ? `(${ans.likes})` : ''}</span>
+                          {/* ✅ SỬA LOGIC: Luôn hiển thị số lượng */}
+                          <span className="text-xs">Hữu ích ({ans.likes || 0})</span>
                         </button>
+
                         {isAdmin && !isVerified && <button onClick={() => onVerifyAnswer(question.id, ans.id)} className="text-xs font-bold text-gray-400 hover:text-green-600 dark:hover:text-green-400 ml-auto flex items-center gap-1"><ShieldCheck size={14} /> Xác thực</button>}
                       </div>
                     </div>
