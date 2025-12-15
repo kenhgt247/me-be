@@ -87,60 +87,29 @@ export interface Notification {
 
 export interface Message {
   id: string;
-
   senderId: string;
-  receiverId?: string; // giữ để không vỡ code cũ
-
   content: string;
-
-  // Firestore v2 dùng Timestamp, nhưng để any cho linh hoạt
-  createdAt: any;
-
-  // V1
-  isRead?: boolean;
-
-  // V2 (chuẩn FB)
-  readBy?: string[];
-
-  type: 'text' | 'image' | 'story_reply'; 
-
-  storyId?: string;       
-  storySnapshotUrl?: string; 
+  createdAt: Timestamp; // Sử dụng Timestamp của Firestore
+  type: 'text' | 'image';
+  readBy: string[]; // Mảng chứa ID những người đã xem
 }
-
 
 export interface ChatSession {
   id: string;
-
   participants: string[];
-
-  participantData?: {
+  // Quan trọng: Lưu snapshot thông tin user để hiển thị nhanh ở danh sách
+  participantData: {
     [uid: string]: {
       name: string;
       avatar: string;
       isExpert?: boolean;
     };
   };
-
   lastMessage: string;
-
-  // Firestore v2
-  lastMessageAt?: any;
-
-  // Giữ cho code cũ
-  lastMessageTime?: string;
-  updatedAt?: string;
-
-  // V2
-  unread?: { [uid: string]: number };
-
-  // V1
-  unreadCount?: { [uid: string]: number };
-
-  // Soft delete
+  lastMessageAt: Timestamp;
+  unread: { [uid: string]: number };
   deletedFor?: { [uid: string]: boolean };
 }
-
 
 export interface Story {
   id: string;
