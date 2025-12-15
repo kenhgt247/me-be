@@ -13,12 +13,18 @@ interface ChatDetailProps {
   onOpenAuth: () => void;
 }
 
+// --- CẬP NHẬT: DANH SÁCH CẢM XÚC PHONG PHÚ HƠN ---
 const STICKER_PACKS = {
-  "Cảm xúc": ["😀", "😂", "🥰", "😎", "😭", "😡", "😱", "🥳", "😴", "🤔"],
-  "Yêu thương": ["❤️", "🧡", "💛", "💚", "💙", "💜", "💖", "💝", "💋", "💌"],
-  "Mẹ & Bé": ["👶", "👧", "🧒", "🤰", "🤱", "🍼", "🧸", "🎈", "🎂", "💊"],
-  "Động vật": ["🐶", "🐱", "🐰", "🐻", "🐼", "🐨", "🐯", "🦁", "🐷", "🐸"],
-  "Đồ ăn": ["🍎", "🍌", "🍉", "🍓", "🥕", "🌽", "🍕", "🍔", "🍦", "🍪"]
+  "Phổ biến": ["😀", "😂", "🥰", "😎", "😭", "👍", "🙏", "❤️", "🎉", "🔥", "💯", "🥺"],
+  "Yêu thương": ["❤️", "🧡", "💛", "💚", "💙", "💜", "💖", "💝", "💋", "💌", "💕", "💞", "💓", "💗", "💘", "🫶"],
+  "Mẹ & Bé": ["👶", "👧", "🧒", "🤰", "🤱", "🍼", "🧸", "🎈", "🎂", "💊", "🛁", "🛌", "👚", "👟", "🏫", "🎨"],
+  "Động vật": ["🐶", "🐱", "🐰", "🐻", "🐼", "🐨", "🐯", "🦁", "🐷", "🐸", "🐵", "🐔", "🦄", "🐝", "🐞", "🦋"],
+  "Đồ ăn": ["🍎", "🍌", "🍉", "🍓", "🥕", "🌽", "🍕", "🍔", "🍦", "🍪", "🍩", "🍫", "🍿", "🥤", "🧋", "☕"],
+  "Cảm xúc": ["😡", "😱", "🥳", "😴", "🤔", "🙄", "🤐", "😪", "🤢", "🤧", "🤕", "🤠", "😇", "🤪", "🤫", "🤥"],
+  "Hoạt động": ["🏃", "🧘", "🏋️", "🚴", "🏊", "🤸", "🧗", "⛹️", "🎮", "🎳", "🎤", "🎧", "🎬", "🎨", "🧶", "📚"],
+  "Thiên nhiên": ["🌸", "🌹", "🌻", "🌼", "🌷", "🌱", "🌲", "🌳", "🌴", "🌵", "🍀", "🍁", "🍄", "🐚", "🌞", "🌈"],
+  "Đồ vật": ["💻", "📱", "📷", "⌚", "💡", "📚", "✏️", "🎁", "🎈", "📫", "📅", "💼", "👓", "💍", "💄", "💅"],
+  "Biểu tượng": ["✨", "🌟", "💫", "💥", "💢", "💦", "💤", "🎵", "🎶", "🚫", "✅", "🆗", "🆘", "🆙", "🆒", "🆕"]
 };
 
 const getTimeStatus = (lastActiveAt?: string) => {
@@ -44,7 +50,7 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
     const [showStickers, setShowStickers] = useState(false);
     const [showScrollDown, setShowScrollDown] = useState(false);
 
-    // --- State mới cho Menu Xóa ---
+    // --- State cho Menu Xóa ---
     const [showMenu, setShowMenu] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
@@ -221,7 +227,6 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
         return emojiRegex.test(content) && [...content].length <= 3;
     };
 
-    // --- Hàm xử lý xóa cuộc trò chuyện ---
     const handleDeleteChat = async () => {
         if (!userId || !currentUser) return;
         if (currentUser.isGuest) {
@@ -236,7 +241,7 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
                 setIsDeleting(true);
                 setShowMenu(false);
                 await deleteConversation(currentUser.id, userId);
-                navigate('/messages'); // Quay về danh sách tin nhắn sau khi xóa
+                navigate('/messages');
             } catch (error) {
                 console.error("Xóa thất bại", error);
                 alert("Có lỗi xảy ra khi xóa tin nhắn.");
@@ -264,7 +269,7 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
                     <div className="ml-1"><h2 className="font-bold text-textDark dark:text-white text-[16px] leading-tight flex items-center gap-1">{targetUser.name}</h2><span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full inline-flex items-center gap-1 mt-0.5 transition-colors ${isOnline ? 'bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-400'}`}><span className={`w-1.5 h-1.5 rounded-full ${dotColor}`}></span>{statusText}</span></div>
                 </div>
                 
-                {/* MENU BUTTON - Modified to include Dropdown */}
+                {/* MENU BUTTON */}
                 <div className="relative" ref={menuRef}>
                     <button 
                         onClick={() => setShowMenu(!showMenu)} 
