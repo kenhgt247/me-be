@@ -2,9 +2,14 @@ import React, { useState, useEffect } from 'react';
 // @ts-ignore
 import { Link, useLocation } from 'react-router-dom';
 import { Home, Plus, Gamepad2, Facebook, Instagram, Youtube, User as UserIcon, Bell, MessageCircle, Bot, MapPin, Phone, Mail, ShieldCheck, Heart } from 'lucide-react';
-import { subscribeToNotifications, subscribeToChats, updateUserStatus } from '../services/db';
+
+// ✅ SỬA 1: Bỏ subscribeToChats ở đây
+import { subscribeToNotifications, updateUserStatus } from '../services/db';
+// ✅ SỬA 2: Import hàm mới từ services/chat
+import { subscribeUnreadCount } from '../services/chat'; 
+
 import { auth } from '../firebaseConfig';
-import ThemeToggle from './ThemeToggle'; // Đã import nút chuyển đổi giao diện
+import ThemeToggle from './ThemeToggle';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -34,6 +39,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             };
             window.addEventListener('beforeunload', handleUnload);
 
+            // --- NOTIFICATIONS ---
             const unsubNotif = subscribeToNotifications(user.uid, (notifs) => {
                 if (notifs) {
                     const unread = notifs.filter(n => !n.isRead).length;
@@ -41,17 +47,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 }
             });
 
-            const unsubChats = subscribeToChats(user.uid, (chats) => {
-                let count = 0;
-                if (chats) {
-                    chats.forEach(c => {
-                        // @ts-ignore
-                        if (c.unreadCount && c.unreadCount[user.uid]) {
-                            // @ts-ignore
-                            count += c.unreadCount[user.uid];
-                        }
-                    });
-                }
+            // ✅ SỬA 3: Logic đếm tin nhắn chưa đọc mới (Gọn hơn, không lỗi)
+            const unsubChats = subscribeUnreadCount(user.uid, (count) => {
                 setUnreadMsgCount(count);
             });
 
@@ -83,7 +80,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const hideBottomBar = isAskPage || isChatDetail || isAiChat;
 
   return (
-    // THAY ĐỔI: Thêm dark:bg-dark-bg và dark:text-dark-text vào container chính
     <div className="min-h-screen font-sans text-textDark dark:text-dark-text bg-[#F7F7F5] dark:bg-dark-bg flex flex-col overflow-x-hidden selection:bg-primary/20 transition-colors duration-300">
       
       {/* --- DESKTOP HEADER --- */}
