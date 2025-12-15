@@ -227,7 +227,12 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
         return emojiRegex.test(content) && [...content].length <= 3;
     };
 
-    const handleDeleteChat = async () => {
+    const handleDeleteChat = async (e: React.MouseEvent) => {
+        // Ngăn sự kiện click lan ra ngoài gây đóng menu sai cách
+        e.stopPropagation(); 
+        
+        console.log("Đã bấm nút xóa"); // Kiểm tra xem click có ăn không
+
         if (!userId || !currentUser) return;
         if (currentUser.isGuest) {
             alert("Vui lòng đăng nhập để thực hiện chức năng này.");
@@ -240,7 +245,13 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
             try {
                 setIsDeleting(true);
                 setShowMenu(false);
+                
+                // OPTIMISTIC UPDATE: Xóa tin nhắn ngay lập tức trên UI
+                setMessages([]); 
+
+                console.log("Đang xóa chat...");
                 await deleteConversation(currentUser.id, userId);
+                console.log("Xóa thành công, chuyển trang...");
                 navigate('/messages');
             } catch (error) {
                 console.error("Xóa thất bại", error);
@@ -262,7 +273,8 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
             <div className="absolute inset-0 opacity-10 dark:opacity-5 pointer-events-none" style={{ backgroundImage: "url('https://www.transparenttextures.com/patterns/cubes.png')" }}></div>
             
             {/* Header */}
-            <div className="bg-white dark:bg-dark-card px-4 py-2.5 flex items-center justify-between border-b border-gray-200 dark:border-dark-border shadow-sm pt-safe-top shrink-0 relative z-10 transition-colors">
+            {/* Z-INDEX ĐÃ ĐƯỢC TĂNG LÊN z-40 ĐỂ MENU NẰM TRÊN */}
+            <div className="bg-white dark:bg-dark-card px-4 py-2.5 flex items-center justify-between border-b border-gray-200 dark:border-dark-border shadow-sm pt-safe-top shrink-0 relative z-40 transition-colors">
                 <div className="flex items-center gap-2">
                     <button onClick={() => navigate(-1)} className="text-primary hover:bg-gray-50 dark:hover:bg-slate-700 p-2 rounded-full -ml-2 active:scale-95 transition-transform"><ArrowLeft size={24} /></button>
                     <div className="relative"><img src={targetUser.avatar} className="w-10 h-10 rounded-full object-cover border border-gray-100 dark:border-slate-600" />{targetUser.isExpert && <div className="absolute -bottom-0.5 -right-0.5 bg-blue-500 text-white rounded-full p-0.5 border-2 border-white dark:border-dark-card"><ShieldCheck size={12} /></div>}</div>
@@ -282,7 +294,7 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
                     {showMenu && (
                         <div className="absolute right-0 top-full mt-2 w-52 bg-white dark:bg-dark-card rounded-xl shadow-xl border border-gray-100 dark:border-slate-700 py-1 overflow-hidden animate-fade-in z-50">
                             <button 
-                                onClick={handleDeleteChat}
+                                onClick={(e) => handleDeleteChat(e)}
                                 disabled={isDeleting}
                                 className="w-full text-left px-4 py-3 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 flex items-center gap-3 transition-colors active:bg-red-100 dark:active:bg-red-900/20"
                             >
