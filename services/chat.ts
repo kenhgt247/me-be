@@ -1,107 +1,98 @@
+// services/chat.ts
 import {
-  collection,
-  doc,
-  addDoc,
-  setDoc,
-  updateDoc,
-  serverTimestamp,
-  onSnapshot,
-  query,
-  orderBy,
-  limit,
-  writeBatch,
-  increment
+  collection, doc, addDoc, updateDoc, serverTimestamp,
+  onSnapshot, query, orderBy, limit, writeBatch, increment,
+  getDoc, Timestamp
 } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
-import { Message } from '../types';
+import { Message, ChatSession, User } from '../types';
 
-/* ======================
-   HELPERS
-====================== */
-export const getChatId = (a: string, b: string) =>
-  [a, b].sort().join('_');
+/* ================= HELPER ================= */
+export const getChatId = (uid1: string, uid2: string) => 
+  [uid1, uid2].sort().join('_');
 
-/* ======================
-   REALTIME MESSAGES
-====================== */
+/* ================= REALTIME MESSAGES ================= */
 export const subscribeMessages = (
-  me: string,
-  other: string,
-  cb: (messages: Message[]) => void
+  meId: string,
+  otherId: string,
+  callback: (messages: Message[]) => void
 ) => {
-  const chatId = getChatId(me, other);
-
+  const chatId = getChatId(meId, otherId);
   const q = query(
-    collection(db, 'messages', chatId, 'items'),
+    collection(db, 'chats', chatId, 'messages'), // Chuẩn hóa path sub-collection
     orderBy('createdAt', 'asc'),
     limit(100)
   );
 
-  return onSnapshot(q, snap => {
+  return onSnapshot(q, (snap) => {
     const data = snap.docs.map(d => ({
       id: d.id,
       ...d.data()
     })) as Message[];
-    cb(data);
+    callback(data);
   });
 };
 
-/* ======================
-   SEND MESSAGE (ATOMIC)
-====================== */
+/* ================= SEND MESSAGE ================= */
 export const sendMessage = async (
-  me: string,
-  other: string,
+  sender: User, // Truyền cả object User để lấy avatar/name
+  receiverId: string,
   content: string,
   type: 'text' | 'image' = 'text'
 ) => {
-  const chatId = getChatId(me, other);
+  if (!content.trim() && type === 'text') return;
+
+  const chatId = getChatId(sender.id, receiverId);
   const batch = writeBatch(db);
 
-  const msgRef = doc(collection(db, 'messages', chatId, 'items'));
-  const chatRef = doc(db, 'chats', chatId);
-
+  // 1. Tạo message mới trong subcollection
+  const msgRef = doc(collection(db, 'chats', chatId, 'messages'));
   batch.set(msgRef, {
-    senderId: me,
+    senderId: sender.id,
     content,
     type,
     createdAt: serverTimestamp(),
-    readBy: [me]
+    readBy: [sender.id] // Người gửi auto xem
   });
 
-  batch.set(
-    chatRef,
-    {
-      participants: [me, other],
-      lastMessage: type === 'image' ? '[Hình ảnh]' : content,
-      lastMessageAt: serverTimestamp(),
-      unread: {
-        [me]: 0,
-        [other]: increment(1)
-      }
-    },
-    { merge: true }
-  );
+  // 2. Lấy thông tin người nhận để cập nhật snapshot (Optional nhưng tốt cho UX)
+  // Trong thực tế, bạn có thể truyền receiverUser vào hàm này để đỡ tốn 1 lần đọc DB
+  // Ở đây tôi giả định chỉ update info người gửi để tối ưu
+  
+  const chatRef = doc(db, 'chats', chatId);
+  
+  // Dữ liệu update cho chat session
+  const updateData: any = {
+    participants: [sender.id, receiverId],
+    lastMessage: type === 'image' ? '[Hình ảnh]' : content,
+    lastMessageAt: serverTimestamp(),
+    [`unread.${receiverId}`]: increment(1), // Tăng biến đếm chưa đọc của người nhận
+    [`deletedFor.${sender.id}`]: false,     // Khôi phục chat nếu đã xóa
+    [`deletedFor.${receiverId}`]: false,
+    
+    // CẬP NHẬT THÔNG TIN NGƯỜI GỬI (để bên kia thấy avatar mới nhất)
+    [`participantData.${sender.id}`]: {
+        name: sender.name,
+        avatar: sender.avatar || '',
+        isExpert: !!sender.isExpert
+    }
+  };
+
+  // Sử dụng set với merge: true để tạo chat doc nếu chưa có
+  batch.set(chatRef, updateData, { merge: true });
 
   await batch.commit();
 };
 
-/* ======================
-   MARK AS READ
-====================== */
-export const markChatAsRead = async (me: string, other: string) => {
-  const chatId = getChatId(me, other);
-  await updateDoc(doc(db, 'chats', chatId), {
-    [`unread.${me}`]: 0
-  });
-};
-
-/* ======================
-   SOFT DELETE CHAT
-====================== */
-export const deleteChatForMe = async (me: string, other: string) => {
-  const chatId = getChatId(me, other);
-  await updateDoc(doc(db, 'chats', chatId), {
-    [`deletedFor.${me}`]: true
+/* ================= MARK READ ================= */
+export const markChatAsRead = async (meId: string, otherId: string) => {
+  const chatId = getChatId(meId, otherId);
+  const chatRef = doc(db, 'chats', chatId);
+  
+  // Reset biến đếm unread của mình về 0
+  await updateDoc(chatRef, {
+    [`unread.${meId}`]: 0
+  }).catch(() => {
+    // Bỏ qua lỗi nếu chat doc chưa tồn tại
   });
 };
