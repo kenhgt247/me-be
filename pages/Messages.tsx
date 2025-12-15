@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { subscribeToChats, getUsersByIds } from '../services/db';
+// THÊM: Import hàm xóa từ services/chat
+import { deleteConversation } from '../services/chat'; 
 // @ts-ignore
 import { Link, useNavigate } from 'react-router-dom';
 import { ChatSession, User } from '../types';
-import { MessageCircle, ShieldCheck, Search, Plus, Loader2, X, UserPlus } from 'lucide-react';
+// THÊM: Import Trash2 icon
+import { MessageCircle, ShieldCheck, Search, Plus, Loader2, X, UserPlus, Trash2 } from 'lucide-react';
 
 interface MessagesProps {
     currentUser: User;
@@ -15,6 +18,10 @@ export const Messages: React.FC<MessagesProps> = ({ currentUser }) => {
     const [showNewChatModal, setShowNewChatModal] = useState(false);
     const [followingUsers, setFollowingUsers] = useState<User[]>([]);
     const [loadingFriends, setLoadingFriends] = useState(false);
+    
+    // State để hiển thị loading khi đang xóa
+    const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+    
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -49,6 +56,31 @@ export const Messages: React.FC<MessagesProps> = ({ currentUser }) => {
         return { id: otherId, ...chat.participantData[otherId] };
     };
 
+    // --- HÀM XỬ LÝ XÓA CHAT ---
+    const handleDeleteChat = async (e: React.MouseEvent, otherUserId: string) => {
+        // Ngăn không cho thẻ Link hoạt động (không chuyển trang)
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (currentUser.isGuest) {
+            alert("Vui lòng đăng nhập để thực hiện.");
+            return;
+        }
+
+        if (window.confirm("Bạn có chắc chắn muốn xóa cuộc trò chuyện này không?")) {
+            try {
+                setIsDeletingId(otherUserId); // Hiển thị loading trên item đang xóa
+                await deleteConversation(currentUser.id, otherUserId);
+                // Không cần setChats lại vì subscribeToChats sẽ tự động cập nhật UI
+            } catch (error) {
+                console.error("Lỗi xóa chat:", error);
+                alert("Có lỗi xảy ra khi xóa.");
+            } finally {
+                setIsDeletingId(null);
+            }
+        }
+    };
+
     if (!currentUser || currentUser.isGuest) return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center animate-fade-in pt-safe-top bg-[#F7F7F5] dark:bg-dark-bg transition-colors">
              <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center mb-6 text-primary">
@@ -60,7 +92,6 @@ export const Messages: React.FC<MessagesProps> = ({ currentUser }) => {
     );
 
     return (
-        // THAY ĐỔI: bg-[#F7F7F5] -> dark:bg-dark-bg
         <div className="min-h-screen bg-[#F7F7F5] dark:bg-dark-bg pb-24 animate-fade-in transition-colors duration-300">
             
             {/* Header */}
@@ -92,7 +123,7 @@ export const Messages: React.FC<MessagesProps> = ({ currentUser }) => {
                         <span className="text-sm">Đang tải tin nhắn...</span>
                     </div>
                 ) : chats.length === 0 ? (
-                     <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
+                      <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
                         <div className="w-20 h-20 bg-blue-50 dark:bg-slate-800 text-blue-400 rounded-full flex items-center justify-center mb-4">
                             <MessageCircle size={32} />
                         </div>
@@ -101,7 +132,7 @@ export const Messages: React.FC<MessagesProps> = ({ currentUser }) => {
                         <button onClick={() => setShowNewChatModal(true)} className="bg-primary text-white font-bold px-6 py-2.5 rounded-full shadow-lg shadow-primary/30 active:scale-95 transition-transform text-sm">
                             Bắt đầu trò chuyện
                         </button>
-                     </div>
+                      </div>
                 ) : (
                     chats.map(chat => {
                         const other = getOtherParticipant(chat);
@@ -115,7 +146,7 @@ export const Messages: React.FC<MessagesProps> = ({ currentUser }) => {
                             <Link 
                                 to={`/messages/${other.id}`} 
                                 key={chat.id}
-                                className="flex items-center gap-3 p-3 rounded-2xl bg-white dark:bg-dark-card border border-transparent hover:border-gray-100 dark:hover:border-slate-700 active:scale-[0.99] transition-all"
+                                className="group relative flex items-center gap-3 p-3 rounded-2xl bg-white dark:bg-dark-card border border-transparent hover:border-gray-100 dark:hover:border-slate-700 active:scale-[0.99] transition-all"
                             >
                                 <div className="relative shrink-0">
                                     <img src={other.avatar} alt={other.name} className="w-14 h-14 rounded-full object-cover border border-gray-100 dark:border-slate-600" />
@@ -130,16 +161,33 @@ export const Messages: React.FC<MessagesProps> = ({ currentUser }) => {
                                         {chat.lastMessage}
                                     </p>
                                 </div>
-                                {chat.unreadCount && chat.unreadCount[currentUser.id] > 0 && (
-                                    <div className="w-3 h-3 bg-red-500 rounded-full shrink-0"></div>
-                                )}
+                                
+                                {/* NÚT XÓA & TRẠNG THÁI UNREAD */}
+                                <div className="flex flex-col items-end gap-2 shrink-0">
+                                    {/* Nút xóa: Hiện khi hover hoặc trên mobile có thể để luôn hiện */}
+                                    <button 
+                                        onClick={(e) => handleDeleteChat(e, other.id)}
+                                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-all opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                                        title="Xóa cuộc trò chuyện"
+                                    >
+                                        {isDeletingId === other.id ? (
+                                            <Loader2 size={16} className="animate-spin" />
+                                        ) : (
+                                            <Trash2 size={16} />
+                                        )}
+                                    </button>
+
+                                    {chat.unreadCount && chat.unreadCount[currentUser.id] > 0 && (
+                                        <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                                    )}
+                                </div>
                             </Link>
                         );
                     })
                 )}
             </div>
 
-            {/* NEW CHAT MODAL (Bottom Sheet style) */}
+            {/* NEW CHAT MODAL (Giữ nguyên phần này) */}
             {showNewChatModal && (
                 <div className="fixed inset-0 z-[60] flex flex-col justify-end md:justify-center items-center">
                     <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowNewChatModal(false)}></div>
