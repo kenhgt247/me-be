@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 // @ts-ignore
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, Image as ImageIcon, MoreVertical, ShieldCheck, Loader2, Plus, X, ChevronDown } from 'lucide-react';
-import { sendMessage, getMessages } from '../services/chat'; 
+import { ArrowLeft, Send, Image as ImageIcon, MoreVertical, ShieldCheck, Loader2, Plus, X, ChevronDown, Trash2 } from 'lucide-react';
+import { sendMessage, getMessages, deleteConversation } from '../services/chat'; 
 import { subscribeToUser } from '../services/db'; 
 import { loginAnonymously } from '../services/auth';
 import { uploadFile } from '../services/storage';
@@ -44,6 +44,11 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
     const [showStickers, setShowStickers] = useState(false);
     const [showScrollDown, setShowScrollDown] = useState(false);
 
+    // --- State mới cho Menu Xóa ---
+    const [showMenu, setShowMenu] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+
     const scrollRef = useRef<HTMLDivElement>(null);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -52,6 +57,17 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
     useEffect(() => {
         messagesRef.current = messages;
     }, [messages]);
+
+    // Xử lý đóng menu khi click ra ngoài
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setShowMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     useEffect(() => {
         if (!userId) return;
@@ -136,12 +152,10 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
         if (!content.trim() || !userId) return;
         
         const tempId = `temp_${Date.now()}`;
-        // LƯU Ý: Ở UI tạm thời, receiverId có thể để trống hoặc userId, 
-        // quan trọng là khi gọi API phải truyền đúng
         const tempMsg: Message = {
             id: tempId,
             senderId: currentUser.id,
-            receiverId: userId, // UI optimistic update cũng cần receiverId để đồng bộ Type
+            receiverId: userId, 
             content: content,
             type: type,
             createdAt: new Date().toISOString(),
@@ -207,6 +221,31 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
         return emojiRegex.test(content) && [...content].length <= 3;
     };
 
+    // --- Hàm xử lý xóa cuộc trò chuyện ---
+    const handleDeleteChat = async () => {
+        if (!userId || !currentUser) return;
+        if (currentUser.isGuest) {
+            alert("Vui lòng đăng nhập để thực hiện chức năng này.");
+            return;
+        }
+
+        const confirmDelete = window.confirm("Bạn có chắc chắn muốn xóa toàn bộ cuộc trò chuyện này không? Hành động này không thể hoàn tác.");
+        
+        if (confirmDelete) {
+            try {
+                setIsDeleting(true);
+                setShowMenu(false);
+                await deleteConversation(currentUser.id, userId);
+                navigate('/messages'); // Quay về danh sách tin nhắn sau khi xóa
+            } catch (error) {
+                console.error("Xóa thất bại", error);
+                alert("Có lỗi xảy ra khi xóa tin nhắn.");
+            } finally {
+                setIsDeleting(false);
+            }
+        }
+    };
+
     if (!targetUser) return <div className="p-10 text-center flex items-center justify-center h-screen bg-white dark:bg-dark-bg"><Loader2 className="animate-spin text-primary" size={32} /></div>;
 
     const isOnline = targetUser.isOnline;
@@ -216,14 +255,40 @@ export const ChatDetail: React.FC<ChatDetailProps> = ({ currentUser, onOpenAuth 
     return (
         <div className="flex flex-col h-[100dvh] bg-[#E5DDD5] dark:bg-slate-900 fixed inset-0 z-50 overflow-hidden transition-colors duration-300">
             <div className="absolute inset-0 opacity-10 dark:opacity-5 pointer-events-none" style={{ backgroundImage: "url('https://www.transparenttextures.com/patterns/cubes.png')" }}></div>
+            
+            {/* Header */}
             <div className="bg-white dark:bg-dark-card px-4 py-2.5 flex items-center justify-between border-b border-gray-200 dark:border-dark-border shadow-sm pt-safe-top shrink-0 relative z-10 transition-colors">
                 <div className="flex items-center gap-2">
                     <button onClick={() => navigate(-1)} className="text-primary hover:bg-gray-50 dark:hover:bg-slate-700 p-2 rounded-full -ml-2 active:scale-95 transition-transform"><ArrowLeft size={24} /></button>
                     <div className="relative"><img src={targetUser.avatar} className="w-10 h-10 rounded-full object-cover border border-gray-100 dark:border-slate-600" />{targetUser.isExpert && <div className="absolute -bottom-0.5 -right-0.5 bg-blue-500 text-white rounded-full p-0.5 border-2 border-white dark:border-dark-card"><ShieldCheck size={12} /></div>}</div>
                     <div className="ml-1"><h2 className="font-bold text-textDark dark:text-white text-[16px] leading-tight flex items-center gap-1">{targetUser.name}</h2><span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full inline-flex items-center gap-1 mt-0.5 transition-colors ${isOnline ? 'bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-400'}`}><span className={`w-1.5 h-1.5 rounded-full ${dotColor}`}></span>{statusText}</span></div>
                 </div>
-                <button className="p-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-full text-primary active:scale-95"><MoreVertical size={22} /></button>
+                
+                {/* MENU BUTTON - Modified to include Dropdown */}
+                <div className="relative" ref={menuRef}>
+                    <button 
+                        onClick={() => setShowMenu(!showMenu)} 
+                        className={`p-2 rounded-full text-primary active:scale-95 transition-colors ${showMenu ? 'bg-gray-100 dark:bg-slate-700' : 'hover:bg-gray-100 dark:hover:bg-slate-700'}`}
+                    >
+                        {isDeleting ? <Loader2 size={22} className="animate-spin" /> : <MoreVertical size={22} />}
+                    </button>
+
+                    {/* Dropdown Menu */}
+                    {showMenu && (
+                        <div className="absolute right-0 top-full mt-2 w-52 bg-white dark:bg-dark-card rounded-xl shadow-xl border border-gray-100 dark:border-slate-700 py-1 overflow-hidden animate-fade-in z-50">
+                            <button 
+                                onClick={handleDeleteChat}
+                                disabled={isDeleting}
+                                className="w-full text-left px-4 py-3 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 flex items-center gap-3 transition-colors active:bg-red-100 dark:active:bg-red-900/20"
+                            >
+                                <Trash2 size={18} />
+                                <span className="font-medium">Xóa cuộc trò chuyện</span>
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
+
             <div ref={messagesContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-1 min-h-0 w-full relative z-10 scroll-smooth" onClick={() => setShowStickers(false)}>
                 {(messages.length === 0 && currentUser.isGuest) && (<div className="text-center py-12 px-6"><div className="bg-white/90 dark:bg-dark-card/90 backdrop-blur-sm p-6 rounded-2xl shadow-sm inline-block"><p className="text-sm font-bold text-primary mb-1">Chế độ Khách 🕵️</p><p className="text-xs text-textGray dark:text-gray-400">Tin nhắn của bạn sẽ được gửi ẩn danh.</p></div></div>)}
                 {messages.map((msg, idx) => {
