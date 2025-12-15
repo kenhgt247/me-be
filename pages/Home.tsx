@@ -15,9 +15,11 @@ import { fetchPublishedPosts } from '../services/blog';
 import { fetchDocuments } from '../services/documents';
 
 // --- KẾT NỐI SERVICE STORIES VÀ CHAT ---
-// Thêm toggleStoryLike vào dòng import từ services/stories
 import { fetchStories, createStory, markStoryViewed, toggleStoryLike } from '../services/stories';
 import { sendMessage, sendStoryReply } from '../services/chat';
+
+// --- ẢNH MẶC ĐỊNH CHO KHÁCH ẨN DANH / LỖI AVATAR ---
+const DEFAULT_AVATAR = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
 
 interface HomeProps {
   questions: Question[];
@@ -38,7 +40,6 @@ const removeVietnameseTones = (str: string) => {
     str = str.replace(/ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ/g, "u");
     str = str.replace(/ỳ|ý|ỵ|ỷ|ỹ/g, "y");
     str = str.replace(/đ/g, "d");
-    // Xóa ký tự đặc biệt
     str = str.replace(/!|@|%|\^|\*|\(|\)|\+|\=|\<|\>|\?|\/|,|\.|\:|\;|\'|\"|\&|\#|\[|\]|~|\$|_|`|-|{|}|\||\\/g, " ");
     return str.trim();
 }
@@ -105,7 +106,16 @@ const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ currentUser, onClos
           <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/*" className="hidden" />
         </div>
         <div className="p-4 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center bg-white dark:bg-gray-900">
-           <div className="flex items-center gap-3"><img src={currentUser.avatar} className="w-10 h-10 rounded-full border border-gray-200 object-cover" alt="User" /><div className="flex flex-col"><span className="text-sm font-bold text-gray-900 dark:text-white">Đăng bởi</span><span className="text-xs text-gray-500">{currentUser.name}</span></div></div>
+           <div className="flex items-center gap-3">
+             {/* SỬA LỖI AVATAR TRONG MODAL */}
+             <img 
+               src={currentUser.avatar || DEFAULT_AVATAR} 
+               onError={(e) => e.currentTarget.src = DEFAULT_AVATAR}
+               className="w-10 h-10 rounded-full border border-gray-200 object-cover" 
+               alt="User" 
+             />
+             <div className="flex flex-col"><span className="text-sm font-bold text-gray-900 dark:text-white">Đăng bởi</span><span className="text-xs text-gray-500">{currentUser.name}</span></div>
+           </div>
            <div className="flex gap-3">
              <button onClick={onClose} disabled={isUploading} className="px-5 py-2.5 rounded-full font-bold text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 transition-colors disabled:opacity-50">Hủy</button>
              <button onClick={handlePost} disabled={!selectedFile || isUploading} className={`px-6 py-2.5 rounded-full font-bold text-white flex items-center gap-2 transition-all shadow-lg ${!selectedFile || isUploading ? 'bg-gray-300 dark:bg-gray-700 cursor-not-allowed shadow-none' : 'bg-gradient-to-r from-primary to-blue-600 hover:opacity-90 active:scale-95 shadow-primary/30'}`}>{isUploading ? <><Loader2 size={18} className="animate-spin" /><span>Đang xử lý...</span></> : <><Send size={18} /><span>Chia sẻ</span></>}</button>
@@ -121,22 +131,16 @@ const StoryViewer = ({ story, currentUser, onClose }: { story: Story, currentUse
   const [progress, setProgress] = useState(0);
   const [replyText, setReplyText] = useState('');
   const [isSending, setIsSending] = useState(false);
-  
-  // STATE MỚI: Quản lý trạng thái Like
   const [isLiked, setIsLiked] = useState(false);
 
-  // 1. Khởi tạo: Đánh dấu đã xem & Kiểm tra đã Like chưa
   useEffect(() => {
     if (currentUser && story.id) { 
         markStoryViewed(story.id, currentUser.id); 
-        
-        // Kiểm tra xem ID của mình có trong mảng likes của story không
         const userHasLiked = story.likes?.includes(currentUser.id) || false;
         setIsLiked(userHasLiked);
     }
   }, [story, currentUser]);
 
-  // 2. Timer chạy thanh thời gian
   useEffect(() => {
     const timer = setInterval(() => {
       setProgress((prev) => {
@@ -147,30 +151,24 @@ const StoryViewer = ({ story, currentUser, onClose }: { story: Story, currentUse
     return () => clearInterval(timer);
   }, [onClose]);
 
-  // --- HÀM XỬ LÝ THẢ TIM (MỚI) ---
   const handleToggleLike = async () => {
     if (!currentUser) return;
-
-    // Optimistic UI: Đổi màu ngay lập tức cho mượt
     setIsLiked(!isLiked);
-
     try {
       await toggleStoryLike(story.id, currentUser.id);
     } catch (error) {
       console.error("Lỗi like story:", error);
-      // Nếu lỗi thì revert lại state (tùy chọn)
       setIsLiked(!isLiked); 
     }
   };
 
-  // --- HÀM GỬI TIN NHẮN ---
   const handleSendReply = async () => {
       if(!replyText.trim() || !currentUser || isSending) return;
       setIsSending(true);
       try {
         await sendStoryReply(
             currentUser, 
-            story.userId, // Hoặc story.author.id tùy vào data của bạn
+            story.userId, 
             replyText, 
             { id: story.id, url: story.mediaUrl }
         );
@@ -197,7 +195,13 @@ const StoryViewer = ({ story, currentUser, onClose }: { story: Story, currentUse
         {/* Header */}
         <div className="absolute top-8 left-4 right-4 flex items-center justify-between z-20 text-white">
           <div className="flex items-center gap-2">
-            <img src={story.userAvatar} className="w-9 h-9 rounded-full border border-white/50 object-cover" alt="" />
+            {/* SỬA LỖI AVATAR TRONG VIEWER */}
+            <img 
+              src={story.userAvatar || DEFAULT_AVATAR} 
+              onError={(e) => e.currentTarget.src = DEFAULT_AVATAR}
+              className="w-9 h-9 rounded-full border border-white/50 object-cover" 
+              alt="" 
+            />
             <div className="flex flex-col">
                 <span className="font-bold text-sm text-shadow">{story.userName}</span>
                 <span className="text-[10px] text-white/80">
@@ -214,8 +218,6 @@ const StoryViewer = ({ story, currentUser, onClose }: { story: Story, currentUse
         <div className="absolute inset-0 flex items-center justify-center bg-black">
              <img src={story.mediaUrl} className="w-full h-full object-cover" alt="story" />
              <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60 pointer-events-none"></div>
-             
-             {/* Hiệu ứng tim bay giữa màn hình (Optional: Có thể thêm sau) */}
         </div>
 
         {/* Footer Actions */}
@@ -239,7 +241,6 @@ const StoryViewer = ({ story, currentUser, onClose }: { story: Story, currentUse
                 {isSending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} className="ml-0.5" />}
             </button>
           ) : (
-            // NÚT THẢ TIM (ĐÃ SỬA)
             <button 
                 onClick={handleToggleLike} 
                 className={`p-3 rounded-full transition-all active:scale-90 ${isLiked ? 'bg-red-500/20' : 'hover:bg-white/10'}`}
@@ -294,30 +295,26 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
   const [adConfig, setAdConfig] = useState<AdConfig | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   
-  // --- Tách Input và Query để Debounce ---
-  const [inputValue, setInputValue] = useState(''); // Giá trị thực trong ô input
-  const [debouncedQuery, setDebouncedQuery] = useState(''); // Giá trị dùng để lọc (có delay)
+  const [inputValue, setInputValue] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   
   const [searchTab, setSearchTab] = useState('all');
   const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
 
-  // --- STATE CHO STORIES ---
   const [stories, setStories] = useState<Story[]>([]);
   const [isLoadingStories, setIsLoadingStories] = useState(true);
   const [activeStory, setActiveStory] = useState<Story | null>(null);
   const [showCreateStory, setShowCreateStory] = useState(false);
 
-  // --- KỸ THUẬT DEBOUNCE ---
   useEffect(() => {
     const handler = setTimeout(() => {
         setDebouncedQuery(inputValue);
-    }, 300); // Delay 300ms
+    }, 300); 
 
     return () => clearTimeout(handler);
   }, [inputValue]);
 
-  // 1. LOAD DỮ LIỆU BAN ĐẦU
   useEffect(() => {
       const unsub = subscribeToAdConfig(config => setAdConfig(config));
       Promise.all([
@@ -332,7 +329,6 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
       return () => unsub();
   }, []);
 
-  // 2. LOAD STORIES
   useEffect(() => {
     const loadStories = async () => {
         if (currentUser) {
@@ -347,51 +343,42 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
 
   useEffect(() => { setVisibleCount(PAGE_SIZE); }, [activeCategory, viewFilter, debouncedQuery, searchTab]);
 
-  // --- HANDLERS ---
   const handleOpenCreateStory = () => {
     if (!currentUser) { alert("Vui lòng đăng nhập để đăng khoảnh khắc!"); return; }
     setShowCreateStory(true);
   };
   const handleStoryCreated = (newStory: Story) => { setStories(prev => [newStory, ...prev]); };
 
-  // --- LOGIC SEARCH & FILTER (NÂNG CẤP: BỎ DẤU + TÌM SÂU) ---
   const searchResults = useMemo(() => {
     if (!debouncedQuery.trim()) return { questions: [], blogs: [], docs: [], users: [] };
     
-    // Chuẩn hóa từ khóa
     const normalizedQuery = removeVietnameseTones(debouncedQuery);
 
-    // Hàm kiểm tra match (So sánh chuỗi đã bỏ dấu)
     const isMatch = (text: string | undefined | null) => {
         return removeVietnameseTones(text || '').includes(normalizedQuery);
     }
 
-    // --- TÌM TRONG CÂU HỎI & TRẢ LỜI ---
     const matchedQuestions = questions.filter(q => 
         isMatch(q.title) ||             
-        isMatch(q.content) ||           
+        isMatch(q.content) ||            
         isMatch(q.author.name) ||
         (q.answers && q.answers.some(ans => isMatch(ans.content) || isMatch(ans.author.name)))
     );
     
-    // --- TÌM TRONG BLOG ---
     const matchedBlogs = blogPosts.filter(p => 
         isMatch(p.title) ||             
-        isMatch(p.excerpt) ||           
-        isMatch(p.authorName)           
+        isMatch(p.excerpt) ||            
+        isMatch(p.authorName)            
     );
     
-    // --- TÌM TRONG TÀI LIỆU ---
     const matchedDocs = documents.filter(d => 
         isMatch(d.title) ||             
-        isMatch(d.description) ||       
-        isMatch(d.authorName)           
+        isMatch(d.description) ||        
+        isMatch(d.authorName)            
     );
     
-    // --- TÌM NGƯỜI DÙNG (GỘP TỪ CÁC NGUỒN) ---
     const usersMap = new Map<string, User>();
     matchedQuestions.forEach(q => usersMap.set(q.author.id, q.author));
-    // Tự tạo user giả từ blog nếu cần
     matchedBlogs.forEach(p => {
         if(isMatch(p.authorName)) usersMap.set(p.authorId, { id: p.authorId, name: p.authorName, avatar: p.authorAvatar || '', isExpert: true } as User);
     });
@@ -419,7 +406,6 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
   
   const paginatedList = displayList.slice(0, visibleCount);
 
-  // --- RENDER HELPERS ---
   const getProfileSlug = (user: User) => user.username || user.id;
 
   const renderUserCard = (user: User) => (
@@ -439,13 +425,10 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
   return (
     <div className="space-y-4 animate-fade-in min-h-screen">
       
-      {/* 1. MỞ MODAL XEM STORY */}
       {activeStory && <StoryViewer story={activeStory} currentUser={currentUser} onClose={() => setActiveStory(null)} />}
 
-      {/* 2. MỞ MODAL TẠO STORY */}
       {showCreateStory && currentUser && <CreateStoryModal currentUser={currentUser} onClose={() => setShowCreateStory(false)} onSuccess={handleStoryCreated} />}
 
-      {/* 3. SEARCH BAR */}
       <div className="px-4 md:px-0 sticky top-[68px] md:top-20 z-30 py-2 md:pt-0 -mx-4 md:mx-0 bg-[#F7F7F5]/95 dark:bg-dark-bg/95 md:bg-transparent backdrop-blur-sm transition-all">
         <div className="relative group shadow-[0_4px_20px_rgba(0,0,0,0.05)] rounded-2xl mx-4 md:mx-0">
             <div className="absolute inset-0 bg-white/80 dark:bg-dark-card/80 backdrop-blur-xl rounded-2xl"></div>
@@ -468,10 +451,8 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
                <SearchTabs activeTab={searchTab} onChange={setSearchTab} counts={{ questions: searchResults.questions.length, blogs: searchResults.blogs.length, docs: searchResults.docs.length, users: searchResults.users.length }} />
                <div className="px-4 md:px-0 space-y-4 pb-20">
                  
-                   {/* Users */}
                    {(searchTab === 'all' || searchTab === 'users') && searchResults.users.length > 0 && (<div className="mb-6"><div className="grid grid-cols-1 md:grid-cols-2 gap-3">{searchResults.users.map(renderUserCard)}</div></div>)}
                    
-                   {/* Blogs */}
                    {(searchTab === 'all' || searchTab === 'blogs') && searchResults.blogs.length > 0 && (
                        <div className="mb-6 space-y-3">
                            <h4 className="text-sm font-bold text-gray-500 uppercase px-1">Bài viết ({searchResults.blogs.length})</h4>
@@ -485,7 +466,6 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
                        </div>
                    )}
 
-                   {/* Docs */}
                    {(searchTab === 'all' || searchTab === 'docs') && searchResults.docs.length > 0 && (
                        <div className="mb-6 space-y-3">
                            <h4 className="text-sm font-bold text-gray-500 uppercase px-1">Tài liệu ({searchResults.docs.length})</h4>
@@ -493,7 +473,6 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
                        </div>
                    )}
                    
-                   {/* Questions */}
                    {(searchTab === 'all' || searchTab === 'questions') && (
                      <div className="space-y-4">
                         <h4 className="text-sm font-bold text-gray-500 uppercase px-1">Câu hỏi thảo luận ({searchResults.questions.length})</h4>
@@ -522,7 +501,13 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
                 {/* Card Tạo Tin */}
                 <div className="snap-start shrink-0 relative group cursor-pointer w-[85px] h-[130px] md:w-[100px] md:h-[150px]" onClick={handleOpenCreateStory}>
                     <div className="w-full h-full rounded-2xl overflow-hidden relative border border-gray-200 dark:border-slate-700 bg-white dark:bg-dark-card shadow-sm">
-                        <img src={currentUser?.avatar || 'https://via.placeholder.com/150'} className="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-500" alt="me" />
+                        {/* SỬA LỖI AVATAR Ở CARD TẠO TIN */}
+                        <img 
+                          src={currentUser?.avatar || DEFAULT_AVATAR} 
+                          onError={(e) => e.currentTarget.src = DEFAULT_AVATAR}
+                          className="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-500" 
+                          alt="me" 
+                        />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
                         <div className="absolute bottom-2 left-0 right-0 flex flex-col items-center">
                             <div className="bg-primary text-white rounded-full p-1 border-2 border-white dark:border-dark-card mb-1 transition-transform group-hover:scale-110"><Plus size={16} /></div>
@@ -539,7 +524,15 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
                             <div className="w-full h-full rounded-xl overflow-hidden relative">
                                 <img src={story.mediaUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="story" />
                                 <div className="absolute inset-0 bg-black/20 hover:bg-black/10 transition-colors"></div>
-                                <div className="absolute top-2 left-2 w-8 h-8 rounded-full border-2 border-blue-500 overflow-hidden shadow-md"><img src={story.userAvatar} className="w-full h-full object-cover" alt="avatar" /></div>
+                                {/* SỬA LỖI AVATAR Ở BUBBLE STORY */}
+                                <div className="absolute top-2 left-2 w-8 h-8 rounded-full border-2 border-blue-500 overflow-hidden shadow-md">
+                                  <img 
+                                    src={story.userAvatar || DEFAULT_AVATAR} 
+                                    onError={(e) => e.currentTarget.src = DEFAULT_AVATAR}
+                                    className="w-full h-full object-cover" 
+                                    alt="avatar" 
+                                  />
+                                </div>
                                 <span className="absolute bottom-2 left-2 right-2 text-[10px] font-bold text-white truncate text-shadow">{story.userName}</span>
                             </div>
                         </div>
