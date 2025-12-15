@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+// @ts-ignore
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import {
   ArrowLeft, Heart, MessageCircle, ShieldCheck,
@@ -22,7 +23,7 @@ import { ExpertPromoBox } from '../components/ExpertPromoBox';
 interface DetailProps {
   questions: Question[];
   currentUser: User;
-  onAddAnswer: (questionId: string, answer: Answer) => Promise<void>; // Updated to Promise for async handling
+  onAddAnswer: (questionId: string, answer: Answer) => Promise<void>;
   onMarkBestAnswer: (questionId: string, answerId: string) => void;
   onVerifyAnswer: (questionId: string, answerId: string) => void;
   onOpenAuth: () => void;
@@ -101,7 +102,6 @@ const RichTextRenderer: React.FC<{ content: string }> = ({ content }) => {
 
   if (isBigEmoji) return <div className="text-5xl md:text-6xl py-4 animate-pop-in">{content}</div>;
 
-  // Split by markdown image syntax
   const parts = content.split(/(!\[.*?\]\(https?:\/\/[^\s)]+\))/g);
 
   return (
@@ -120,7 +120,6 @@ const RichTextRenderer: React.FC<{ content: string }> = ({ content }) => {
           );
         }
         
-        // Split by URL or Mention
         return (
           <span key={i}>
             {part.split(/((?:https?:\/\/[^\s]+)|(?:@[\w\p{L}]+))/gu).map((sub, j) => {
@@ -175,9 +174,7 @@ const QuestionDetailAd = ({ config }: { config: NonNullable<AdConfig['questionDe
 
 const ReportModal: React.FC<{ isOpen: boolean; onClose: () => void; onSubmit: (reason: string) => void }> = ({ isOpen, onClose, onSubmit }) => {
   const [reason, setReason] = useState('');
-  
   if (!isOpen) return null;
-  
   return (
     <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
       <div className="bg-white dark:bg-dark-card rounded-3xl w-full max-w-sm p-6 shadow-2xl animate-pop-in border border-gray-100 dark:border-dark-border">
@@ -203,13 +200,11 @@ const ReportModal: React.FC<{ isOpen: boolean; onClose: () => void; onSubmit: (r
 
 export default function QuestionDetail({
   questions, currentUser, onAddAnswer, onMarkBestAnswer, onVerifyAnswer,
-  onOpenAuth, onEditQuestion, onDeleteQuestion, onDeleteAnswer,
-  // onHideQuestion, onHideAnswer, onEditAnswer // Unused props kept for interface compatibility
+  onOpenAuth, onEditQuestion, onDeleteQuestion, onDeleteAnswer
 }: DetailProps) {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   
-  // Calculate IDs and Data
   const questionId = useMemo(() => getIdFromSlug(slug), [slug]);
   const question = useMemo(() => questions.find(q => q.id === questionId), [questions, questionId]);
 
@@ -231,7 +226,7 @@ export default function QuestionDetail({
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [answerImage, setAnswerImage] = useState<string | null>(null);
-  const [uploadingImage, setUploadingImage] = useState(false); // Used for UI feedback if needed
+  const [uploadingImage, setUploadingImage] = useState(false); 
   
   // Mentions State
   const [showMentions, setShowMentions] = useState(false);
@@ -256,21 +251,16 @@ export default function QuestionDetail({
 
   // --- EFFECTS ---
 
-  // Load Ad Config
   useEffect(() => {
-    getAdConfig()
-      .then(setAdConfig)
-      .catch(e => console.error("Failed to load ads config", e));
+    getAdConfig().then(setAdConfig).catch(e => console.error("Failed to load ads config", e));
   }, []);
 
-  // Update Saved State
   useEffect(() => {
     if (currentUser && question) {
       setIsSaved(currentUser.savedQuestions?.includes(question.id) || false);
     }
   }, [currentUser, question]);
 
-  // Click Outside to Close Menu
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -281,7 +271,6 @@ export default function QuestionDetail({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Auto-resize Textarea
   useEffect(() => {
     if (answerInputRef.current) {
       answerInputRef.current.style.height = 'auto';
@@ -289,7 +278,6 @@ export default function QuestionDetail({
     }
   }, [newAnswer]);
 
-  // Focus Input on Open
   useEffect(() => {
     if (isInputOpen && answerInputRef.current) {
       setTimeout(() => answerInputRef.current?.focus(), 300);
@@ -302,7 +290,12 @@ export default function QuestionDetail({
     if (!questions || !question) return [];
     return questions
       .filter(q => q.id !== question.id)
-      .sort((a, b) => ((b.views || 0) + (b.likes || 0)) - ((a.views || 0) + (a.likes || 0)))
+      .sort((a, b) => {
+        // Safe access to likes if it's undefined
+        const likesA = Array.isArray(a.likes) ? a.likes.length : (typeof a.likes === 'number' ? a.likes : 0);
+        const likesB = Array.isArray(b.likes) ? b.likes.length : (typeof b.likes === 'number' ? b.likes : 0);
+        return ((b.views || 0) + likesB) - ((a.views || 0) + likesA);
+      })
       .slice(0, 5);
   }, [questions, question]);
 
@@ -312,8 +305,6 @@ export default function QuestionDetail({
     usersMap.set(question.author.id, question.author);
     question.answers.forEach(a => usersMap.set(a.author.id, a.author));
     if (currentUser && !currentUser.isGuest) {
-      // Exclude current user from mention list if needed, or keep them. 
-      // Logic here removes current user from list:
       usersMap.delete(currentUser.id);
     }
     return Array.from(usersMap.values());
@@ -337,11 +328,27 @@ export default function QuestionDetail({
 
       if (sortOption === 'newest') return timeB - timeA;
       if (sortOption === 'oldest') return timeA - timeB;
-      if (sortOption === 'best') return b.likes - a.likes;
+      if (sortOption === 'best') return b.likes - a.likes; // Answers use 'likes' as number
       
       return timeB - timeA;
     });
   }, [question, sortOption]);
+
+  // ✅ SỬA LỖI HIỂN THỊ LIKE: Tính toán số lượng và trạng thái
+  const likesCount = useMemo(() => {
+      if (!question) return 0;
+      // Nếu là mảng (Logic mới) -> Lấy length
+      // Nếu là số (Logic cũ) -> Lấy số
+      return Array.isArray(question.likes) ? question.likes.length : (typeof question.likes === 'number' ? question.likes : 0);
+  }, [question]);
+
+  const isLiked = useMemo(() => {
+      if (!question || !currentUser) return false;
+      // Kiểm tra xem ID người dùng có trong mảng không
+      return Array.isArray(question.likes) 
+          ? question.likes.includes(currentUser.id) 
+          : false; 
+  }, [question, currentUser]);
 
   // --- HANDLERS ---
 
@@ -361,6 +368,7 @@ export default function QuestionDetail({
     if (!question) return;
     try {
       const user = await ensureAuth();
+      // Logic DB đã được sửa để xử lý Toggle
       toggleQuestionLikeDb(question, user);
     } catch (e) { /* ignore */ }
   }, [question, ensureAuth]);
@@ -452,12 +460,10 @@ export default function QuestionDetail({
 
       await onAddAnswer(question.id, ans);
       
-      // Reset
       setNewAnswer('');
       setAnswerImage(null);
       setIsInputOpen(false);
       
-      // Scroll to bottom
       setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 100);
     } catch (e: unknown) {
       if (e instanceof Error && e.message !== "LOGIN_REQUIRED") alert("Lỗi gửi câu trả lời.");
@@ -507,8 +513,6 @@ export default function QuestionDetail({
       await toggleAnswerUseful(question.id, ans.id, user.id);
     } catch (e) { /* ignore */ }
   };
-
-  // --- RENDER HELPERS ---
 
   if (!question) {
     return (
@@ -616,9 +620,14 @@ export default function QuestionDetail({
               {/* Actions */}
               <div className="flex items-center justify-between py-3 border-t border-gray-50 dark:border-slate-800">
                 <div className="flex items-center gap-6">
-                  <button onClick={handleLike} className={`flex items-center gap-2 text-sm font-bold transition-all active:scale-90 ${question.likes > 0 ? 'text-red-500' : 'text-gray-500 dark:text-gray-400 hover:text-red-500'}`}>
-                    <Heart size={20} className={question.likes > 0 ? "fill-red-500" : ""} /><span>{question.likes || 'Thích'}</span>
+                  
+                  {/* ✅ NÚT LIKE ĐÃ SỬA: CHỈ HIỂN THỊ SỐ LƯỢNG */}
+                  <button onClick={handleLike} className={`flex items-center gap-2 text-sm font-bold transition-all active:scale-90 ${isLiked ? 'text-red-500' : 'text-gray-500 dark:text-gray-400 hover:text-red-500'}`}>
+                    <Heart size={20} className={isLiked ? "fill-red-500" : ""} />
+                    {/* 👇 SỬA LỖI Ở ĐÂY: Hiển thị likesCount thay vì render cả mảng */}
+                    <span>{likesCount > 0 ? likesCount : 'Thích'}</span>
                   </button>
+
                   <button onClick={() => setIsInputOpen(true)} className="flex items-center gap-2 text-sm font-bold text-gray-500 dark:text-gray-400 hover:text-blue-500 transition-all active:scale-90">
                     <MessageCircle size={20} /><span>{question.answers.length || 'Trả lời'}</span>
                   </button>
