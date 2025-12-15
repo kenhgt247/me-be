@@ -68,8 +68,12 @@ export const UserManagement: React.FC = () => {
 
   // Filter Logic
   const filteredUsers = users.filter(u => {
-    const matchesSearch = u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          u.email?.toLowerCase().includes(searchTerm.toLowerCase());
+    // Thêm ( || "") để biến null thành chuỗi rỗng -> Không bao giờ lỗi
+    const nameSafe = (u.name || "").toLowerCase();
+    const emailSafe = (u.email || "").toLowerCase();
+    const searchSafe = searchTerm.toLowerCase();
+
+    const matchesSearch = nameSafe.includes(searchSafe) || emailSafe.includes(searchSafe);
     
     if (!matchesSearch) return false;
 
@@ -78,7 +82,6 @@ export const UserManagement: React.FC = () => {
     if (filter === 'banned') return u.isBanned;
     return true;
   });
-
   return (
     <div className="space-y-6 relative">
        {/* Actions Bar */}
