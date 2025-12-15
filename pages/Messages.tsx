@@ -9,8 +9,10 @@ import {
   doc,
   getDoc
 } from 'firebase/firestore';
+import { Trash2 } from 'lucide-react'; // Import icon thùng rác
 import { db } from '../firebaseConfig';
 import { User, ChatSession } from '../types';
+import { deleteChatForUser } from '../services/chat'; // Import hàm xóa mới
 
 interface Props {
   currentUser: User;
@@ -38,7 +40,7 @@ export const Messages: React.FC<Props> = ({ currentUser }) => {
         for (const d of snap.docs) {
           const chat = { id: d.id, ...d.data() } as ChatSession;
 
-          // Bỏ chat đã bị user xóa
+          // Bỏ qua chat đã bị user xóa
           if (chat.deletedFor?.[currentUser.id]) continue;
 
           items.push(chat);
@@ -84,6 +86,18 @@ export const Messages: React.FC<Props> = ({ currentUser }) => {
     return () => unsub();
   }, [currentUser.id]);
 
+  /* ================= HANDLERS ================= */
+  
+  // Hàm xử lý xóa chat
+  const handleDeleteChat = async (e: React.MouseEvent, otherId: string) => {
+    e.preventDefault(); // Ngăn không cho Link chuyển trang
+    e.stopPropagation();
+
+    if (window.confirm("Bạn có chắc chắn muốn xóa cuộc trò chuyện này?")) {
+      await deleteChatForUser(currentUser.id, otherId);
+    }
+  };
+
   /* ================= FORMAT TIME ================= */
   const formatTime = (timestamp: any) => {
     if (!timestamp?.toDate) return '';
@@ -126,61 +140,78 @@ export const Messages: React.FC<Props> = ({ currentUser }) => {
           'https://via.placeholder.com/40';
 
         return (
-          <Link
-            key={chat.id}
-            to={`/messages/${otherId}`}
-            className={`flex items-center gap-3 p-3 rounded-2xl transition-all border ${
-              isUnread
-                ? 'bg-blue-50 border-blue-100 dark:bg-blue-900/20 dark:border-blue-800/30' // Unread Styles (Light/Dark)
-                : 'bg-white border-transparent hover:bg-gray-50 dark:bg-dark-card dark:border-slate-800/50 dark:hover:bg-slate-800' // Read Styles (Light/Dark)
-            }`}
-          >
-            <div className="relative">
-                <img
-                src={displayAvatar}
-                alt={displayName}
-                className="w-12 h-12 rounded-full object-cover border border-gray-100 dark:border-slate-700 bg-gray-200 dark:bg-slate-700"
-                />
-                {/* Online Indicator (Optional - nếu có data presence) */}
-                {/* {otherUser?.isOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-dark-card"></div>} */}
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <div className="flex justify-between items-baseline mb-0.5">
-                <h3
-                  className={`truncate text-sm ${
-                    isUnread
-                      ? 'font-bold text-gray-900 dark:text-white'
-                      : 'font-medium text-gray-700 dark:text-gray-200'
-                  }`}
-                >
-                  {displayName}
-                </h3>
-
-                <span className="text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap ml-2 font-medium">
-                  {formatTime(chat.lastMessageAt)}
-                </span>
+          <div key={chat.id} className="relative group">
+            <Link
+              to={`/messages/${otherId}`}
+              className={`flex items-center gap-3 p-3 rounded-2xl transition-all border pr-12 ${ // Thêm pr-12 để tránh chữ đè lên nút xóa
+                isUnread
+                  ? 'bg-blue-50 border-blue-100 dark:bg-blue-900/20 dark:border-blue-800/30' // Unread Styles
+                  : 'bg-white border-transparent hover:bg-gray-50 dark:bg-dark-card dark:border-slate-800/50 dark:hover:bg-slate-800' // Read Styles
+              }`}
+            >
+              <div className="relative">
+                  <img
+                  src={displayAvatar}
+                  alt={displayName}
+                  className="w-12 h-12 rounded-full object-cover border border-gray-100 dark:border-slate-700 bg-gray-200 dark:bg-slate-700"
+                  />
+                  {/* Online Indicator (Optional) */}
+                  {/* {otherUser?.isOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-dark-card"></div>} */}
               </div>
 
-              <div className="flex justify-between items-center">
-                <p
-                  className={`truncate text-sm pr-2 ${
-                    isUnread
-                      ? 'font-semibold text-gray-800 dark:text-gray-100'
-                      : 'text-gray-500 dark:text-gray-400'
-                  }`}
-                >
-                  {chat.lastMessage}
-                </p>
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-baseline mb-0.5">
+                  <h3
+                    className={`truncate text-sm ${
+                      isUnread
+                        ? 'font-bold text-gray-900 dark:text-white'
+                        : 'font-medium text-gray-700 dark:text-gray-200'
+                    }`}
+                  >
+                    {displayName}
+                  </h3>
 
-                {isUnread && (
-                  <span className="shrink-0 ml-2 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm shadow-red-500/30">
-                    {chat.unread[currentUser.id]}
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap ml-2 font-medium">
+                    {formatTime(chat.lastMessageAt)}
                   </span>
-                )}
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <p
+                    className={`truncate text-sm pr-2 ${
+                      isUnread
+                        ? 'font-semibold text-gray-800 dark:text-gray-100'
+                        : 'text-gray-500 dark:text-gray-400'
+                    }`}
+                  >
+                    {chat.lastMessage}
+                  </p>
+
+                  {isUnread && (
+                    <span className="shrink-0 ml-2 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm shadow-red-500/30">
+                      {chat.unread[currentUser.id]}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          </Link>
+            </Link>
+
+            {/* --- NÚT XÓA CHAT --- */}
+            <button
+              onClick={(e) => handleDeleteChat(e, otherId)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-all opacity-0 group-hover:opacity-100 md:opacity-0 focus:opacity-100"
+              title="Xóa cuộc trò chuyện"
+            >
+              <Trash2 size={18} />
+            </button>
+            {/* Hiển thị nút xóa luôn trên mobile (vì mobile ko có hover) */}
+            <button
+               onClick={(e) => handleDeleteChat(e, otherId)}
+               className="md:hidden absolute right-3 top-1/2 -translate-y-1/2 p-2 text-gray-400 active:text-red-500"
+            >
+               <Trash2 size={18} />
+            </button>
+          </div>
         );
       })}
     </div>
