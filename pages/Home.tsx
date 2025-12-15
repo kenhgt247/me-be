@@ -15,8 +15,8 @@ import { fetchPublishedPosts } from '../services/blog';
 import { fetchDocuments } from '../services/documents';
 
 // --- KẾT NỐI SERVICE STORIES VÀ CHAT ---
-import { fetchStories, createStory, markStoryViewed } from '../services/stories';
-// Thay vì import sendMessage, hãy import sendStoryReply
+// Thêm toggleStoryLike vào dòng import từ services/stories
+import { fetchStories, createStory, markStoryViewed, toggleStoryLike } from '../services/stories';
 import { sendMessage, sendStoryReply } from '../services/chat';
 
 interface HomeProps {
