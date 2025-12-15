@@ -33,7 +33,19 @@
     <title>Asking.vn - Cộng đồng Mẹ & Bé</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    
+    <script>
+      (function() {
+        // Kiểm tra xem người dùng đã lưu chế độ dark chưa, hoặc hệ thống có đang để dark mode không
+        var savedTheme = localStorage.getItem('theme');
+        var sysTheme = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        
+        if (savedTheme === 'dark' || (!savedTheme && sysTheme)) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      })();
+    </script>
     <script>
       tailwind.config = {
         darkMode: 'class', // Kích hoạt chế độ tối thủ công
