@@ -1,12 +1,24 @@
 import {
-  collection, doc, addDoc, serverTimestamp,
-  onSnapshot, query, orderBy, limit,
-  writeBatch, increment
+  collection,
+  doc,
+  addDoc,
+  setDoc,
+  updateDoc,
+  serverTimestamp,
+  onSnapshot,
+  query,
+  orderBy,
+  limit,
+  writeBatch,
+  increment
 } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { Message } from '../types';
 
-export const getConversationId = (a: string, b: string) =>
+/* ======================
+   HELPERS
+====================== */
+export const getChatId = (a: string, b: string) =>
   [a, b].sort().join('_');
 
 /* ======================
@@ -15,18 +27,22 @@ export const getConversationId = (a: string, b: string) =>
 export const subscribeMessages = (
   me: string,
   other: string,
-  cb: (m: Message[]) => void
+  cb: (messages: Message[]) => void
 ) => {
-  const cid = getConversationId(me, other);
+  const chatId = getChatId(me, other);
 
   const q = query(
-    collection(db, 'messages', cid, 'items'),
+    collection(db, 'messages', chatId, 'items'),
     orderBy('createdAt', 'asc'),
     limit(100)
   );
 
   return onSnapshot(q, snap => {
-    cb(snap.docs.map(d => ({ id: d.id, ...d.data() }) as Message));
+    const data = snap.docs.map(d => ({
+      id: d.id,
+      ...d.data()
+    })) as Message[];
+    cb(data);
   });
 };
 
@@ -39,11 +55,11 @@ export const sendMessage = async (
   content: string,
   type: 'text' | 'image' = 'text'
 ) => {
-  const cid = getConversationId(me, other);
+  const chatId = getChatId(me, other);
   const batch = writeBatch(db);
 
-  const msgRef = doc(collection(db, 'messages', cid, 'items'));
-  const chatRef = doc(db, 'chats', cid);
+  const msgRef = doc(collection(db, 'messages', chatId, 'items'));
+  const chatRef = doc(db, 'chats', chatId);
 
   batch.set(msgRef, {
     senderId: me,
@@ -53,13 +69,19 @@ export const sendMessage = async (
     readBy: [me]
   });
 
-  batch.set(chatRef, {
-    participants: [me, other],
-    lastMessage: type === 'image' ? '[Hình ảnh]' : content,
-    lastMessageAt: serverTimestamp(),
-    [`unread.${other}`]: increment(1),
-    [`unread.${me}`]: 0
-  }, { merge: true });
+  batch.set(
+    chatRef,
+    {
+      participants: [me, other],
+      lastMessage: type === 'image' ? '[Hình ảnh]' : content,
+      lastMessageAt: serverTimestamp(),
+      unread: {
+        [me]: 0,
+        [other]: increment(1)
+      }
+    },
+    { merge: true }
+  );
 
   await batch.commit();
 };
@@ -67,11 +89,19 @@ export const sendMessage = async (
 /* ======================
    MARK AS READ
 ====================== */
-export const markAsRead = async (me: string, other: string) => {
-  const cid = getConversationId(me, other);
-  await writeBatch(db)
-    .update(doc(db, 'chats', cid), {
-      [`unread.${me}`]: 0
-    })
-    .commit();
+export const markChatAsRead = async (me: string, other: string) => {
+  const chatId = getChatId(me, other);
+  await updateDoc(doc(db, 'chats', chatId), {
+    [`unread.${me}`]: 0
+  });
+};
+
+/* ======================
+   SOFT DELETE CHAT
+====================== */
+export const deleteChatForMe = async (me: string, other: string) => {
+  const chatId = getChatId(me, other);
+  await updateDoc(doc(db, 'chats', chatId), {
+    [`deletedFor.${me}`]: true
+  });
 };
