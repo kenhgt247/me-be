@@ -126,12 +126,16 @@ const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ currentUser, onClos
   );
 };
 
-// --- 2. COMPONENT: STORY VIEWER (FULL TÍNH NĂNG: CHAT + TIM) ---
+// --- 2. COMPONENT: STORY VIEWER (ĐÃ SỬA TÊN HIỂN THỊ DỄ THƯƠNG) ---
 const StoryViewer = ({ story, currentUser, onClose }: { story: Story, currentUser?: User | null, onClose: () => void }) => {
   const [progress, setProgress] = useState(0);
   const [replyText, setReplyText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
+
+  // --- LOGIC TÊN DỄ THƯƠNG ---
+  // Nếu không có tên (undefined/null) thì hiện tên cute
+  const displayAuthorName = story.userName || "Mẹ thỏ bí ẩn 🐭"; 
 
   useEffect(() => {
     if (currentUser && story.id) { 
@@ -195,7 +199,6 @@ const StoryViewer = ({ story, currentUser, onClose }: { story: Story, currentUse
         {/* Header */}
         <div className="absolute top-8 left-4 right-4 flex items-center justify-between z-20 text-white">
           <div className="flex items-center gap-2">
-            {/* SỬA LỖI AVATAR TRONG VIEWER */}
             <img 
               src={story.userAvatar || DEFAULT_AVATAR} 
               onError={(e) => e.currentTarget.src = DEFAULT_AVATAR}
@@ -203,7 +206,8 @@ const StoryViewer = ({ story, currentUser, onClose }: { story: Story, currentUse
               alt="" 
             />
             <div className="flex flex-col">
-                <span className="font-bold text-sm text-shadow">{story.userName}</span>
+                {/* Dùng biến displayAuthorName ở đây */}
+                <span className="font-bold text-sm text-shadow">{displayAuthorName}</span>
                 <span className="text-[10px] text-white/80">
                     {new Date(story.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                 </span>
@@ -227,7 +231,8 @@ const StoryViewer = ({ story, currentUser, onClose }: { story: Story, currentUse
                 value={replyText} 
                 onChange={(e) => setReplyText(e.target.value)} 
                 onKeyDown={(e) => e.key === 'Enter' && handleSendReply()}
-                placeholder={`Gửi tin nhắn cho ${story.userName}...`} 
+                // SỬA Ở ĐÂY: Dùng displayAuthorName thay vì story.userName trực tiếp
+                placeholder={`Gửi tin nhắn cho ${displayAuthorName}...`} 
                 className="w-full bg-transparent border border-white/60 rounded-full pl-5 pr-10 py-3 text-white placeholder-white/70 text-sm outline-none focus:border-white focus:bg-black/20 transition-all backdrop-blur-sm" 
             />
           </div>
