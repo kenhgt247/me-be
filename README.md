@@ -32,21 +32,6 @@ Chúng tôi công khai mã nguồn này với mong muốn tạo ra một **Cộn
   * **Chế độ Ẩn danh:** Cho phép người dùng login và hỏi đáp ẩn danh để bảo đảm riêng tư.
   * **Upload ảnh & Media:** Tối ưu hóa trải nghiệm tải ảnh và xem preview.
 
------
-
-## 🛠 Công nghệ sử dụng (Tech Stack)
-
-Dự án sử dụng các công nghệ hiện đại và phổ biến nhất hiện nay:
-
-  * **Frontend:** [React](https://reactjs.org/) (Vite), [TypeScript](https://www.typescriptlang.org/)
-  * **Styling:** [Tailwind CSS](https://tailwindcss.com/) (Mobile-first design)
-  * **Icons:** [Lucide React](https://lucide.dev/)
-  * **AI Integration:** Google Gemini API (cho việc gợi ý title, generate content)
-  * **Routing:** React Router DOM
-  * **Backend/BaaS (Giả định/Tích hợp):** Firebase (Auth, Storage, Firestore) hoặc tương đương.
-
------
-
 ## 🚀 Cài đặt & Chạy dự án (Getting Started)
 
 Hãy clone dự án về và thử nghiệm sức mạnh của AI coding ngay trên máy của bạn\!
@@ -82,21 +67,6 @@ npm run dev
 ```
 
 Truy cập `http://localhost:5173` để xem kết quả.
-
------
-
-## 🗺 Lộ trình phát triển (Roadmap)
-
-  * [x] Khởi tạo dự án Core bằng AI.
-  * [x] Tích hợp Gemini AI để hỗ trợ viết nội dung.
-  * [ ] Tối ưu hóa SEO (Next.js migration?).
-  * [ ] Phát triển Mobile App (React Native) dùng chung logic.
-  * [ ] Tích hợp Chuyên gia xác thực (Verified Badge).
-  * [ ] Dark Mode.( đã cập nhật hôm nay )
-
------
-
------
 
 > **Lời nhắn từ tác giả:**
 > *"Đây là một thử nghiệm táo bạo khi để AI đảm nhiệm vai trò 'Lead Developer'. Hy vọng repository này sẽ là nguồn cảm hứng cho các bạn thấy rằng: Khoảng cách từ ý tưởng đến sản phẩm đang ngày càng được thu hẹp nhờ công nghệ. Hãy cùng nhau hoàn thiện nó nhé\!"*
