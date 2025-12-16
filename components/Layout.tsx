@@ -215,19 +215,27 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           <div className="max-w-6xl mx-auto px-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
 
-              {/* Cột 1: Brand Info */}
-              <div>
-                <Link to="/" className="text-xl font-bold text-primary flex items-center gap-2 mb-4">
+              {/* Cột 1 */}
+              <div className="space-y-4">
+                <Link to="/" className="text-2xl font-bold text-primary flex items-center gap-2">
                   <span className="bg-gradient-to-tr from-primary to-secondary p-1.5 rounded-xl text-white shadow-sm text-lg">👶</span>
                   Asking.vn
                 </Link>
-                <p className="text-gray-500 dark:text-gray-400 leading-relaxed text-sm">
-                  Cộng đồng Mẹ & Bé văn minh, hiện đại. Nơi kết nối hàng triệu bà mẹ Việt Nam cùng đội ngũ chuyên gia y tế hàng đầu.
+                <p className="text-gray-500 leading-relaxed text-sm">
+                  Cộng đồng Mẹ & Bé văn minh, hiện đại. Nơi kết nối hàng triệu bà mẹ Việt Nam cùng đội ngũ chuyên gia  hàng đầu.
                 </p>
-                <div className="space-y-3 text-gray-500 dark:text-gray-400 pt-2 text-sm">
+                <div className="space-y-3 text-gray-500 pt-2 text-sm">
                   <div className="flex items-start gap-3">
                     <MapPin size={18} className="mt-0.5 shrink-0 text-primary" />
-                    <span>Tầng 12, Tòa nhà Asking, Quận 1, TP.HCM</span>
+                    <span>107. Bạch Năng Thi, P. Tân Hưng, Tp.Hải Phòng</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Phone size={18} className="text-primary" />
+                    <span>0912.434.666</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Mail size={18} className="text-primary" />
+                    <span>hotro@asking.vn</span>
                   </div>
                 </div>
               </div>
