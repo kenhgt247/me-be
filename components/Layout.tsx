@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom'; // Bỏ @ts-ignore nếu đã cài @types
+import { Link, useLocation } from 'react-router-dom';
 import {
   Home,
   Plus,
@@ -8,10 +8,15 @@ import {
   Bell,
   MessageCircle,
   Bot,
-  Heart
+  Heart,
+  MapPin,
+  ShieldCheck,
+  Facebook,
+  Instagram,
+  Youtube
 } from 'lucide-react';
 
-// Import đúng từ các file service đã sửa
+// Import services and config
 import { subscribeToNotifications, updateUserStatus } from '../services/db';
 import { subscribeUnreadCount } from '../services/chat';
 import { auth } from '../firebaseConfig';
@@ -33,12 +38,10 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   /* ================= AUTH + REALTIME ================= */
   useEffect(() => {
-    // Khai báo biến cleanup để quản lý listener
     let unsubNotif: (() => void) | null = null;
     let unsubUnread: (() => void) | null = null;
     let presenceInterval: any = null;
 
-    // Hàm dọn dẹp chung
     const cleanUpSubscriptions = () => {
       if (unsubNotif) { unsubNotif(); unsubNotif = null; }
       if (unsubUnread) { unsubUnread(); unsubUnread = null; }
@@ -46,7 +49,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     };
 
     const unsubscribeAuth = auth.onAuthStateChanged(user => {
-      // Luôn dọn dẹp listener cũ mỗi khi trạng thái auth thay đổi
       cleanUpSubscriptions();
 
       if (user) {
@@ -59,9 +61,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         updateUserStatus(user.uid, true);
         presenceInterval = setInterval(() => {
           updateUserStatus(user.uid, true);
-        }, 2 * 60 * 1000); // 2 phút update 1 lần
+        }, 2 * 60 * 1000);
 
-        // Xử lý khi tắt tab
         const handleUnload = () => {
           updateUserStatus(user.uid, false);
         };
@@ -78,13 +79,10 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           setUnreadMsgCount(count);
         });
 
-        // Cleanup riêng cho sự kiện window
         return () => {
            window.removeEventListener('beforeunload', handleUnload);
         };
       } else {
-        // --- LOGOUT ---
-        // Đã gọi cleanUpSubscriptions() ở đầu hàm nên không lo leak memory
         setUnreadNotifCount(0);
         setUnreadMsgCount(0);
         setCurrentUserAvatar(
@@ -93,10 +91,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       }
     });
 
-    // Cleanup khi component unmount
     return () => {
       cleanUpSubscriptions();
-      updateUserStatus(auth.currentUser?.uid || '', false); // Cố gắng set offline nếu có thể
+      updateUserStatus(auth.currentUser?.uid || '', false);
       unsubscribeAuth();
     };
   }, []);
@@ -129,14 +126,14 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             <NavLink to="/games" label="Góc Bé Chơi" active={path === '/games'} />
             <NavLink to="/messages" label="Tin nhắn" active={path.startsWith('/messages')} />
 
-            <Link to="/ai-chat" className="mx-2 bg-gradient-to-tr from-purple-500 to-blue-500 text-white px-4 py-2 rounded-full flex items-center gap-2 font-bold shadow">
+            <Link to="/ai-chat" className="mx-2 bg-gradient-to-tr from-purple-500 to-blue-500 text-white px-4 py-2 rounded-full flex items-center gap-2 font-bold shadow hover:shadow-md transition-shadow">
               <Bot size={18} /> Trợ lý AI
             </Link>
 
             {/* Dark Mode Toggle */}
             <div className="px-1"><ThemeToggle /></div>
 
-            <Link to="/notifications" className="relative p-2 text-gray-500 hover:text-primary transition-colors">
+            <Link to="/notifications" className="relative p-2 text-gray-500 dark:text-gray-400 hover:text-primary transition-colors">
               <Bell size={20} />
               {unreadNotifCount > 0 && (
                 <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
@@ -156,7 +153,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
       {/* ================= MOBILE TOP BAR ================= */}
       {!hideTopBar && !isAskPage && !isGameZone && !isNotificationPage && !isExpertReg && (
-        <header className="md:hidden fixed top-0 inset-x-0 z-40 bg-white/80 dark:bg-dark-card/80 backdrop-blur-xl border-b dark:border-dark-border px-4 py-2 flex justify-between items-center shadow-sm">
+        <header className="md:hidden fixed top-0 inset-x-0 z-40 bg-white/80 dark:bg-dark-card/80 backdrop-blur-xl border-b border-gray-100 dark:border-dark-border px-4 py-2 flex justify-between items-center shadow-sm">
           <Link to="/" className="text-xl font-black text-primary">Asking.vn</Link>
           <div className="flex items-center gap-3">
             <ThemeToggle />
@@ -182,7 +179,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
       {/* ================= MOBILE BOTTOM NAV ================= */}
       {!hideBottomBar && (
-        <div className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-dark-card/95 backdrop-blur-xl border-t dark:border-dark-border px-6 py-2 z-50 rounded-t-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+        <div className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-dark-card/95 backdrop-blur-xl border-t border-gray-100 dark:border-dark-border px-6 py-2 z-50 rounded-t-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
           <div className="flex justify-between items-end">
             <MobileNavItem to="/" icon={<Home size={24} />} label="Trang chủ" active={path === '/'} />
             <MobileNavItem to="/games" icon={<Gamepad2 size={24} />} label="Bé chơi" active={path === '/games'} />
@@ -212,44 +209,41 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         </div>
       )}
 
-       {/* --- DESKTOP FOOTER (ĐÃ SỬA PHẦN BETA) --- */}
-      {/* --- DESKTOP FOOTER --- */}
+      {/* ================= DESKTOP FOOTER ================= */}
       {!hideBottomBar && !isNotificationPage && !isExpertReg && !isAiChat && !isQuestionDetail && !isGameZone && (
-        <footer className="bg-white border-t border-gray-200 pt-16 pb-8 text-sm hidden md:block mt-10">
-        <footer className="bg-white dark:bg-dark-card border-t border-gray-200 dark:border-dark-border pt-16 pb-8 text-sm hidden md:block mt-10">
+        <footer className="bg-white dark:bg-dark-card border-t border-gray-200 dark:border-dark-border pt-16 pb-8 text-sm hidden md:block mt-10 transition-colors">
           <div className="max-w-6xl mx-auto px-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
 
-@@ -184,10 +194,10 @@
+              {/* Cột 1: Brand Info */}
+              <div>
+                <Link to="/" className="text-xl font-bold text-primary flex items-center gap-2 mb-4">
                   <span className="bg-gradient-to-tr from-primary to-secondary p-1.5 rounded-xl text-white shadow-sm text-lg">👶</span>
                   Asking.vn
                 </Link>
-                <p className="text-gray-500 leading-relaxed text-sm">
                 <p className="text-gray-500 dark:text-gray-400 leading-relaxed text-sm">
                   Cộng đồng Mẹ & Bé văn minh, hiện đại. Nơi kết nối hàng triệu bà mẹ Việt Nam cùng đội ngũ chuyên gia y tế hàng đầu.
                 </p>
-                <div className="space-y-3 text-gray-500 pt-2 text-sm">
                 <div className="space-y-3 text-gray-500 dark:text-gray-400 pt-2 text-sm">
                   <div className="flex items-start gap-3">
                     <MapPin size={18} className="mt-0.5 shrink-0 text-primary" />
                     <span>Tầng 12, Tòa nhà Asking, Quận 1, TP.HCM</span>
-@@ -205,8 +215,8 @@
+                  </div>
+                </div>
+              </div>
 
               {/* Cột 2 */}
               <div>
-                <h4 className="font-bold text-gray-900 text-base mb-5">Về Asking.vn</h4>
-                <ul className="space-y-3 text-gray-500">
                 <h4 className="font-bold text-gray-900 dark:text-white text-base mb-5">Về Asking.vn</h4>
                 <ul className="space-y-3 text-gray-500 dark:text-gray-400">
                   <li><Link to="/about" className="hover:text-primary transition-colors">Giới thiệu chung</Link></li>
                   <li><Link to="/expert-register" className="hover:text-primary transition-colors flex items-center gap-1">Đăng ký Chuyên gia <ShieldCheck size={14} className="text-blue-500"/></Link></li>
                   <li><Link to="/blog" className="hover:text-primary transition-colors">Góc chuyên gia</Link></li>
-@@ -216,41 +226,41 @@
+                </ul>
+              </div>
 
               {/* Cột 3 */}
               <div>
-                <h4 className="font-bold text-gray-900 text-base mb-5">Hỗ trợ & Chính sách</h4>
-                <ul className="space-y-3 text-gray-500">
                 <h4 className="font-bold text-gray-900 dark:text-white text-base mb-5">Hỗ trợ & Chính sách</h4>
                 <ul className="space-y-3 text-gray-500 dark:text-gray-400">
                   <li><Link to="/terms" className="hover:text-primary transition-colors">Điều khoản sử dụng</Link></li>
@@ -259,54 +253,49 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 </ul>
               </div>
 
-              {/* Cột 4 - ĐÃ SỬA: THÔNG BÁO BETA */}
               {/* Cột 4 */}
               <div>
-                <h4 className="font-bold text-gray-900 text-base mb-5">Kết nối với chúng tôi</h4>
                 <h4 className="font-bold text-gray-900 dark:text-white text-base mb-5">Kết nối với chúng tôi</h4>
                 <div className="flex gap-3 mb-8">
-                  <SocialIcon color="text-blue-600 bg-blue-50 hover:bg-blue-100" icon={<Facebook size={18} />} />
-                  <SocialIcon color="text-pink-600 bg-pink-50 hover:bg-pink-100" icon={<Instagram size={18} />} />
-                  <SocialIcon color="text-red-600 bg-red-50 hover:bg-red-100" icon={<Youtube size={18} />} />
                   <SocialIcon color="text-blue-600 bg-blue-50 dark:bg-slate-700 hover:bg-blue-100 dark:hover:bg-slate-600" icon={<Facebook size={18} />} />
                   <SocialIcon color="text-pink-600 bg-pink-50 dark:bg-slate-700 hover:bg-pink-100 dark:hover:bg-slate-600" icon={<Instagram size={18} />} />
                   <SocialIcon color="text-red-600 bg-red-50 dark:bg-slate-700 hover:bg-red-100 dark:hover:bg-slate-600" icon={<Youtube size={18} />} />
                 </div>
 
-                <h4 className="font-bold text-gray-900 text-base mb-3">Phiên bản</h4>
-                <div className="bg-yellow-50 border border-yellow-100 rounded-xl p-3 shadow-sm">
-                   <div className="flex items-center gap-2 mb-1">
                 <h4 className="font-bold text-gray-900 dark:text-white text-base mb-3">Phiên bản</h4>
                 <div className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-100 dark:border-yellow-900/30 rounded-xl p-3 shadow-sm">
-                    <div className="flex items-center gap-2 mb-1">
+                   <div className="flex items-center gap-2 mb-1">
                       <span className="relative flex h-2.5 w-2.5">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-yellow-500"></span>
                       </span>
-                      <span className="font-bold text-yellow-800 text-xs uppercase tracking-wide">Beta Testing</span>
+                      <span className="font-bold text-yellow-800 dark:text-yellow-500 text-xs uppercase tracking-wide">Beta Testing</span>
                    </div>
-                   <p className="text-[11px] text-yellow-800/80 leading-relaxed">
+                   <p className="text-[11px] text-yellow-800/80 dark:text-yellow-500/80 leading-relaxed">
                       Mạng xã hội đang hoạt động thử nghiệm và chờ giấy phép chính thức.
                    </p>
-                      <span className="font-bold text-yellow-800 dark:text-yellow-500 text-xs uppercase tracking-wide">Beta Testing</span>
-                    </div>
-                    <p className="text-[11px] text-yellow-800/80 dark:text-yellow-500/80 leading-relaxed">
-                       Mạng xã hội đang hoạt động thử nghiệm và chờ giấy phép chính thức.
-                    </p>
                 </div>
               </div>
             </div>
 
-            <div className="border-t border-gray-100 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-gray-400">
             <div className="border-t border-gray-100 dark:border-dark-border pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-gray-400">
               <p>© 2024 Asking.vn - Bản quyền thuộc về Asking Việt Nam.</p>
               <div className="flex items-center gap-1">
                 Made with <Heart size={12} className="text-red-500 fill-red-500" /> by Asking Team
-@@ -268,28 +278,28 @@
+              </div>
+            </div>
+          </div>
+        </footer>
+      )}
+    </div>
+  );
+};
+
+/* ================= HELPER COMPONENTS ================= */
+
 const NavLink: React.FC<{ to: string; label: string; active: boolean }> = ({ to, label, active }) => (
   <Link 
     to={to} 
-    className={`px-4 py-2 rounded-full transition-all ${active ? 'bg-primary/10 text-primary font-bold' : 'text-textGray hover:text-primary hover:bg-gray-50'}`}
     className={`px-4 py-2 rounded-full transition-all ${active ? 'bg-primary/10 text-primary font-bold' : 'text-textGray dark:text-gray-400 hover:text-primary dark:hover:text-primary hover:bg-gray-50 dark:hover:bg-slate-700'}`}
   >
     {label}
@@ -315,7 +304,6 @@ const NavLink: React.FC<{ to: string; label: string; active: boolean }> = ({ to,
 
 const MobileNavItem: React.FC<{ to: string; icon: React.ReactNode; label: string; active: boolean }> = ({ to, icon, label, active }) => (
   <Link to={to} className="flex flex-col items-center gap-1 min-w-[60px] active:scale-95 transition-transform group">
-    <div className={`p-1.5 rounded-xl transition-colors ${active ? 'text-primary' : 'text-gray-400 group-hover:text-textDark'}`}>
     <div className={`p-1.5 rounded-xl transition-colors ${active ? 'text-primary' : 'text-gray-400 group-hover:text-textDark dark:group-hover:text-white'}`}>
       {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement<any>, { 
         fill: active ? "currentColor" : "none", 
