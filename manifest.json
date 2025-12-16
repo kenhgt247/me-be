@@ -2,8 +2,8 @@
 {
   "name": "Asking.vn - Mẹ & Bé",
   "short_name": "Asking.vn",
-  "start_url": "./",
-  "scope": "./",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#F7F7F5",
   "theme_color": "#ffffff",
