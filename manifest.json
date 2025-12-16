@@ -10,12 +10,12 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/images/192x192.png",
+      "src": "https://raw.githubusercontent.com/kenhgt247/me-be/main/images/192x192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/images/512x512.png",
+      "src": "https://raw.githubusercontent.com/kenhgt247/me-be/main/images/512x512.png",
       "sizes": "512x512",
       "type": "image/png"
     }
