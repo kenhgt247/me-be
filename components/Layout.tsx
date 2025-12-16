@@ -13,7 +13,9 @@ import {
   ShieldCheck,
   Facebook,
   Instagram,
-  Youtube
+  Youtube,
+  Phone, // Added missing import
+  Mail   // Added missing import
 } from 'lucide-react';
 
 // Import services and config
@@ -221,10 +223,10 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                   <span className="bg-gradient-to-tr from-primary to-secondary p-1.5 rounded-xl text-white shadow-sm text-lg">👶</span>
                   Asking.vn
                 </Link>
-                <p className="text-gray-500 leading-relaxed text-sm">
+                <p className="text-gray-500 dark:text-gray-400 leading-relaxed text-sm">
                   Cộng đồng Mẹ & Bé văn minh, hiện đại. Nơi kết nối hàng triệu bà mẹ Việt Nam cùng đội ngũ chuyên gia  hàng đầu.
                 </p>
-                <div className="space-y-3 text-gray-500 pt-2 text-sm">
+                <div className="space-y-3 text-gray-500 dark:text-gray-400 pt-2 text-sm">
                   <div className="flex items-start gap-3">
                     <MapPin size={18} className="mt-0.5 shrink-0 text-primary" />
                     <span>107. Bạch Năng Thi, P. Tân Hưng, Tp.Hải Phòng</span>
