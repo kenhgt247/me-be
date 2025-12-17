@@ -15,7 +15,7 @@ import { ShareModal } from '../components/ShareModal';
 import { ExpertPromoBox } from '../components/ExpertPromoBox';
 
 // --- HẰNG SỐ: ẢNH ĐẠI DIỆN DỄ THƯƠNG MẶC ĐỊNH ---
-const CUTE_AVATAR = "https://cdn-icons-png.flaticon.com/512/4322/4322991.png"; // Hình mèo cute
+const CUTE_AVATAR = "/images/rabbit.png"; // Hình thỏ dễ thương
 
 interface ProfileProps {
     user: User;
