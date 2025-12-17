@@ -224,7 +224,7 @@ export const fetchAllBlogs = async () => {
   if (!db) return [];
   try {
     // Giả sử collection tên là 'blogs'
-    const snapshot = await getDocs(collection(db, 'blogs'));
+    const snapshot = await getDocs(collection(db, 'blogPosts'));
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (error) {
     console.error("Error fetching blogs:", error);
