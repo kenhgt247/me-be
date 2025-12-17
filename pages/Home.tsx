@@ -29,19 +29,17 @@ interface HomeProps {
 
 const PAGE_SIZE = 20;
 
-// --- HELPER: Hàm xóa dấu tiếng Việt để tìm kiếm chính xác ---
+// --- HELPER: Hàm xóa dấu tiếng Việt chuẩn Unicode để tìm kiếm chính xác ---
 const removeVietnameseTones = (str: string) => {
     if (!str) return "";
-    str = str.toLowerCase();
-    str = str.replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g, "a");
-    str = str.replace(/è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ/g, "e");
-    str = str.replace(/ì|í|ị|ỉ|ĩ/g, "i");
-    str = str.replace(/ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ/g, "o");
-    str = str.replace(/ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ/g, "u");
-    str = str.replace(/ỳ|ý|ỵ|ỷ|ỹ/g, "y");
-    str = str.replace(/đ/g, "d");
-    str = str.replace(/!|@|%|\^|\*|\(|\)|\+|\=|\<|\>|\?|\/|,|\.|\:|\;|\'|\"|\&|\#|\[|\]|~|\$|_|`|-|{|}|\||\\/g, " ");
-    return str.trim();
+    return str
+        .toLowerCase()
+        .normalize("NFD") // Tách tổ hợp dấu
+        .replace(/[\u0300-\u036f]/g, "") // Xóa dấu
+        .replace(/đ/g, "d")
+        .replace(/[^a-z0-9\s]/g, " ") // Chỉ giữ lại chữ cái, số và khoảng trắng
+        .replace(/\s+/g, " ") // Gộp khoảng trắng thừa
+        .trim();
 }
 
 // --- 1. COMPONENT: CREATE STORY MODAL ---
@@ -220,8 +218,8 @@ const StoryViewer = ({ story, currentUser, onClose }: { story: Story, currentUse
 
         {/* Ảnh Story */}
         <div className="absolute inset-0 flex items-center justify-center bg-black">
-             <img src={story.mediaUrl} className="w-full h-full object-cover" alt="story" />
-             <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60 pointer-events-none"></div>
+              <img src={story.mediaUrl} className="w-full h-full object-cover" alt="story" />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60 pointer-events-none"></div>
         </div>
 
         {/* Footer Actions */}
@@ -236,7 +234,7 @@ const StoryViewer = ({ story, currentUser, onClose }: { story: Story, currentUse
                 className="w-full bg-transparent border border-white/60 rounded-full pl-5 pr-10 py-3 text-white placeholder-white/70 text-sm outline-none focus:border-white focus:bg-black/20 transition-all backdrop-blur-sm" 
             />
           </div>
-          
+           
           {replyText.trim() ? (
             <button 
                 onClick={handleSendReply} 
@@ -299,10 +297,10 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
   const [viewFilter, setViewFilter] = useState<'newest' | 'active' | 'unanswered'>('newest');
   const [adConfig, setAdConfig] = useState<AdConfig | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  
+   
   const [inputValue, setInputValue] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  
+   
   const [searchTab, setSearchTab] = useState('all');
   const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -357,27 +355,32 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
   const searchResults = useMemo(() => {
     if (!debouncedQuery.trim()) return { questions: [], blogs: [], docs: [], users: [] };
     
+    // --- LOGIC TÌM KIẾM THEO TỪ KHÓA (TOKEN-BASED) ---
     const normalizedQuery = removeVietnameseTones(debouncedQuery);
+    const queryTokens = normalizedQuery.split(" ").filter(t => t.length > 0); // Tách chuỗi thành các từ khóa
 
+    // Hàm kiểm tra: Văn bản phải chứa tất cả các từ khóa
     const isMatch = (text: string | undefined | null) => {
-        return removeVietnameseTones(text || '').includes(normalizedQuery);
+        if (!text) return false;
+        const normalizedText = removeVietnameseTones(text);
+        return queryTokens.every(token => normalizedText.includes(token));
     }
 
     const matchedQuestions = questions.filter(q => 
-        isMatch(q.title) ||             
+        isMatch(q.title) ||              
         isMatch(q.content) ||            
         isMatch(q.author.name) ||
         (q.answers && q.answers.some(ans => isMatch(ans.content) || isMatch(ans.author.name)))
     );
     
     const matchedBlogs = blogPosts.filter(p => 
-        isMatch(p.title) ||             
+        isMatch(p.title) ||              
         isMatch(p.excerpt) ||            
         isMatch(p.authorName)            
     );
     
     const matchedDocs = documents.filter(d => 
-        isMatch(d.title) ||             
+        isMatch(d.title) ||              
         isMatch(d.description) ||        
         isMatch(d.authorName)            
     );
@@ -397,7 +400,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
   }, [debouncedQuery, questions, blogPosts, documents]);
 
   let displayList = [...questions];
-  
+   
   if (!debouncedQuery) {
       if (activeCategory !== 'Tất cả') displayList = displayList.filter(q => q.category === activeCategory);
       switch (viewFilter) {
@@ -408,7 +411,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
   } else { 
       displayList = searchResults.questions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); 
   }
-  
+   
   const paginatedList = displayList.slice(0, visibleCount);
 
   const getProfileSlug = (user: User) => user.username || user.id;
@@ -419,7 +422,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
         <div className="flex flex-col"><span className="text-sm font-bold text-textDark dark:text-dark-text truncate max-w-[100px]">{user.name}</span><span className="text-[10px] text-primary font-medium">Xem trang</span></div>
     </Link>
   );
-  
+   
   const renderDocCard = (doc: Document) => (
     <Link to={`/documents/${doc.slug}`} key={doc.id} className="flex items-center gap-4 bg-white dark:bg-dark-card p-3 rounded-2xl border border-gray-100 dark:border-dark-border shadow-sm active:scale-[0.98] transition-transform group hover:border-green-200 dark:hover:border-green-500/50">
         <div className="w-12 h-12 bg-green-50 dark:bg-green-900/20 rounded-xl flex items-center justify-center text-2xl shrink-0">{doc.fileType === 'pdf' ? '📕' : doc.fileType === 'image' ? '🖼️' : '📄'}</div>
@@ -429,7 +432,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
 
   return (
     <div className="space-y-4 animate-fade-in min-h-screen">
-      
+       
       {activeStory && <StoryViewer story={activeStory} currentUser={currentUser} onClose={() => setActiveStory(null)} />}
 
       {showCreateStory && currentUser && <CreateStoryModal currentUser={currentUser} onClose={() => setShowCreateStory(false)} onSuccess={handleStoryCreated} />}
@@ -455,7 +458,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
            <div className="animate-slide-up space-y-4">
                <SearchTabs activeTab={searchTab} onChange={setSearchTab} counts={{ questions: searchResults.questions.length, blogs: searchResults.blogs.length, docs: searchResults.docs.length, users: searchResults.users.length }} />
                <div className="px-4 md:px-0 space-y-4 pb-20">
-                 
+                  
                    {(searchTab === 'all' || searchTab === 'users') && searchResults.users.length > 0 && (<div className="mb-6"><div className="grid grid-cols-1 md:grid-cols-2 gap-3">{searchResults.users.map(renderUserCard)}</div></div>)}
                    
                    {(searchTab === 'all' || searchTab === 'blogs') && searchResults.blogs.length > 0 && (
@@ -499,7 +502,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
            </div>
       ) : (
       <div className="space-y-4">
-          
+           
           {/* --- STORIES BAR --- */}
           <div className="px-4 md:px-0">
              <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 snap-x">
@@ -579,7 +582,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
                   return (
                       <React.Fragment key={q.id}>
                           {shouldShowAd && (adConfig.provider === 'adsense' ? <AdBanner className="mx-4 md:mx-0" debugLabel={`Ad #${index}`} /> : <a href={adConfig.homeAd?.link || '#'} target="_blank" rel="noopener noreferrer" className="block group"><div className="bg-white dark:bg-dark-card p-5 rounded-[1.5rem] shadow-sm dark:shadow-none border border-gray-100 dark:border-dark-border hover:border-yellow-300 transition-all relative overflow-hidden"><div className="flex items-start justify-between mb-3 relative z-10"><div className="flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center text-[10px] font-bold text-green-700 dark:text-green-400">Ad</div><div><p className="text-xs font-bold text-textDark dark:text-dark-text flex items-center gap-1">{adConfig.homeAd?.sponsorName || 'Nhà tài trợ'}<span className="bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded text-[9px] font-bold">Sponsored</span></p><p className="text-[10px] text-gray-400">Gợi ý dành cho bạn</p></div></div><MoreHorizontal size={16} className="text-gray-300"/></div><h3 className="text-[16px] font-bold text-textDark dark:text-dark-text mb-2 leading-snug">{adConfig.homeAd?.title}</h3><p className="text-textGray dark:text-dark-muted text-sm line-clamp-2 mb-3 font-normal">{adConfig.homeAd?.content}</p>{adConfig.homeAd?.imageUrl && (<div className="mt-3 rounded-xl overflow-hidden border border-gray-100 dark:border-dark-border bg-gray-50 dark:bg-slate-800"><img src={adConfig.homeAd.imageUrl} className="w-full h-48 object-cover" alt="ad" /></div>)}<div className="flex items-center justify-between pt-3 border-t border-gray-50 dark:border-slate-800 mt-3"><div className="flex items-center gap-4 text-xs font-bold text-gray-400"><span className="flex items-center gap-1.5"><Heart size={14} /> 1.2k</span><span className="flex items-center gap-1.5"><MessageCircle size={14} /> 45</span></div><div className="text-[10px] font-bold text-white bg-blue-600 px-3 py-1.5 rounded-full flex items-center gap-1 shadow-sm group-hover:bg-blue-700 transition-colors">{adConfig.homeAd?.ctaText || 'Xem ngay'} <ExternalLink size={10}/></div></div></div></a>)}
-                          <Link to={`/question/${toSlug(q.title, q.id)}`} className="block group"><div className="bg-white dark:bg-dark-card p-5 rounded-[1.5rem] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-gray-100 dark:border-dark-border active:scale-[0.98] transition-all relative overflow-hidden">{q.answers.length === 0 && <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-orange-100 to-transparent dark:from-orange-900/10 rounded-bl-full -mr-8 -mt-8"></div>}<div className="flex items-start justify-between mb-3 relative z-10"><div className="flex items-center gap-2"><img src={q.author.avatar} className="w-8 h-8 rounded-full border border-gray-100 dark:border-slate-700 object-cover" /><div><p className="text-xs font-bold text-textDark dark:text-dark-text flex items-center gap-1">{q.author.name} {q.author.isExpert && <ShieldCheck size={10} className="text-blue-500" />}</p><p className="text-[10px] text-gray-400">{new Date(q.createdAt).toLocaleDateString('vi-VN')}</p></div></div><span className="bg-gray-50 dark:bg-slate-700 text-textGray dark:text-dark-muted text-[10px] font-bold px-2 py-1 rounded-lg border border-gray-100 dark:border-slate-600">{q.category}</span></div><h3 className="text-[16px] font-bold text-textDark dark:text-dark-text mb-2 leading-snug line-clamp-2">{q.title}</h3><p className="text-textGray dark:text-dark-muted text-sm line-clamp-2 mb-3 font-normal">{q.content}</p><FBImageGrid images={q.images || []} /><div className="flex items-center justify-between pt-3 border-t border-gray-50 dark:border-slate-800 mt-3"><div className="flex items-center gap-4 text-xs font-bold text-gray-400 dark:text-gray-500">
+                          <Link to={`/question/${toSlug(q.title, q.id)}`} className="block group"><div className="bg-white dark:bg-dark-card p-5 rounded-[1.5rem] shadow-[0_2px_15px_rgba(0,0,0,0.03)] dark:shadow-none border border-gray-100 dark:border-dark-border active:scale-[0.98] transition-all relative overflow-hidden">{q.answers.length === 0 && <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-orange-100 to-transparent dark:from-orange-900/10 rounded-bl-full -mr-8 -mt-8"></div>}<div className="flex items-start justify-between mb-3 relative z-10"><div className="flex items-center gap-2"><img src={q.author.avatar} className="w-8 h-8 rounded-full border border-gray-100 dark:border-slate-700 object-cover" /><div><p className="text-xs font-bold text-textDark dark:text-dark-text flex items-center gap-1">{q.author.name} {q.author.isExpert && <ShieldCheck size={10} className="text-blue-500" />}</p><p className="text-[10px] text-gray-400">{new Date(q.createdAt).toLocaleDateString('vi-VN')}</p></div></div><span className="bg-gray-50 dark:bg-slate-700 text-textGray dark:text-dark-muted text-[10px] font-bold px-2 py-1 rounded-lg border border-gray-100 dark:border-slate-600">{q.category}</span></div><h3 className="text-[16px] font-bold text-textDark dark:text-dark-text mb-2 leading-snug line-clamp-2">{q.title}</h3><p className="text-textGray dark:text-dark-muted text-sm line-clamp-2 mb-3 font-normal">{q.content}</p><FBImageGrid images={q.images || []} /><div className="flex items-center justify-between pt-3 border-t border-gray-5 dark:border-slate-800 mt-3"><div className="flex items-center gap-4 text-xs font-bold text-gray-400 dark:text-gray-500">
                             {/* DÒNG CODE ĐÃ FIX */}
                             <span className="flex items-center gap-1.5">
                                 <Heart size={14} className={likesCount > 0 || isLikedByCurrentUser ? "text-red-500 fill-red-500" : ""} /> 
