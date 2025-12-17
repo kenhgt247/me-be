@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react'; // Thêm useMemo
 import { BlogPost, BlogCategory } from '../../types';
 import { toSlug } from '../../types'; 
 import { 
@@ -7,8 +7,11 @@ import {
 } from '../../services/blog';
 import { generateBlogPost, generateBlogTitle } from '../../services/gemini';
 import { subscribeToAuthChanges } from '../../services/auth';
-// ĐÃ SỬA: Thêm "Eye" vào dòng import dưới đây
 import { Plus, Trash2, Edit2, X, Image as ImageIcon, Video, Link as LinkIcon, BookOpen, Layers, Sparkles, Loader2, RefreshCw, FileText, CheckCircle, AlertCircle, Eye } from 'lucide-react';
+
+// --- IMPORT REACT QUILL ---
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';// Import style mặc định
 
 export const BlogAdmin: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -46,6 +49,24 @@ export const BlogAdmin: React.FC = () => {
     status: 'draft' as 'draft' | 'published'
   });
 
+  // --- CẤU HÌNH TOOLBAR CHO EDITOR ---
+  const quillModules = useMemo(() => ({
+    toolbar: [
+      [{ 'header': [1, 2, 3, false] }],
+      ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+      [{'list': 'ordered'}, {'list': 'bullet'}],
+      ['link', 'image', 'video'], // Thêm khả năng chèn ảnh/video trực tiếp
+      ['clean']
+    ],
+  }), []);
+
+  const quillFormats = [
+    'header',
+    'bold', 'italic', 'underline', 'strike', 'blockquote',
+    'list', 'bullet',
+    'link', 'image', 'video'
+  ];
+
   useEffect(() => {
     const unsub = subscribeToAuthChanges(user => {
       setCurrentUser(user);
@@ -57,9 +78,7 @@ export const BlogAdmin: React.FC = () => {
   const loadData = async (user: any) => {
     setLoading(true);
     try {
-        // Logic phân quyền: Admin thấy hết, Chuyên gia chỉ thấy bài của mình
         const authorFilter = user.isAdmin ? undefined : user.id;
-        
         const [cats, allPosts] = await Promise.all([
             fetchBlogCategories(),
             fetchAllPostsAdmin(authorFilter)
@@ -73,7 +92,7 @@ export const BlogAdmin: React.FC = () => {
     }
   };
 
-  // --- CATEGORY HANDLERS ---
+  // --- CATEGORY HANDLERS (Giữ nguyên) ---
   const handleEditCat = (cat: BlogCategory) => {
     setEditingCat(cat);
     setCatForm({ name: cat.name, iconEmoji: cat.iconEmoji, order: cat.order, isActive: cat.isActive });
@@ -83,7 +102,6 @@ export const BlogAdmin: React.FC = () => {
   const handleSaveCat = async () => {
     if (!catForm.name) return;
     const slug = toSlug(catForm.name);
-    
     try {
         if (editingCat) {
             await updateBlogCategory(editingCat.id, { ...catForm, slug });
@@ -105,7 +123,7 @@ export const BlogAdmin: React.FC = () => {
     loadData(currentUser);
   };
 
-  // --- POST HANDLERS ---
+  // --- POST HANDLERS (Giữ nguyên logic) ---
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const newTitle = e.target.value;
       setPostForm(prev => ({
@@ -229,6 +247,7 @@ export const BlogAdmin: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-20">
+      {/* HEADER COMPONENT (Giữ nguyên) */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex justify-between items-center">
          <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -240,23 +259,17 @@ export const BlogAdmin: React.FC = () => {
          </div>
          <div className="flex gap-2">
             {currentUser.isAdmin && (
-                <button 
-                    onClick={() => setActiveTab('categories')} 
-                    className={`px-4 py-2 rounded-lg font-bold text-sm transition-all flex items-center gap-2 ${activeTab === 'categories' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}
-                >
+                <button onClick={() => setActiveTab('categories')} className={`px-4 py-2 rounded-lg font-bold text-sm transition-all flex items-center gap-2 ${activeTab === 'categories' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
                     <Layers size={18} /> Danh mục
                 </button>
             )}
-            <button 
-                onClick={() => setActiveTab('posts')} 
-                className={`px-4 py-2 rounded-lg font-bold text-sm transition-all flex items-center gap-2 ${activeTab === 'posts' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}
-            >
+            <button onClick={() => setActiveTab('posts')} className={`px-4 py-2 rounded-lg font-bold text-sm transition-all flex items-center gap-2 ${activeTab === 'posts' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
                 <FileText size={18} /> Bài viết
             </button>
          </div>
       </div>
 
-      {/* --- CATEGORIES TAB --- */}
+      {/* --- CATEGORIES TAB (Giữ nguyên) --- */}
       {activeTab === 'categories' && currentUser.isAdmin && (
           <div className="space-y-4">
               <div className="flex justify-end">
@@ -294,7 +307,7 @@ export const BlogAdmin: React.FC = () => {
           </div>
       )}
 
-      {/* --- POSTS TAB --- */}
+      {/* --- POSTS TAB (Giữ nguyên) --- */}
       {activeTab === 'posts' && (
           <div className="space-y-4">
               <div className="flex justify-end">
@@ -350,7 +363,7 @@ export const BlogAdmin: React.FC = () => {
           </div>
       )}
 
-      {/* CATEGORY MODAL */}
+      {/* CATEGORY MODAL (Giữ nguyên) */}
       {showCatModal && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in">
               <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl animate-pop-in">
@@ -368,7 +381,7 @@ export const BlogAdmin: React.FC = () => {
           </div>
       )}
 
-      {/* POST MODAL */}
+      {/* POST MODAL - ĐÃ TÍCH HỢP REACT QUILL */}
       {showPostModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
               <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-pop-in">
@@ -381,6 +394,7 @@ export const BlogAdmin: React.FC = () => {
                   </div>
                   
                   <div className="p-6 overflow-y-auto flex-1 space-y-5">
+                      {/* Tiêu đề & Slug */}
                       <div className="grid md:grid-cols-2 gap-5">
                           <div className="relative">
                               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tiêu đề</label>
@@ -409,7 +423,7 @@ export const BlogAdmin: React.FC = () => {
                           </div>
                       </div>
 
-                      {/* SLUG INPUT */}
+                      {/* Slug */}
                       <div>
                           <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Đường dẫn (Slug)</label>
                           <div className="flex gap-2">
@@ -429,6 +443,7 @@ export const BlogAdmin: React.FC = () => {
                           </div>
                       </div>
 
+                      {/* Excerpt */}
                       <textarea 
                         value={postForm.excerpt} 
                         onChange={e => setPostForm({...postForm, excerpt: e.target.value})} 
@@ -436,6 +451,7 @@ export const BlogAdmin: React.FC = () => {
                         className="w-full p-3 border rounded-xl h-24 resize-none focus:ring-2 focus:ring-blue-100 outline-none text-sm" 
                       />
                       
+                      {/* EDITOR QUAN TRỌNG */}
                       <div className="relative">
                           <div className="flex justify-between items-center mb-1">
                               <label className="text-xs font-bold text-gray-500 uppercase">Nội dung chi tiết</label>
@@ -448,14 +464,22 @@ export const BlogAdmin: React.FC = () => {
                                 {aiLoading.content ? 'AI đang viết...' : 'Viết bài với AI'}
                               </button>
                           </div>
-                          <textarea 
-                            value={postForm.content} 
-                            onChange={e => setPostForm({...postForm, content: e.target.value})} 
-                            placeholder="Nội dung bài viết (Hỗ trợ HTML cơ bản hoặc Markdown)..." 
-                            className="w-full p-4 border rounded-xl h-80 font-mono text-sm leading-relaxed focus:ring-2 focus:ring-blue-100 outline-none" 
-                          />
+                          
+                          {/* SỬ DỤNG REACT QUILL THAY CHO TEXTAREA */}
+                          <div className="bg-white rounded-xl overflow-hidden border border-gray-200 focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-300 transition-all">
+                             <ReactQuill 
+                                theme="snow"
+                                value={postForm.content}
+                                onChange={(content) => setPostForm({...postForm, content})}
+                                modules={quillModules}
+                                formats={quillFormats}
+                                className="h-80 mb-12" // Thêm margin bottom để không bị che bởi toolbar dưới
+                                placeholder="Viết nội dung bài viết tại đây..."
+                             />
+                          </div>
                       </div>
                       
+                      {/* Media Inputs */}
                       <div className="grid md:grid-cols-2 gap-4">
                           <div className="space-y-2">
                               <label className="text-xs font-bold text-gray-500 uppercase">Media</label>
@@ -481,6 +505,7 @@ export const BlogAdmin: React.FC = () => {
                           </div>
                       </div>
 
+                      {/* Status Checkboxes */}
                       <div className="flex items-center gap-6 border-t pt-4">
                           <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 transition-colors">
                               <input type="radio" name="status" checked={postForm.status === 'draft'} onChange={() => setPostForm({...postForm, status: 'draft'})} className="accent-gray-500 w-4 h-4"/>
@@ -501,6 +526,25 @@ export const BlogAdmin: React.FC = () => {
               </div>
           </div>
       )}
+
+      {/* STYLE CUSTOM CHO QUILL EDITOR ĐẸP HƠN */}
+      <style>{`
+        .ql-toolbar.ql-snow {
+            border-top-left-radius: 0.75rem;
+            border-top-right-radius: 0.75rem;
+            border-color: #e5e7eb;
+            background-color: #f9fafb;
+        }
+        .ql-container.ql-snow {
+            border-bottom-left-radius: 0.75rem;
+            border-bottom-right-radius: 0.75rem;
+            border-color: #e5e7eb;
+            font-size: 1rem;
+        }
+        .ql-editor {
+            min-height: 200px;
+        }
+      `}</style>
     </div>
   );
 };
