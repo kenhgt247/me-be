@@ -19,7 +19,7 @@ import { fetchStories, createStory, markStoryViewed, toggleStoryLike } from '../
 import { sendMessage, sendStoryReply } from '../services/chat';
 
 // --- ẢNH MẶC ĐỊNH CHO KHÁCH ẨN DANH / LỖI AVATAR ---
-const DEFAULT_AVATAR = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
+const DEFAULT_AVATAR = "/images/rabbit.png";
 
 interface HomeProps {
   questions: Question[];
