@@ -53,7 +53,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
         }
     }, [userId, user, navigate]);
 
-    // --- 2. TẢI DỮ LIỆU PROFILE & XỬ LÝ REDIRECT ---
+    // --- 2. TẢI DỮ LIỆU PROFILE & XỬ LÝ REDIRECT (ĐÃ SỬA LỖI AVATAR) ---
     useEffect(() => {
         if (!userId) return;
         
@@ -65,12 +65,26 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
             try {
                 let targetUserData: User | null = null;
 
+                // --- FIX: ƯU TIÊN DỮ LIỆU TỪ AUTH CONTEXT NẾU XEM CHÍNH MÌNH ---
+                // Nếu đang xem profile của chính mình hoặc trùng username, 
+                // lấy dữ liệu có sẵn từ props 'user' để hiển thị ngay lập tức
+                // giúp khắc phục độ trễ khi Firestore chưa tạo xong document.
+                if (user && (user.id === userId || user.username === userId)) {
+                    targetUserData = { ...user };
+                    if (isMounted) setProfileData(targetUserData);
+                }
+
+                // Sau đó vẫn gọi Firestore để lấy dữ liệu đầy đủ nhất (bio, coverUrl...)
                 // A. Thử tìm bằng ID trước (Ưu tiên ID chính xác)
                 const docRef = doc(db, 'users', userId);
                 const docSnap = await getDoc(docRef);
 
                 if (docSnap.exists()) {
-                    targetUserData = { id: docSnap.id, ...docSnap.data() } as User;
+                    // Merge dữ liệu từ Firestore vào dữ liệu hiện có (nếu có)
+                    targetUserData = { 
+                        ...(targetUserData || { id: docSnap.id }), 
+                        ...docSnap.data() 
+                    } as User;
                 } else {
                     // B. Nếu không thấy ID, thử tìm bằng Username
                     const q = query(
@@ -95,16 +109,18 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
                     const currentSlug = userId.toLowerCase();
                     const canonicalSlug = (targetUserData.username || targetUserData.id).toLowerCase();
 
-                    if (canonicalSlug && currentSlug !== canonicalSlug) {
+                    // Chỉ redirect nếu khác slug và không phải đang load chính ID đó (tránh loop)
+                    if (canonicalSlug && currentSlug !== canonicalSlug && userId !== targetUserData.id) {
                         navigate(`/profile/${canonicalSlug}`, { replace: true });
                         return; 
                     }
                 } else {
-                    setProfileData(null);
+                    // Nếu không tìm thấy profile và cũng không có data tạm thời -> null
+                    if (!targetUserData) setProfileData(null);
                 }
             } catch (err) {
                 console.error("Lỗi tải profile:", err);
-                if (isMounted) setProfileData(null);
+                if (isMounted && !profileData) setProfileData(null);
             } finally {
                 if (isMounted) setLoadingProfile(false);
             }
@@ -113,7 +129,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, questions, onLogout, onO
         fetchProfileAndRedirect();
         
         return () => { isMounted = false; };
-    }, [userId, navigate]);
+    }, [userId, navigate, user]); // Thêm user vào dependency để cập nhật khi Auth load xong
 
     const isViewingSelf = user && profileData && user.id === profileData.id;
 
