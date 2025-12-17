@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/images/512x512.png" />
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Asking.vn - Cộng đồng Mẹ & Bé</title>
+
     <meta name="description" content="Asking.vn - Cộng đồng hỏi đáp, chia sẻ kiến thức uy tín dành cho Mẹ và Bé. Kết nối chuyên gia, bác sĩ và các bậc phụ huynh." />
     <meta name="keywords" content="mẹ và bé, hỏi đáp, nuôi dạy con, thai kỳ, sức khỏe, chuyên gia, asking.vn" />
     <meta name="author" content="Asking.vn" />
@@ -19,9 +21,7 @@
     <meta property="twitter:title" content="Asking.vn - Cộng đồng Mẹ & Bé" />
     <meta property="twitter:description" content="Cộng đồng hỏi đáp, chia sẻ kiến thức uy tín dành cho Mẹ và Bé." />
     <meta property="twitter:image" content="/images/512x512.png" />
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5438816964690202"
-      crossorigin="anonymous"></script>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+
     <meta name="theme-color" content="#F7F7F5" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -29,16 +29,14 @@
     <meta name="format-detection" content="telephone=no" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/images/512x512.png" />
-    
-    <title>Asking.vn - Cộng đồng Mẹ & Bé</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5438816964690202" crossorigin="anonymous"></script>
+
     <script>
       (function() {
-        // Kiểm tra xem người dùng đã lưu chế độ dark chưa, hoặc hệ thống có đang để dark mode không
         var savedTheme = localStorage.getItem('theme');
         var sysTheme = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        
         if (savedTheme === 'dark' || (!savedTheme && sysTheme)) {
           document.documentElement.classList.add('dark');
         } else {
@@ -46,149 +44,9 @@
         }
       })();
     </script>
-    <script>
-      tailwind.config = {
-        darkMode: 'class', // Kích hoạt chế độ tối thủ công
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Quicksand', 'sans-serif'],
-            },
-            colors: {
-              // --- MÀU CŨ (GIỮ NGUYÊN) ---
-              primary: '#2EC4B6', // Soft Teal
-              secondary: '#CBF3F0', // Light Teal
-              cream: '#F7F7F5', // Warm Cream
-              accent: '#FFBF69', // Soft Orange/Yellow
-              textDark: '#1F2937', // Darker gray
-              textGray: '#6B7280',
-              
-              // --- MÀU MỚI (DARK MODE - SLATE) ---
-              dark: {
-                bg: '#0f172a',      // Slate 900
-                card: '#1e293b',    // Slate 800
-                text: '#f1f5f9',    // Slate 100
-                muted: '#94a3b8',   // Slate 400
-                border: '#334155'   // Slate 700
-              }
-            },
-            spacing: {
-              'safe-top': 'env(safe-area-inset-top)',
-              'safe-bottom': 'env(safe-area-inset-bottom)',
-              'safe-left': 'env(safe-area-inset-left)',
-              'safe-right': 'env(safe-area-inset-right)',
-            },
-            animation: {
-              'fade-in': 'fadeIn 0.4s ease-out',
-              'pop-in': 'popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-              'slide-up': 'slideUp 0.3s ease-out',
-              'bounce-small': 'bounceSmall 1s infinite',
-            },
-            keyframes: {
-              fadeIn: {
-                '0%': { opacity: '0' },
-                '100%': { opacity: '1' },
-              },
-              popIn: {
-                '0%': { opacity: '0', transform: 'scale(0.95)' },
-                '100%': { opacity: '1', transform: 'scale(1)' },
-              },
-              slideUp: {
-                '0%': { transform: 'translateY(100%)' },
-                '100%': { transform: 'translateY(0)' },
-              },
-              bounceSmall: {
-                '0%, 100%': { transform: 'translateY(-5%)' },
-                '50%': { transform: 'translateY(0)' },
-              }
-            }
-          }
-        }
-      }
-    </script>
-    <style>
-      /* Native App Feel Global Styles */
-      :root {
-        --sat: env(safe-area-inset-top);
-        --sab: env(safe-area-inset-bottom);
-
-        /* --- BIẾN MÀU NỀN & CHỮ (LOGIC MỚI) --- */
-        --bg-color: #F7F7F5;       /* Mặc định: Màu Cream cũ */
-        --text-color: #1F2937;     /* Mặc định: Màu TextDark cũ */
-      }
-      
-      /* Khi class 'dark' được thêm vào html */
-      :root.dark {
-        --bg-color: #0f172a;       /* Màu nền tối mới */
-        --text-color: #f1f5f9;     /* Màu chữ sáng mới */
-      }
-      
-      html {
-        -webkit-tap-highlight-color: transparent;
-        scroll-behavior: smooth;
-        height: 100%;
-        
-        /* Thay màu cứng bằng biến để đổi màu tự động */
-        background-color: var(--bg-color);
-        transition: background-color 0.3s ease; /* Hiệu ứng chuyển màu mượt */
-        
-        /* Prevent bounce on iOS body */
-        overscroll-behavior-y: none;
-      }
-      
-      body {
-        /* Thay màu cứng bằng biến */
-        background-color: var(--bg-color);
-        color: var(--text-color);
-        
-        overscroll-behavior-y: none;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-        height: 100%;
-        width: 100%;
-        position: fixed;
-        overflow: hidden;
-        /* Disable text selection generally to feel more like an app */
-        -webkit-user-select: none;
-        user-select: none;
-        /* Improve touch response */
-        touch-action: manipulation;
-      }
-      
-      /* Allow text selection in inputs and content areas that matter */
-      input, textarea, [contenteditable="true"], .selectable-text {
-        -webkit-user-select: text;
-        user-select: text;
-      }
-      
-      #root {
-        height: 100%;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-        /* Padding bottom to ensure content isn't hidden behind bottom nav */
-        padding-bottom: env(safe-area-inset-bottom);
-      }
-
-      /* Hide scrollbar but keep functionality */
-      .no-scrollbar::-webkit-scrollbar {
-        display: none;
-      }
-      .no-scrollbar {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-      }
-      
-      /* Safe area padding utilities fallback */
-      .pb-safe-bottom {
-        padding-bottom: env(safe-area-inset-bottom, 20px);
-      }
-      .pt-safe-top {
-        padding-top: env(safe-area-inset-top, 20px);
-      }
-    </style>
-</head>
+  </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
-   </body>
+  </body>
 </html>

@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* --- GLOBAL APP STYLES --- */
+:root {
+  --sat: env(safe-area-inset-top);
+  --sab: env(safe-area-inset-bottom);
+  
+  /* --- BIẾN MÀU (Dùng biến CSS để sync với Tailwind config) --- */
+  --bg-color: #F7F7F5;      /* Cream */
+  --text-color: #1F2937;    /* Gray 800 */
+}
+
+/* Khi có class dark */
+:root.dark {
+  --bg-color: #0f172a;      /* Slate 900 */
+  --text-color: #f1f5f9;    /* Slate 100 */
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+  height: 100%;
+  
+  /* Sử dụng biến màu đã khai báo */
+  background-color: var(--bg-color);
+  transition: background-color 0.3s ease;
+  
+  /* Chặn hiệu ứng nảy trang trên iOS */
+  overscroll-behavior-y: none;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  overscroll-behavior-y: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  height: 100%;
+  width: 100%;
+  position: fixed;
+  overflow: hidden;
+  
+  /* Tắt chọn văn bản để tạo cảm giác giống App native */
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+/* Cho phép chọn văn bản ở các ô nhập liệu */
+input, textarea, [contenteditable="true"], .selectable-text {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+#root {
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* --- UTILITIES --- */
+/* Ẩn thanh cuộn nhưng vẫn cuộn được */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Safe area padding */
+.pb-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 20px);
+}
+.pt-safe-top {
+  padding-top: env(safe-area-inset-top, 20px);
+}
