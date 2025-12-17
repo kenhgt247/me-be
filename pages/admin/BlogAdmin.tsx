@@ -49,21 +49,24 @@ export const BlogAdmin: React.FC = () => {
     status: 'draft' as 'draft' | 'published'
   });
 
-  // --- CẤU HÌNH TOOLBAR CHO EDITOR ---
+ // --- CẤU HÌNH TOOLBAR CHO EDITOR ---
+  // Phần modules (thanh công cụ) giữ nguyên, không cần sửa
   const quillModules = useMemo(() => ({
     toolbar: [
       [{ 'header': [1, 2, 3, false] }],
       ['bold', 'italic', 'underline', 'strike', 'blockquote'],
-      [{'list': 'ordered'}, {'list': 'bullet'}],
-      ['link', 'image', 'video'], // Thêm khả năng chèn ảnh/video trực tiếp
+      [{'list': 'ordered'}, {'list': 'bullet'}], // Ở đây giữ nguyên để hiện 2 nút
+      ['link', 'image', 'video'],
       ['clean']
     ],
   }), []);
 
+  // Phần formats (định dạng cho phép) -> CẦN SỬA Ở ĐÂY
   const quillFormats = [
     'header',
     'bold', 'italic', 'underline', 'strike', 'blockquote',
-    'list', 'bullet',
+    'list', // Chỉ cần để 'list' là đủ (nó bao gồm cả số và chấm tròn)
+    // Xóa chữ 'bullet' ở đây đi
     'link', 'image', 'video'
   ];
 
