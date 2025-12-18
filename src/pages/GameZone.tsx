@@ -1,17 +1,36 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Volume2, Star, Trophy, Sparkles, Play, Loader2, RotateCcw, ArrowDown } from 'lucide-react';
-import { Game, GameLevel, GameCategory, CategoryDef, GameAsset } from '../types';
-// Import từ service (đã sửa đúng đường dẫn không có chữ 's')
-import { fetchAllGames, fetchCategories } from '../services/game';
-import { generateStory } from '../services/gemini';
+import React, { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, Volume2, Star, Trophy, Sparkles, Play, Loader2, RotateCcw, Home, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-// =============================================================================
-//  UTILS UI
-// =============================================================================
+// --- IMPORT TYPES & SERVICES ---
+// Đảm bảo đường dẫn import đúng với cấu trúc dự án của bạn
+import { Game, GameLevel, GameCategory, CategoryDef, GameAsset } from '../types';
+import { fetchAllGames, fetchCategories } from '../services/game';
+import { generateStory } from '../services/gemini';
 
-const BouncyButton: React.FC<any> = ({ children, onClick, className, ...props }) => (
-  <button
+// --- SOUND UTILS ---
+const useAudio = (url?: string) => {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => {
+    if (url) {
+        audioRef.current = new Audio(url);
+        audioRef.current.load();
+    }
+  }, [url]);
+
+  const play = () => {
+    if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(() => {});
+    }
+  };
+  return play;
+};
+
+// --- UI COMPONENTS ---
+
+const BouncyButton: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ children, onClick, className, ...props }) => (
+  <button 
     onClick={(e) => {
       const btn = e.currentTarget;
       btn.style.transform = "scale(0.9)";
@@ -37,206 +56,171 @@ const RotateDeviceOverlay: React.FC<{ orientation?: 'portrait' | 'landscape' }> 
   );
 };
 
-// =============================================================================
-//  GAME ENGINES
-// =============================================================================
+// --- GAME SCREENS ---
 
-const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ game, onBack }) => {
-  const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
-  const [score, setScore] = useState(0);
-  const [isWrong, setIsWrong] = useState(false);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [gameFinished, setGameFinished] = useState(false);
-
-  const levels = game.levels || [];
-  const currentLevel = levels[currentLevelIdx];
-
-  // Tự chọn ngôn ngữ TTS theo category (không đổi schema)
-  const resolveTtsLang = () => {
-    // ưu tiên config nếu có
-    const cfgLang = (game as any)?.config?.ttsLang || (game as any)?.config?.language;
-    if (typeof cfgLang === 'string') {
-      if (cfgLang.toLowerCase().includes('en')) return 'en-US';
-      if (cfgLang.toLowerCase().includes('vi')) return 'vi-VN';
-    }
-    // fallback theo category
-    if ((game as any)?.category === 'english') return 'en-US';
-    return 'vi-VN';
-  };
-
-  const playAudio = (url?: string, text?: string) => {
-    window.speechSynthesis.cancel();
-    if (url) {
-      const audio = new Audio(url);
-      audio.play().catch(e => console.log("Audio play error", e));
-    } else if (text) {
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = resolveTtsLang();
-      u.rate = 0.9;
-      window.speechSynthesis.speak(u);
-    }
-  };
-
+const VictoryScreen: React.FC<{ onBack: () => void; score: number; total: number }> = ({ onBack, score, total }) => {
   useEffect(() => {
-    if (currentLevel?.instruction) {
-      setTimeout(() => {
-        playAudio(currentLevel.instruction.audioUrl, currentLevel.instruction.text);
-      }, 500);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentLevelIdx]);
-
-  const finishGame = () => {
-    setGameFinished(true);
-    playAudio(undefined, "Chúc mừng bé đã hoàn thành trò chơi!");
-  };
-
-  const goNextLevel = () => {
-    if (currentLevelIdx < levels.length - 1) {
-      setCurrentLevelIdx(i => i + 1);
-      return;
-    }
-    finishGame();
-  };
-
-  const handleCorrect = () => {
-    playAudio((game as any)?.config?.correctSoundUrl, "Đúng rồi! Bé giỏi quá!");
-    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-    setShowSuccessModal(true);
-    setScore(s => s + 1);
-
-    setTimeout(() => {
-      setShowSuccessModal(false);
-      goNextLevel();
-    }, 2000);
-  };
-
-  const handleWrong = () => {
-    playAudio((game as any)?.config?.wrongSoundUrl, "Sai rồi, thử lại nhé!");
-    setIsWrong(true);
-    setTimeout(() => setIsWrong(false), 500);
-  };
-
-  // Flashcard: click = nghe + next (không cần correctAnswerId)
-  const handleFlashcardClick = (asset: GameAsset) => {
-    playAudio(asset.audioUrl, asset.text);
-
-    // hiệu ứng nhẹ cho vui (không đổi UI)
-    confetti({ particleCount: 30, spread: 55, origin: { y: 0.65 } });
-
-    // tăng điểm kiểu “sưu tầm thẻ” (tùy bạn, nhưng không phá UI)
-    setScore(s => s + 1);
-
-    // chuyển thẻ sau một nhịp
-    setTimeout(() => {
-      goNextLevel();
-    }, 650);
-  };
-
-  const handleAssetClick = (asset: GameAsset) => {
-    if (!currentLevel) return;
-
-    if (game.gameType === 'quiz') {
-      if (asset.id === currentLevel.correctAnswerId) handleCorrect();
-      else handleWrong();
-      return;
-    }
-
-    if (game.gameType === 'flashcard') {
-      handleFlashcardClick(asset);
-      return;
-    }
-  };
-
-  if (gameFinished) {
-    return (
-      <div className="fixed inset-0 z-[60] bg-[#FFF9C4] dark:bg-slate-900 flex flex-col items-center justify-center animate-fade-in">
-        <div className="relative mb-8">
-          <div className="absolute inset-0 bg-yellow-400 blur-3xl opacity-50 rounded-full animate-pulse"></div>
-          <Trophy size={120} className="text-yellow-500 relative z-10 drop-shadow-lg animate-bounce" />
-        </div>
-        <h2 className="text-4xl font-black text-orange-600 dark:text-orange-400 mb-4">Hoan hô!</h2>
-        <p className="text-xl text-gray-700 dark:text-gray-300 mb-10 font-bold">Bé đã hoàn thành xuất sắc!</p>
-        <BouncyButton onClick={onBack} className="bg-orange-500 text-white text-xl font-bold px-12 py-4 rounded-full shadow-xl">
-          Chơi trò khác
-        </BouncyButton>
-      </div>
-    );
-  }
-
-  if (!currentLevel) {
-    return (
-      <div className="fixed inset-0 z-[60] bg-white dark:bg-slate-900 flex flex-col items-center justify-center">
-        <p className="text-gray-500">Trò chơi này đang được soạn thảo...</p>
-        <button onClick={onBack} className="mt-4 text-blue-500 underline">Quay lại</button>
-      </div>
-    );
-  }
-
-  // progress chuẩn: level hiện tại là +1
-  const progressPct = levels.length > 0 ? ((currentLevelIdx + 1) / levels.length) * 100 : 0;
+    const duration = 3000;
+    const end = Date.now() + duration;
+    const frame = () => {
+      confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#FFD700', '#FF69B4', '#00BFFF'] });
+      confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#FFD700', '#FF69B4', '#00BFFF'] });
+      if (Date.now() < end) requestAnimationFrame(frame);
+    };
+    frame();
+  }, []);
 
   return (
-    <div className="fixed inset-0 z-[60] bg-[#E0F7FA] dark:bg-slate-950 flex flex-col h-[100dvh]">
-      <div className="p-4 flex justify-between items-center bg-white/60 dark:bg-slate-900/60 backdrop-blur-md pt-safe-top">
-        <BouncyButton onClick={onBack} className="bg-white dark:bg-slate-800 p-3 rounded-full shadow-md text-gray-700 dark:text-gray-200">
-          <ArrowLeft size={24} />
-        </BouncyButton>
-
-        <div className="flex-1 mx-4 h-4 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden max-w-xs">
-          <div className="h-full bg-yellow-400 transition-all duration-500 ease-out" style={{ width: `${progressPct}%` }} />
-        </div>
-
-        <div className="bg-white dark:bg-slate-800 px-4 py-2 rounded-full shadow-sm font-black text-yellow-500 flex items-center gap-2">
-          <Star fill="currentColor" /> {score}
-        </div>
+    <div className="fixed inset-0 z-[70] bg-[#FFF9C4] flex flex-col items-center justify-center animate-fade-in">
+      <div className="relative mb-8">
+         <div className="absolute inset-0 bg-yellow-400 blur-3xl opacity-50 rounded-full animate-pulse"></div>
+         <Trophy size={140} className="text-yellow-500 relative z-10 drop-shadow-2xl animate-bounce" />
+         <div className="absolute -top-4 -right-4 bg-red-500 text-white font-black text-xl w-12 h-12 rounded-full flex items-center justify-center rotate-12 shadow-lg">
+            {score}/{total}
+         </div>
       </div>
-
-      <div className={`flex-1 flex flex-col items-center justify-center p-4 relative ${isWrong ? 'animate-shake' : ''}`}>
-        <div onClick={() => playAudio(currentLevel.instruction.audioUrl, currentLevel.instruction.text)} className="mb-8 cursor-pointer group">
-          {currentLevel.instruction.imageUrl ? (
-            <img src={currentLevel.instruction.imageUrl} alt="Instruction" className="h-40 object-contain drop-shadow-lg group-hover:scale-105 transition-transform" />
-          ) : (
-            <h2 className="text-3xl md:text-4xl font-black text-center text-slate-700 dark:text-white group-hover:text-blue-500 transition-colors">
-              {currentLevel.instruction.text} <Volume2 className="inline-block ml-2 opacity-50" size={24} />
-            </h2>
-          )}
-        </div>
-
-        <div className={`grid gap-4 w-full max-w-4xl ${currentLevel.items.length <= 2 ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-4'}`}>
-          {currentLevel.items.map((item, idx) => (
-            <BouncyButton
-              key={idx}
-              onClick={() => handleAssetClick(item)}
-              className="aspect-square bg-white dark:bg-slate-800 rounded-[2rem] shadow-lg border-b-8 border-gray-100 dark:border-slate-700 flex flex-col items-center justify-center p-4 hover:border-blue-200 dark:hover:border-slate-600 group relative overflow-hidden"
-            >
-              {item.imageUrl ? (
-                <img src={item.imageUrl} alt="" className="w-full h-full object-contain pointer-events-none" />
-              ) : (
-                <span className="text-4xl md:text-6xl font-bold text-slate-700 dark:text-white">{item.text}</span>
-              )}
-            </BouncyButton>
-          ))}
-        </div>
-
-        {/* Giữ showSuccessModal state để không phá logic; quiz dùng, flashcard không cần hiển thị */}
-        {showSuccessModal && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="bg-white/80 backdrop-blur-md px-8 py-4 rounded-2xl shadow-xl text-2xl font-black text-green-600 flex items-center gap-2">
-              <Sparkles /> Bé giỏi quá!
-            </div>
-          </div>
-        )}
+      <h2 className="text-5xl font-black text-orange-600 mb-2 drop-shadow-sm">HOAN HÔ!</h2>
+      <p className="text-xl text-gray-600 mb-10 font-bold">Bé thật là xuất sắc!</p>
+      <div className="flex gap-4">
+        <BouncyButton onClick={onBack} className="bg-white border-4 border-orange-200 text-orange-500 p-4 rounded-full shadow-lg">
+          <Home size={32} />
+        </BouncyButton>
+        <BouncyButton onClick={onBack} className="bg-gradient-to-b from-orange-400 to-orange-600 text-white text-xl font-bold px-12 py-4 rounded-full shadow-xl border-b-8 border-orange-700 active:border-b-0 active:translate-y-2 transition-all">
+          CHƠI TIẾP
+        </BouncyButton>
       </div>
     </div>
   );
 };
 
-// --- Story Reader & Html5 Player (Simple versions) ---
+// --- CORE GAME ENGINE ---
+
+const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ game, onBack }) => {
+  const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
+  const [score, setScore] = useState(0);
+  const [isWrong, setIsWrong] = useState(false);
+  const [gameFinished, setGameFinished] = useState(false);
+
+  // Sound Effects (Placeholder links - should be replaced with local assets or configured URLs)
+  const playCorrect = useAudio((game as any).config?.correctSoundUrl || 'https://www.soundjay.com/buttons/sounds/button-3.mp3'); 
+  const playWrong = useAudio((game as any).config?.wrongSoundUrl || 'https://www.soundjay.com/buttons/sounds/button-10.mp3');
+  const playWin = useAudio('https://www.soundjay.com/misc/sounds/magic-chime-01.mp3');
+
+  const levels = game.levels || [];
+  const currentLevel = levels[currentLevelIdx];
+
+  const speak = (text: string) => {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'vi-VN'; u.rate = 0.9; u.pitch = 1.1; 
+    window.speechSynthesis.speak(u);
+  };
+
+  useEffect(() => {
+    if (currentLevel?.instruction) {
+      setTimeout(() => {
+        if(currentLevel.instruction.audioUrl) {
+            new Audio(currentLevel.instruction.audioUrl).play().catch(() => {});
+        } else {
+            speak(currentLevel.instruction.text);
+        }
+      }, 600);
+    }
+  }, [currentLevelIdx, currentLevel]);
+
+  const handleAssetClick = (asset: GameAsset) => {
+    if (game.gameType === 'quiz') {
+      if (asset.id === currentLevel.correctAnswerId) {
+        // Correct
+        playCorrect && playCorrect();
+        speak("Đúng rồi! Bé giỏi quá!");
+        confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
+        setScore(s => s + 1);
+        
+        setTimeout(() => {
+          if (currentLevelIdx < levels.length - 1) {
+            setCurrentLevelIdx(i => i + 1);
+          } else {
+            playWin && playWin();
+            setGameFinished(true);
+          }
+        }, 1500);
+      } else {
+        // Wrong
+        playWrong && playWrong();
+        speak("Sai rồi, bé thử lại nhé!");
+        setIsWrong(true);
+        setTimeout(() => setIsWrong(false), 500);
+      }
+    } else if (game.gameType === 'flashcard') {
+      // Flashcard logic
+      if(asset.audioUrl) new Audio(asset.audioUrl).play().catch(() => {});
+      else speak(asset.text || "");
+    }
+  };
+
+  if (gameFinished) return <VictoryScreen onBack={onBack} score={score} total={levels.length} />;
+  if (!currentLevel) return <div className="p-10 text-center text-gray-500 font-bold">Đang tải màn chơi...</div>;
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-[#E0F7FA] flex flex-col h-[100dvh] overflow-hidden">
+      <div className="p-4 flex items-center justify-between pt-safe-top">
+        <BouncyButton onClick={onBack} className="bg-white p-3 rounded-full shadow-md text-gray-600"><ArrowLeft /></BouncyButton>
+        
+        <div className="flex-1 mx-4 h-6 bg-white rounded-full p-1 shadow-inner relative">
+            <div 
+                className="h-full bg-gradient-to-r from-green-400 to-green-500 rounded-full transition-all duration-700 ease-out relative"
+                style={{ width: `${((currentLevelIdx + 1) / levels.length) * 100}%` }}
+            >
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-8 h-8 bg-white rounded-full shadow-md flex items-center justify-center text-lg border-2 border-green-500">
+                    🐸
+                </div>
+            </div>
+        </div>
+
+        <div className="bg-white px-4 py-2 rounded-full shadow-md font-black text-orange-500 flex items-center gap-1 text-lg">
+            <Star fill="currentColor" className="text-yellow-400" /> {score}
+        </div>
+      </div>
+
+      <div className={`flex-1 flex flex-col items-center justify-center p-4 relative transition-transform duration-100 ${isWrong ? 'translate-x-[-10px]' : ''}`}>
+        <div onClick={() => speak(currentLevel.instruction.text)} className="mb-6 cursor-pointer transform hover:scale-105 transition-transform">
+           {currentLevel.instruction.imageUrl ? (
+               <div className="p-4 bg-white rounded-3xl shadow-xl rotate-1">
+                   <img src={currentLevel.instruction.imageUrl} className="h-48 object-contain rounded-xl" alt="Instruction" />
+               </div>
+           ) : (
+               <h2 className="text-3xl md:text-5xl font-black text-center text-blue-600 drop-shadow-sm bg-white/80 backdrop-blur px-8 py-4 rounded-3xl shadow-lg border-b-8 border-blue-200">
+                   {currentLevel.instruction.text} <Volume2 className="inline ml-2 text-blue-400" />
+               </h2>
+           )}
+        </div>
+
+        <div className={`grid gap-4 w-full max-w-4xl ${currentLevel.items.length <= 2 ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-4'}`}>
+            {currentLevel.items.map((item, idx) => (
+                <BouncyButton
+                    key={idx}
+                    onClick={() => handleAssetClick(item)}
+                    className="aspect-square bg-white rounded-[2rem] shadow-[0_8px_0_rgb(0,0,0,0.1)] border-4 border-white flex flex-col items-center justify-center p-4 hover:bg-blue-50 hover:scale-[1.02] transition-all group relative overflow-hidden active:shadow-none active:translate-y-[8px]"
+                >
+                    {item.imageUrl ? (
+                        <img src={item.imageUrl} className="w-full h-full object-contain pointer-events-none group-hover:rotate-6 transition-transform duration-300" alt="Option" />
+                    ) : (
+                        <span className="text-4xl md:text-6xl font-black text-slate-700 group-hover:text-blue-600">{item.text}</span>
+                    )}
+                </BouncyButton>
+            ))}
+        </div>
+      </div>
+      <div className="absolute bottom-0 left-0 w-full h-32 bg-[url('https://i.imgur.com/Kx6vFqg.png')] bg-contain bg-repeat-x opacity-30 pointer-events-none"></div>
+    </div>
+  );
+};
+
+// --- STORY & HTML5 HELPERS ---
 
 const StoryReader: React.FC<{ game: Game; onBack: () => void }> = ({ game, onBack }) => {
   const [isPlaying, setIsPlaying] = useState(false);
-
   const toggleRead = () => {
     if (isPlaying) {
       window.speechSynthesis.cancel();
@@ -249,15 +233,14 @@ const StoryReader: React.FC<{ game: Game; onBack: () => void }> = ({ game, onBac
       setIsPlaying(true);
     }
   };
-
   return (
-    <div className="fixed inset-0 z-[60] bg-[#FFF8E1] dark:bg-slate-900 flex flex-col h-[100dvh]">
+    <div className="fixed inset-0 z-[60] bg-[#FFF8E1] flex flex-col h-[100dvh]">
       <div className="px-4 py-3 flex justify-between bg-white/50 backdrop-blur-md pt-safe-top">
         <button onClick={onBack}><ArrowLeft size={24} /></button>
         <h2 className="font-bold text-lg">{game.title}</h2>
         <div className="w-6"></div>
       </div>
-      <div className="flex-1 overflow-y-auto p-6 md:p-10 max-w-2xl mx-auto prose prose-lg dark:prose-invert">
+      <div className="flex-1 overflow-y-auto p-6 md:p-10 max-w-2xl mx-auto prose prose-lg">
         {game.storyContent ? game.storyContent.split('\n').map((p, i) => <p key={i}>{p}</p>) : <p>Chưa có nội dung.</p>}
       </div>
       <div className="p-6 flex justify-center">
@@ -273,14 +256,16 @@ const Html5Player: React.FC<{ game: Game; onBack: () => void }> = ({ game, onBac
   if (!game.gameUrl) return null;
   return (
     <div className="fixed inset-0 z-[60] bg-black flex flex-col h-[100dvh]">
-      <RotateDeviceOverlay orientation={(game as any).orientation as any} />
+      <RotateDeviceOverlay orientation={(game as any).orientation} />
       <div className="h-10 bg-gray-900 flex items-center px-4">
         <button onClick={onBack} className="text-white flex items-center gap-2 font-bold bg-white/10 px-3 py-1 rounded-full"><ArrowLeft size={16} /> Thoát</button>
       </div>
-      <iframe src={game.gameUrl} className="flex-1 w-full h-full border-none" allowFullScreen />
+      <iframe src={game.gameUrl} className="flex-1 w-full h-full border-none" allowFullScreen title={game.title} />
     </div>
   );
 };
+
+// --- AI STORY GENERATOR ---
 
 const AiStoryTeller: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [step, setStep] = useState(1);
@@ -308,7 +293,7 @@ const AiStoryTeller: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             <h3 className="text-2xl font-bold mb-6">Bé chọn nhân vật nhé?</h3>
             <div className="grid grid-cols-2 gap-4">
               {['Thỏ con', 'Gấu Pooh', 'Khủng long', 'Công chúa'].map(c => (
-                <button key={c} onClick={() => { setChar(c); setStep(2); }} className="bg-white/10 p-6 rounded-2xl font-bold">{c}</button>
+                <button key={c} onClick={() => { setChar(c); setStep(2); }} className="bg-white/10 p-6 rounded-2xl font-bold hover:bg-white/20">{c}</button>
               ))}
             </div>
           </>
@@ -318,7 +303,7 @@ const AiStoryTeller: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             <h3 className="text-2xl font-bold mb-6">Câu chuyện về bài học gì?</h3>
             <div className="grid grid-cols-1 gap-3 w-full">
               {['Lòng dũng cảm', 'Sự thật thà', 'Tình bạn'].map(l => (
-                <button key={l} onClick={() => { setLesson(l); handleGenerate(); }} className="bg-white/10 p-4 rounded-xl font-bold">{l}</button>
+                <button key={l} onClick={() => { setLesson(l); handleGenerate(); }} className="bg-white/10 p-4 rounded-xl font-bold hover:bg-white/20">{l}</button>
               ))}
             </div>
           </>
@@ -336,10 +321,8 @@ const AiStoryTeller: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 };
 
 // =============================================================================
-//  MAIN HUB
+//  MAIN COMPONENT: GAME ZONE
 // =============================================================================
-
-const PAGE_SIZE = 12;
 
 export const GameZone: React.FC = () => {
   const [games, setGames] = useState<Game[]>([]);
@@ -347,7 +330,7 @@ export const GameZone: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<GameCategory | null>(null);
   const [activeGame, setActiveGame] = useState<Game | null>(null);
   const [loading, setLoading] = useState(true);
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [visibleCount, setVisibleCount] = useState(12);
   const [aiStoryMode, setAiStoryMode] = useState(false);
 
   useEffect(() => {
@@ -364,35 +347,48 @@ export const GameZone: React.FC = () => {
     load();
   }, []);
 
+  // --- RENDER GAME MODES ---
   if (aiStoryMode) return <AiStoryTeller onBack={() => setAiStoryMode(false)} />;
-
   if (activeGame) {
     if (activeGame.gameType === 'html5') return <Html5Player game={activeGame} onBack={() => setActiveGame(null)} />;
     if (activeGame.gameType === 'story') return <StoryReader game={activeGame} onBack={() => setActiveGame(null)} />;
     return <UniversalGameEngine game={activeGame} onBack={() => setActiveGame(null)} />;
   }
 
+  // --- FILTER & DISPLAY ---
   const filteredGames = games.filter(g => activeCategory ? (g.category === activeCategory || (activeCategory === 'general' && !(g as any).category)) : true);
   const visibleGames = filteredGames.slice(0, visibleCount);
+  const PAGE_SIZE = 12;
 
   return (
-    <div className="min-h-screen pb-24 bg-[#E0F7FA] dark:bg-slate-950 flex flex-col pt-safe-top overflow-x-hidden transition-colors">
-      <div className="pt-8 pb-6 px-4 text-center relative bg-white/30 dark:bg-slate-900/30 backdrop-blur-sm mb-4">
-        <h1 className="text-4xl md:text-5xl font-black text-blue-600 dark:text-blue-400 mb-2 drop-shadow-sm flex items-center justify-center gap-3">
-          <span className="animate-bounce">🎡</span> Góc Bé Chơi
-        </h1>
-        {activeCategory && (
-          <BouncyButton onClick={() => setActiveCategory(null)} className="absolute top-8 left-4 bg-white p-3 rounded-full shadow-lg">
-            <ArrowLeft size={24} className="text-gray-500" />
-          </BouncyButton>
-        )}
+    <div className="min-h-screen pb-24 bg-[#E0F7FA] dark:bg-slate-950 flex flex-col overflow-x-hidden transition-colors">
+      
+      {/* 1. KHOẢNG TRỐNG CHO HEADER APP (Quan trọng) */}
+      <div className="h-20"></div>
+
+      {/* 2. TIÊU ĐỀ GỌN GÀNG (Thay thế khối màu vàng) */}
+      <div className="px-6 mb-4 flex justify-between items-center">
+         <div>
+            <h1 className="text-2xl font-black text-blue-600 dark:text-blue-400 flex items-center gap-2">
+                <span className="animate-bounce">🎡</span> Góc Bé Chơi
+            </h1>
+            <p className="text-sm text-gray-500 font-bold ml-1">Vui học mỗi ngày</p>
+         </div>
+         {activeCategory && (
+            <BouncyButton onClick={() => setActiveCategory(null)} className="bg-white p-2 rounded-full shadow-sm text-gray-500 border">
+                <ArrowLeft size={20} />
+            </BouncyButton>
+         )}
       </div>
 
+      {/* 3. LOADING STATE */}
       {loading ? (
         <div className="flex justify-center py-20"><Loader2 className="animate-spin text-blue-500" size={40} /></div>
       ) : !activeCategory ? (
+        // --- MÀN HÌNH CHÍNH (Chưa chọn danh mục) ---
         <div className="px-4 py-2 w-full max-w-5xl mx-auto pb-32">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+            {/* AI STORY CARD */}
             <button onClick={() => setAiStoryMode(true)} className="col-span-2 bg-gradient-to-r from-pink-400 to-purple-500 p-6 rounded-[2.5rem] text-white shadow-xl flex items-center justify-between group relative overflow-hidden min-h-[160px]">
               <div className="relative z-10 text-left">
                 <div className="bg-white/20 backdrop-blur-md inline-flex px-3 py-1 rounded-lg text-xs font-bold mb-2">Mới nhất</div>
@@ -402,6 +398,7 @@ export const GameZone: React.FC = () => {
               <span className="text-7xl group-hover:scale-110 transition-transform">🧚‍♀️</span>
             </button>
 
+            {/* CATEGORY CARDS */}
             {categories.map(cat => (
               <BouncyButton key={cat.id} onClick={() => setActiveCategory(cat.id)} className={`aspect-square rounded-[2.5rem] flex flex-col items-center justify-center gap-3 shadow-lg ${cat.color} text-white border-b-8 border-black/10`}>
                 <span className="text-5xl drop-shadow-md">{cat.icon}</span>
@@ -411,6 +408,7 @@ export const GameZone: React.FC = () => {
           </div>
         </div>
       ) : (
+        // --- MÀN HÌNH DANH SÁCH GAME (Đã chọn danh mục) ---
         <div className="px-4 pb-32 w-full max-w-6xl mx-auto">
           <div className="flex items-center gap-3 mb-6 px-2 justify-center md:justify-start">
             <span className="text-4xl">{categories.find(c => c.id === activeCategory)?.icon}</span>
@@ -446,3 +444,4 @@ export const GameZone: React.FC = () => {
     </div>
   );
 };
+
