@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Game, GameLevel, CategoryDef, GameAsset, GameConfig } from '../../types';
 import { getGameById, updateGame, addLevelToGame, updateLevelInGame, deleteLevelFromGame, importLevelsBatch, fetchCategories } from '../../services/game';
 import { generateGameContent, generateStory } from '../../services/gemini';
-import { ArrowLeft, Sparkles, Trash2, Save, Loader2, Bot, X, Link as LinkIcon, BookOpen, ImageIcon, Volume2, Code } from 'lucide-react';
+import { ArrowLeft, Sparkles, Trash2, Save, Loader2, Bot, X, Link as LinkIcon, BookOpen, ImageIcon, Volume2, Code, Target, Languages, FileText } from 'lucide-react';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -35,10 +35,13 @@ export const GameDetail: React.FC = () => {
   const [storyContent, setStoryContent] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
   
-  // AI State
+  // AI State - Nâng cấp thêm các trường input mới
   const [showAiModal, setShowAiModal] = useState(false);
   const [aiTopic, setAiTopic] = useState('');
   const [aiCount, setAiCount] = useState(5);
+  const [aiLanguage, setAiLanguage] = useState('Tiếng Việt');
+  const [aiLearningGoal, setAiLearningGoal] = useState('');
+  const [aiExtra, setAiExtra] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedLevels, setGeneratedLevels] = useState<GameLevel[]>([]);
 
@@ -123,12 +126,14 @@ export const GameDetail: React.FC = () => {
       setFormLevel({ ...formLevel, items: newItems });
   };
 
+  // Logic sinh game nâng cấp: Truyền đủ 8 tham số cho gemini service
   const handleAiGenerate = async () => {
-    if (!game) return;
+    if (!game || !aiTopic.trim() || !aiLearningGoal.trim()) return;
+    
     setIsGenerating(true);
     try {
         if (game.gameType === 'story') {
-            const story = await generateStory(aiTopic || game.title, "Bài học bổ ích");
+            const story = await generateStory(aiTopic || game.title, aiLearningGoal);
             setStoryContent(story.content);
             alert("AI đã viết xong truyện!");
         } else {
@@ -136,8 +141,13 @@ export const GameDetail: React.FC = () => {
                 aiTopic || game.title,
                 `${game.minAge}-${game.maxAge} tuổi`,
                 aiCount,
-                'emoji'
+                'emoji',
+                game.category, // Truyền category thực tế từ Firestore
+                aiLanguage,
+                aiLearningGoal,
+                aiExtra
             );
+            
             const convertedLevels: GameLevel[] = rawData.map((q: any, idx: number) => {
                 const correctId = generateId();
                 const items = q.opts.map((opt: string) => ({
@@ -170,6 +180,7 @@ export const GameDetail: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-20 animate-fade-in">
+       {/* HEADER SECTION (Giữ nguyên) */}
        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
           <div className="flex items-center gap-4">
              <button onClick={() => navigate('/admin/games')} className="p-3 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors text-gray-600"><ArrowLeft size={22} /></button>
@@ -180,6 +191,7 @@ export const GameDetail: React.FC = () => {
                 </div>
                 <div className="flex gap-2 mt-2">
                     <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-xs font-bold uppercase">{game.gameType}</span>
+                    <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-xs font-bold uppercase">{categories.find(c => c.id === game.category)?.label}</span>
                     {(game.gameType !== 'html5' && game.gameType !== 'story') && <span className="text-gray-500 font-medium text-xs self-center">({levels.length} màn chơi)</span>}
                 </div>
              </div>
@@ -189,6 +201,7 @@ export const GameDetail: React.FC = () => {
           </button>
        </div>
 
+       {/* CONFIG SECTIONS (Giữ nguyên) */}
        {game.gameType === 'html5' && (
            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-200">
                <h3 className="font-bold text-gray-800 mb-6 flex items-center gap-2 text-lg"><LinkIcon className="text-indigo-500"/> Cấu hình Game HTML5</h3>
@@ -212,6 +225,7 @@ export const GameDetail: React.FC = () => {
            </div>
        )}
 
+       {/* GAME LEVELS MANAGER (Giữ nguyên) */}
        {(game.gameType !== 'html5' && game.gameType !== 'story') && (
         <div className="grid lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
@@ -296,11 +310,14 @@ export const GameDetail: React.FC = () => {
         </div>
        )}
 
+       {/* =============================================================================
+           🚀 NÂNG CẤP AI MODAL: THÊM CÁC TRƯỜNG NHẬP LIỆU BẮT BUỘC
+           ============================================================================= */}
        {showAiModal && (
           <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
-             <div className="bg-white rounded-[2rem] w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-pop-in shadow-2xl">
+             <div className="bg-white rounded-[2rem] w-full max-w-2xl max-h-[95vh] flex flex-col overflow-hidden animate-pop-in shadow-2xl">
                 <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-indigo-50 to-purple-50">
-                   <h2 className="text-xl font-bold flex items-center gap-2 text-indigo-700"><Bot size={28} /> AI Level Generator</h2>
+                   <h2 className="text-xl font-bold flex items-center gap-2 text-indigo-700"><Bot size={28} /> AI Level Designer</h2>
                    <button onClick={() => setShowAiModal(false)} className="p-2 hover:bg-white rounded-full transition-colors"><X size={24} className="text-gray-500" /></button>
                 </div>
                 
@@ -308,8 +325,8 @@ export const GameDetail: React.FC = () => {
                    {generatedLevels.length > 0 ? (
                       <div className="space-y-6">
                          <div className="flex justify-between items-center">
-                            <p className="text-green-600 font-bold flex items-center gap-2 text-lg"><Sparkles size={20}/> AI đã tạo {generatedLevels.length} màn chơi:</p>
-                            <button onClick={() => setGeneratedLevels([])} className="text-gray-400 hover:text-gray-600 text-sm font-bold">Làm lại</button>
+                            <p className="text-green-600 font-bold flex items-center gap-2 text-lg"><Sparkles size={20}/> AI đã hoàn tất thiết kế:</p>
+                            <button onClick={() => setGeneratedLevels([])} className="text-gray-400 hover:text-gray-600 text-sm font-bold">Tạo lại bản khác</button>
                          </div>
                          <div className="bg-gray-50 rounded-2xl p-4 space-y-3 border border-gray-200 max-h-[300px] overflow-y-auto scrollbar-thin">
                             {generatedLevels.map((lvl, i) => (
@@ -320,16 +337,68 @@ export const GameDetail: React.FC = () => {
                             ))}
                          </div>
                          <button onClick={saveGeneratedLevels} className="w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-green-700 flex items-center justify-center gap-2 shadow-lg shadow-green-200">
-                            <Save size={20} /> Lưu tất cả vào Game
+                            <Save size={20} /> Phê duyệt & Nhập vào Game
                          </button>
                       </div>
                    ) : (
-                      <div className="space-y-6">
-                         <div><label className="block text-sm font-bold text-gray-700 mb-2">Chủ đề</label><input value={aiTopic} onChange={e => setAiTopic(e.target.value)} className="w-full border p-4 rounded-xl outline-none focus:ring-4 focus:ring-indigo-100" /></div>
-                         {game.gameType !== 'story' && (<div><label className="block text-sm font-bold text-gray-700 mb-2">Số lượng màn chơi</label><input type="number" value={aiCount} onChange={e => setAiCount(Number(e.target.value))} className="w-full border p-4 rounded-xl outline-none focus:ring-4 focus:ring-indigo-100" /></div>)}
-                         <button onClick={handleAiGenerate} disabled={isGenerating} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-4 rounded-xl font-bold text-lg hover:shadow-lg transition-all disabled:opacity-70 flex items-center justify-center gap-2 active:scale-95">
-                            {isGenerating ? <Loader2 className="animate-spin" /> : <Sparkles />} {isGenerating ? 'Đang suy nghĩ...' : 'Tạo ngay'}
+                      <div className="space-y-5">
+                         {/* Thông tin chuyên mục (Read-only để AI biết ngữ cảnh) */}
+                         <div className="flex items-center gap-2 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+                             <Sparkles size={16} className="text-indigo-500" />
+                             <span className="text-xs font-bold text-indigo-700 uppercase">Chuyên mục: {categories.find(c => c.id === game.category)?.label}</span>
+                         </div>
+
+                         {/* 1. Chủ đề & Ngôn ngữ */}
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2"><Bot size={16}/> Chủ đề chi tiết</label>
+                                <input value={aiTopic} onChange={e => setAiTopic(e.target.value)} placeholder="Ví dụ: Bé học đếm số..." className="w-full border p-4 rounded-xl outline-none focus:ring-4 focus:ring-indigo-100" />
+                            </div>
+                            <div>
+                                <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2"><Languages size={16}/> Ngôn ngữ game</label>
+                                <select value={aiLanguage} onChange={e => setAiLanguage(e.target.value)} className="w-full border p-4 rounded-xl outline-none bg-white">
+                                    <option value="Tiếng Việt">Tiếng Việt</option>
+                                    <option value="Tiếng Anh">Tiếng Anh</option>
+                                    <option value="Song ngữ">Song ngữ (Việt - Anh)</option>
+                                </select>
+                            </div>
+                         </div>
+
+                         {/* 2. Mục tiêu học tập (Bắt buộc) */}
+                         <div>
+                            <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2"><Target size={16}/> Mục tiêu học tập (Bắt buộc)</label>
+                            <textarea 
+                                value={aiLearningGoal} 
+                                onChange={e => setAiLearningGoal(e.target.value)} 
+                                rows={3}
+                                placeholder="Ví dụ: Giúp bé nhận diện mặt số từ 1-10, học cách phát âm tên các loại quả bằng tiếng Anh..." 
+                                className="w-full border p-4 rounded-xl outline-none focus:ring-4 focus:ring-indigo-100 resize-none" 
+                            />
+                         </div>
+
+                         {/* 3. Số lượng & Yêu cầu thêm */}
+                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div className="md:col-span-1">
+                                <label className="block text-sm font-bold text-gray-700 mb-2">Số lượng</label>
+                                <input type="number" min={1} max={20} value={aiCount} onChange={e => setAiCount(Number(e.target.value))} className="w-full border p-4 rounded-xl outline-none" />
+                            </div>
+                            <div className="md:col-span-3">
+                                <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2"><FileText size={16}/> Yêu cầu đặc biệt (Nếu có)</label>
+                                <input value={aiExtra} onChange={e => setAiExtra(e.target.value)} placeholder="Ví dụ: Chỉ sử dụng emoji trái cây..." className="w-full border p-4 rounded-xl outline-none focus:ring-4 focus:ring-indigo-100" />
+                            </div>
+                         </div>
+
+                         {/* Nút sinh game - Chỉ enable khi nhập đủ info */}
+                         <button 
+                            onClick={handleAiGenerate} 
+                            disabled={isGenerating || !aiTopic.trim() || !aiLearningGoal.trim()} 
+                            className={`w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-4 rounded-xl font-bold text-lg hover:shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed shadow-xl shadow-indigo-100`}
+                         >
+                            {isGenerating ? <Loader2 className="animate-spin" /> : <Sparkles />} 
+                            {isGenerating ? 'AI đang thiết kế màn chơi...' : 'Bắt đầu sinh dữ liệu ngay'}
                          </button>
+                         
+                         {!aiLearningGoal.trim() && <p className="text-center text-xs text-orange-500 font-medium">Mẹ vui lòng nhập Mục tiêu học tập để AI làm việc nhé!</p>}
                       </div>
                    )}
                 </div>
