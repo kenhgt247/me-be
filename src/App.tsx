@@ -4,6 +4,7 @@ import ScrollToTop from './components/ScrollToTop';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'; // Thêm Outlet
 import { Layout } from './components/Layout';
 import { AdminLayout } from './layouts/AdminLayout';
+import { SpeedInsights } from './components/SpeedInsights';
 
 // User Pages
 import { Home } from './pages/Home';
@@ -181,6 +182,7 @@ export default function App() {
     <BrowserRouter>
       <ScrollToTop />
       <PWAInstallPrompt />
+      <SpeedInsights />
       
       <AuthModal 
         isOpen={showGlobalAuthModal}
