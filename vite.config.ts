@@ -14,10 +14,8 @@ export default defineConfig({
     host: true,
   },
   build: {
-    // Tối ưu hóa việc đóng gói
     rollupOptions: {
       output: {
-        // Chia nhỏ các thư viện khổng lồ (Manual Chunking)
         manualChunks: {
           'firebase-vendor': ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/storage'],
           'ai-vendor': ['@google/generative-ai'], 
