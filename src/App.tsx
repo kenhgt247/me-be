@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 // @ts-ignore
 import ScrollToTop from './components/ScrollToTop';
@@ -50,7 +51,7 @@ import {
   submitExpertApplication 
 } from './services/db';
 import { Loader2 } from 'lucide-react'; // Thêm icon loading
-
+import { SpeedInsights } from "@vercel/speed-insights/react";
 // ... (Giữ nguyên constant GUEST_USER)
 const GUEST_USER: User = {
   id: 'guest',
@@ -179,6 +180,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+    <SpeedInsights />
       <ScrollToTop />
       <PWAInstallPrompt />
       
