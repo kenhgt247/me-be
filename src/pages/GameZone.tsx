@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Volume2, Star, Trophy, Sparkles, Play, Loader2, RotateCcw, Home, Moon, Bell, Bot } from 'lucide-react';
+import { ArrowLeft, Volume2, Star, Trophy, Sparkles, Play, Loader2, RotateCcw, ArrowDown, Moon, Sun, Bell, Bot } from 'lucide-react';
 import { Game, GameLevel, GameCategory, CategoryDef, GameAsset } from '../types';
 // Import từ service
 import { fetchAllGames, fetchCategories } from '../services/game';
@@ -130,36 +130,36 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
   };
 
   if (gameFinished) return (
-    <div className="fixed inset-0 z-[100] bg-[#FFF9C4] flex flex-col items-center justify-center animate-fade-in">
+    <div className="fixed inset-0 z-[100] bg-[#FFF9C4] dark:bg-slate-900 flex flex-col items-center justify-center animate-fade-in">
       <Trophy size={120} className="text-yellow-500 mb-4 animate-bounce" />
-      <h2 className="text-4xl font-black text-orange-600 mb-4">Hoan hô!</h2>
+      <h2 className="text-4xl font-black text-orange-600 dark:text-orange-400 mb-4">Hoan hô!</h2>
       <BouncyButton onClick={onBack} className="bg-orange-500 text-white text-xl font-bold px-12 py-4 rounded-full shadow-xl">Chơi trò khác</BouncyButton>
     </div>
   );
 
-  if (!currentLevel) return <div className="p-10 text-center">Đang tải...</div>;
+  if (!currentLevel) return <div className="p-10 text-center dark:text-white">Đang tải...</div>;
 
   const progressPct = levels.length > 0 ? ((currentLevelIdx + 1) / levels.length) * 100 : 0;
 
   return (
-    <div className="fixed inset-0 z-[100] bg-[#E0F7FA] flex flex-col h-[100dvh]">
+    <div className="fixed inset-0 z-[100] bg-[#E0F7FA] dark:bg-slate-950 flex flex-col h-[100dvh]">
       <div className="p-4 flex justify-between items-center pt-safe-top">
-        <BouncyButton onClick={onBack} className="bg-white p-3 rounded-full shadow-md"><ArrowLeft /></BouncyButton>
-        <div className="flex-1 mx-4 h-4 bg-gray-200 rounded-full overflow-hidden"><div className="h-full bg-green-500 transition-all" style={{ width: `${progressPct}%` }} /></div>
-        <div className="bg-white px-4 py-2 rounded-full shadow-sm font-black text-yellow-500 flex items-center gap-2"><Star fill="currentColor" /> {score}</div>
+        <BouncyButton onClick={onBack} className="bg-white dark:bg-slate-800 p-3 rounded-full shadow-md dark:text-white"><ArrowLeft /></BouncyButton>
+        <div className="flex-1 mx-4 h-4 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-green-500 transition-all" style={{ width: `${progressPct}%` }} /></div>
+        <div className="bg-white dark:bg-slate-800 px-4 py-2 rounded-full shadow-sm font-black text-yellow-500 flex items-center gap-2"><Star fill="currentColor" /> {score}</div>
       </div>
       <div className={`flex-1 flex flex-col items-center justify-center p-4 ${isWrong ? 'animate-shake' : ''}`}>
         <div onClick={() => speak(currentLevel.instruction.text)} className="mb-8 cursor-pointer">
-           {currentLevel.instruction.imageUrl ? <img src={currentLevel.instruction.imageUrl} className="h-48 object-contain rounded-xl shadow-lg" /> : <h2 className="text-4xl font-black text-blue-600">{currentLevel.instruction.text}</h2>}
+           {currentLevel.instruction.imageUrl ? <img src={currentLevel.instruction.imageUrl} className="h-48 object-contain rounded-xl shadow-lg" /> : <h2 className="text-4xl font-black text-blue-600 dark:text-blue-400 text-center">{currentLevel.instruction.text}</h2>}
         </div>
         <div className={`grid gap-4 w-full max-w-4xl ${currentLevel.items.length <= 2 ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-4'}`}>
             {currentLevel.items.map((item, idx) => (
-                <BouncyButton key={idx} onClick={() => handleAssetClick(item)} className="aspect-square bg-white rounded-[2rem] shadow-lg flex flex-col items-center justify-center p-4">
-                    {item.imageUrl ? <img src={item.imageUrl} className="w-full h-full object-contain" /> : <span className="text-4xl font-bold text-slate-700">{item.text}</span>}
+                <BouncyButton key={idx} onClick={() => handleAssetClick(item)} className="aspect-square bg-white dark:bg-slate-800 rounded-[2rem] shadow-lg flex flex-col items-center justify-center p-4 dark:border dark:border-slate-700">
+                    {item.imageUrl ? <img src={item.imageUrl} className="w-full h-full object-contain" /> : <span className="text-4xl font-bold text-slate-700 dark:text-white">{item.text}</span>}
                 </BouncyButton>
             ))}
         </div>
-        {showSuccessModal && <div className="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-sm pointer-events-none"><div className="text-4xl font-black text-green-600 animate-bounce">Đúng rồi! 🎉</div></div>}
+        {showSuccessModal && <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-black/50 backdrop-blur-sm pointer-events-none"><div className="text-4xl font-black text-green-600 animate-bounce">Đúng rồi! 🎉</div></div>}
       </div>
     </div>
   );
@@ -172,9 +172,9 @@ const StoryReader: React.FC<{ game: Game; onBack: () => void }> = ({ game, onBac
     else { const u = new SpeechSynthesisUtterance(game.storyContent || ""); u.lang = 'vi-VN'; u.onend = () => setIsPlaying(false); window.speechSynthesis.speak(u); setIsPlaying(true); }
   };
   return (
-    <div className="fixed inset-0 z-[100] bg-[#FFF8E1] flex flex-col h-[100dvh]">
-      <div className="px-4 py-3 flex justify-between bg-white/50 backdrop-blur-md pt-safe-top"><button onClick={onBack}><ArrowLeft /></button><h2 className="font-bold text-lg">{game.title}</h2><div className="w-6"></div></div>
-      <div className="flex-1 overflow-y-auto p-6 md:p-10 prose prose-lg">{game.storyContent ? game.storyContent.split('\n').map((p, i) => <p key={i}>{p}</p>) : <p>Chưa có nội dung.</p>}</div>
+    <div className="fixed inset-0 z-[100] bg-[#FFF8E1] dark:bg-slate-900 flex flex-col h-[100dvh]">
+      <div className="px-4 py-3 flex justify-between bg-white/50 dark:bg-slate-800/50 backdrop-blur-md pt-safe-top"><button onClick={onBack} className="dark:text-white"><ArrowLeft /></button><h2 className="font-bold text-lg dark:text-white">{game.title}</h2><div className="w-6"></div></div>
+      <div className="flex-1 overflow-y-auto p-6 md:p-10 prose prose-lg dark:prose-invert max-w-none">{game.storyContent ? game.storyContent.split('\n').map((p, i) => <p key={i} className="dark:text-gray-300">{p}</p>) : <p>Chưa có nội dung.</p>}</div>
       <div className="p-6 flex justify-center"><button onClick={toggleRead} className="bg-orange-500 text-white px-8 py-3 rounded-full font-bold flex gap-2">{isPlaying ? <Volume2 className="animate-pulse" /> : <Play />} {isPlaying ? 'Dừng' : 'Đọc truyện'}</button></div>
     </div>
   );
@@ -229,8 +229,17 @@ export const GameZone: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [aiStoryMode, setAiStoryMode] = useState(false);
+  
+  // STATE CHO DARK MODE
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
   useEffect(() => {
+    // 1. Kiểm tra theme hiện tại
+    if (document.documentElement.classList.contains('dark')) {
+        setIsDarkMode(true);
+    }
+
+    // 2. Load Data
     const load = async () => {
       setLoading(true);
       const [gamesData, catsData] = await Promise.all([fetchAllGames(true), fetchCategories()]);
@@ -240,6 +249,20 @@ export const GameZone: React.FC = () => {
     };
     load();
   }, []);
+
+  // --- HÀM TOGGLE THEME (SỬA LỖI SÁNG TỐI) ---
+  const toggleTheme = () => {
+    const html = document.documentElement;
+    if (html.classList.contains('dark')) {
+        html.classList.remove('dark');
+        localStorage.setItem('theme', 'light');
+        setIsDarkMode(false);
+    } else {
+        html.classList.add('dark');
+        localStorage.setItem('theme', 'dark');
+        setIsDarkMode(true);
+    }
+  };
 
   if (aiStoryMode) return <AiStoryTeller onBack={() => setAiStoryMode(false)} />;
   if (activeGame) {
@@ -255,14 +278,21 @@ export const GameZone: React.FC = () => {
     <div className="min-h-screen pb-24 bg-[#E0F7FA] dark:bg-slate-950 flex flex-col pt-16 overflow-x-hidden transition-colors">
       
       {/* ================================================== */}
-      {/* 🟢 HEADER CHUẨN APP (Đã sửa theo đoạn HTML của bạn) */}
+      {/* 🟢 HEADER CHUẨN APP (Đã thêm Logic Toggle Theme) */}
       {/* ================================================== */}
       <header className="md:hidden fixed top-0 inset-x-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-gray-100 dark:border-slate-800 px-4 py-2 flex justify-between items-center shadow-sm">
         <a className="text-xl font-black text-blue-600 dark:text-blue-400" href="/" data-discover="true">Asking.vn</a>
         <div className="flex items-center gap-3">
-            <button className="p-2 rounded-full transition-all duration-300 bg-orange-50 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-yellow-400 dark:hover:bg-slate-600 shadow-sm border border-gray-200 dark:border-slate-600" aria-label="Chuyển chế độ tối/sáng" title="Bật chế độ sáng">
-                <Moon size={20} />
+            {/* 👇 NÚT NÀY ĐÃ ĐƯỢC GẮN HÀM TOGGLE 👇 */}
+            <button 
+                onClick={toggleTheme}
+                className="p-2 rounded-full transition-all duration-300 bg-orange-50 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-yellow-400 dark:hover:bg-slate-600 shadow-sm border border-gray-200 dark:border-slate-600" 
+                aria-label="Chuyển chế độ tối/sáng" 
+                title="Bật chế độ sáng"
+            >
+                {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
             </button>
+            
             <a className="relative w-9 h-9 flex items-center justify-center rounded-full bg-gray-100 dark:bg-slate-800 dark:text-gray-200" href="/notifications" data-discover="true">
                 <Bell size={20} />
             </a>
