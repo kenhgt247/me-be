@@ -1,18 +1,16 @@
-
-const CACHE_NAME = 'asking-vn-v1';
+const CACHE_NAME = 'asking-vn-v2'; // Đổi từ v1 sang v2 để ép trình duyệt xóa cache cũ
 const urlsToCache = [
   '/',
   '/index.html',
-  '/manifest.json'
+  '/manifest.json',
+  '/images/512x512.png'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('Opened cache');
-        return cache.addAll(urlsToCache);
-      })
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(urlsToCache);
+    })
   );
   self.skipWaiting();
 });
@@ -23,7 +21,7 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
           if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
+            return caches.delete(cacheName); // Xóa sạch version cũ v1
           }
         })
       );
@@ -32,16 +30,26 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Chiến lược: Ưu tiên lấy từ Mạng, lỗi mạng mới lấy từ Cache
 self.addEventListener('fetch', (event) => {
-  // Simple cache-first strategy for static assets, network-first for others could be implemented here.
-  // For PWA install criteria, a simple fetch handler is sufficient.
+  // Bỏ qua các yêu cầu từ chrome-extension hoặc không phải http
+  if (!(event.request.url.indexOf('http') === 0)) return;
+
   event.respondWith(
-    caches.match(event.request)
+    fetch(event.request)
       .then((response) => {
-        if (response) {
-          return response;
-        }
-        return fetch(event.request);
+        // Nếu lấy được file mới, trả về luôn
+        return response;
+      })
+      .catch(() => {
+        // Nếu mất mạng, mới tìm trong cache
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) return cachedResponse;
+          // Nếu là trang web thì trả về index.html từ cache
+          if (event.request.mode === 'navigate') {
+            return caches.match('/index.html');
+          }
+        });
       })
   );
 });
