@@ -17,8 +17,10 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
+          // Tách riêng các "ông tạ" nặng ký
           'firebase-vendor': ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/storage'],
-          'ai-vendor': ['@google/generative-ai'], 
+          // Sửa chính xác thành @google/genai theo package.json của bạn
+          'ai-vendor': ['@google/genai'], 
           'editor-vendor': ['react-quill-new'],
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
         },
