@@ -1,24 +1,11 @@
-// Version mới để trình duyệt nhận diện thay đổi
-const CACHE_NAME = 'asking-vn-fix-v1';
+self.addEventListener('install', (e) => self.skipWaiting());
 
-self.addEventListener('install', (event) => {
-  // Ép Service Worker mới hoạt động ngay mà không đợi đóng trình duyệt
-  self.skipWaiting();
-});
-
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        // Xóa sạch mọi bộ nhớ đệm cũ đang gây lỗi trắng trang
-        cacheNames.map((cacheName) => caches.delete(cacheName))
-      );
-    })
-  );
+self.addEventListener('activate', (e) => {
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))));
   self.clients.claim();
 });
 
-// Cho phép mọi yêu cầu đi thẳng ra Internet, không lấy từ Cache cũ lỗi nữa
+// Chiến lược chỉ lấy từ mạng (Network Only) để cứu web đang bị trắng trang
 self.addEventListener('fetch', (event) => {
   event.respondWith(fetch(event.request));
 });
