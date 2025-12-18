@@ -28,6 +28,6 @@ export default defineConfig({
     },
     // Giảm dung lượng file bằng cách nén mã nguồn
     minify: 'esbuild',
-    chunkSizeWarningLimit: 1000, // Tăng giới hạn cảnh báo lên 1MB để bớt báo lỗi đỏ
-  },
+    chunkSizeWarningLimit: 1000, // Tăng giới hạn cảnh báo lên 1MB để bớt báo 
+});
 });

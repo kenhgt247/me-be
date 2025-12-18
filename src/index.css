@@ -2,50 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
-/* --- GLOBAL APP STYLES --- */
+/* --- BIẾN MÀU TOÀN CỤC --- */
 :root {
   --sat: env(safe-area-inset-top);
   --sab: env(safe-area-inset-bottom);
   
-  /* --- BIẾN MÀU (Dùng biến CSS để sync với Tailwind config) --- */
+  /* Sync với Tailwind config */
   --bg-color: #F7F7F5;      /* Cream */
   --text-color: #1F2937;    /* Gray 800 */
 }
 
-/* Khi có class dark */
 :root.dark {
   --bg-color: #0f172a;      /* Slate 900 */
   --text-color: #f1f5f9;    /* Slate 100 */
 }
 
+/* --- RESET HỆ THỐNG --- */
 html {
   -webkit-tap-highlight-color: transparent;
   scroll-behavior: smooth;
   height: 100%;
-  
-  /* Sử dụng biến màu đã khai báo */
+  /* Loại bỏ transition ở đây để tránh làm chậm LCP/FCP */
   background-color: var(--bg-color);
-  transition: background-color 0.3s ease;
-  
-  /* Chặn hiệu ứng nảy trang trên iOS */
-  overscroll-behavior-y: none;
+  /* Ngăn hiệu ứng nảy trang nhưng không chặn cuộn tự nhiên */
+  overscroll-behavior-y: contain;
 }
 
 body {
   background-color: var(--bg-color);
   color: var(--text-color);
-  overscroll-behavior-y: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  height: 100%;
-  width: 100%;
-  position: fixed;
-  overflow: hidden;
   
-  /* Tắt chọn văn bản để tạo cảm giác giống App native */
+  /* QUAN TRỌNG: Loại bỏ position: fixed để sửa lỗi CLS 0.9 */
+  min-height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  
+  /* Giữ cảm giác App native */
   -webkit-user-select: none;
   user-select: none;
-  touch-action: manipulation;
+  touch-action: pan-y; /* Cho phép cuộn dọc tự nhiên */
 }
 
 /* Cho phép chọn văn bản ở các ô nhập liệu */
@@ -55,9 +53,10 @@ input, textarea, [contenteditable="true"], .selectable-text {
 }
 
 #root {
-  height: 100%;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  /* Để body cuộn tự nhiên thay vì cuộn bên trong #root */
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
   padding-bottom: env(safe-area-inset-bottom);
 }
 
@@ -71,10 +70,17 @@ input, textarea, [contenteditable="true"], .selectable-text {
   scrollbar-width: none;
 }
 
-/* Safe area padding */
+/* Safe area padding cho các thiết bị có tai thỏ/cằm dày */
 .pb-safe-bottom {
   padding-bottom: env(safe-area-inset-bottom, 20px);
 }
 .pt-safe-top {
   padding-top: env(safe-area-inset-top, 20px);
+}
+
+/* Lớp hỗ trợ tối ưu hóa GPU cho các hiệu ứng mượt hơn */
+.optimize-gpu {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
 }
