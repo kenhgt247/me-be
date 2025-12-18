@@ -16,6 +16,26 @@ import { fetchDocuments } from '../services/documents';
 import { fetchStories, createStory, markStoryViewed, toggleStoryLike } from '../services/stories';
 import { sendMessage, sendStoryReply } from '../services/chat';
 
+// --- INTERFACES ---
+
+interface CreateStoryModalProps {
+  currentUser: User;
+  onClose: () => void;
+  onSuccess: (story: Story) => void;
+}
+
+interface StoryViewerProps {
+  story: Story;
+  currentUser: User | null;
+  onClose: () => void;
+}
+
+export interface HomeProps {
+  questions: Question[];
+  categories: string[];
+  currentUser: User | null;
+}
+
 const DEFAULT_AVATAR = "/images/rabbit.png";
 const PAGE_SIZE = 20;
 
@@ -93,7 +113,7 @@ const CreateStoryModal = memo(({ currentUser, onClose, onSuccess }: CreateStoryM
 });
 
 // --- 2. COMPONENT: STORY VIEWER (Memoized) ---
-const StoryViewer = memo(({ story, currentUser, onClose }: any) => {
+const StoryViewer = memo(({ story, currentUser, onClose }: StoryViewerProps) => {
   const [progress, setProgress] = useState(0);
   const [replyText, setReplyText] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -265,14 +285,18 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
   if (!debouncedQuery) {
       if (activeCategory !== 'Tất cả') displayList = displayList.filter(q => q.category === activeCategory);
       if (viewFilter === 'newest') displayList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      else if (viewFilter === 'active') displayList.sort((a, b) => (b.answers.length * 2 + (typeof b.likes === 'number' ? b.likes : (b.likes?.length || 0))) - (a.answers.length * 2 + (typeof a.likes === 'number' ? a.likes : (a.likes?.length || 0))));
+      else if (viewFilter === 'active') displayList.sort((a, b) => {
+        const scoreB = b.answers.length * 2 + (Array.isArray(b.likes) ? b.likes.length : (typeof b.likes === 'number' ? b.likes : 0));
+        const scoreA = a.answers.length * 2 + (Array.isArray(a.likes) ? a.likes.length : (typeof a.likes === 'number' ? a.likes : 0));
+        return scoreB - scoreA;
+      });
       else if (viewFilter === 'unanswered') displayList = displayList.filter(q => q.answers.length === 0).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   } else { displayList = searchResults.questions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); }
   const paginatedList = displayList.slice(0, visibleCount);
 
   const renderUserCard = (user: User) => (
     <Link to={`/profile/${user.username || user.id}`} key={user.id} className="flex-shrink-0 bg-white dark:bg-dark-card p-3 pr-5 rounded-2xl border border-gray-100 dark:border-dark-border shadow-sm flex items-center gap-3 min-w-[160px] active:scale-95 transition-transform hover:border-blue-200">
-        <div className="relative"><img src={user.avatar} className="w-10 h-10 rounded-full object-cover border border-gray-100" decoding="async" />{user.isExpert && <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white rounded-full p-0.5 border border-white"><ShieldCheck size={10} /></div>}</div>
+        <div className="relative"><img src={user.avatar || DEFAULT_AVATAR} className="w-10 h-10 rounded-full object-cover border border-gray-100" decoding="async" />{user.isExpert && <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white rounded-full p-0.5 border border-white"><ShieldCheck size={10} /></div>}</div>
         <div className="flex flex-col"><span className="text-sm font-bold text-textDark dark:text-dark-text truncate max-w-[100px]">{user.name}</span><span className="text-[10px] text-primary font-medium">Xem trang</span></div>
     </Link>
   );
@@ -312,7 +336,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
                    {(searchTab === 'all' || searchTab === 'docs') && searchResults.docs.length > 0 && (
                        <div className="mb-6 space-y-3"><h4 className="text-sm font-bold text-gray-500 uppercase px-1">Tài liệu ({searchResults.docs.length})</h4><div className="space-y-3">{searchResults.docs.map(renderDocCard)}</div></div>
                    )}
-                   {(searchTab === 'all' || searchTab === 'questions') && (<div className="space-y-4"><h4 className="text-sm font-bold text-gray-500 uppercase px-1">Câu hỏi thảo luận ({searchResults.questions.length})</h4>{paginatedList.map(q => (<Link to={`/question/${toSlug(q.title, q.id)}`} key={q.id} className="block group"><div className="bg-white dark:bg-dark-card p-5 rounded-[1.5rem] shadow-sm dark:shadow-none border border-gray-100 dark:border-dark-border hover:border-primary/30 transition-all"><h3 className="text-[16px] font-bold text-textDark dark:text-dark-text mb-2 leading-snug">{q.title}</h3><p className="text-textGray dark:text-dark-muted text-sm line-clamp-2 mb-3">{q.content}</p><div className="flex items-center gap-3 text-xs text-gray-400 dark:text-gray-500"><img src={q.author.avatar} className="w-5 h-5 rounded-full border border-gray-100" alt="" decoding="async" /><span>{q.author.name}</span></div></div></Link>))}</div>)}
+                   {(searchTab === 'all' || searchTab === 'questions') && (<div className="space-y-4"><h4 className="text-sm font-bold text-gray-500 uppercase px-1">Câu hỏi thảo luận ({searchResults.questions.length})</h4>{paginatedList.map(q => (<Link to={`/question/${toSlug(q.title, q.id)}`} key={q.id} className="block group"><div className="bg-white dark:bg-dark-card p-5 rounded-[1.5rem] shadow-sm dark:shadow-none border border-gray-100 dark:border-dark-border hover:border-primary/30 transition-all"><h3 className="text-[16px] font-bold text-textDark dark:text-dark-text mb-2 leading-snug">{q.title}</h3><p className="text-textGray dark:text-dark-muted text-sm line-clamp-2 mb-3">{q.content}</p><div className="flex items-center gap-3 text-xs text-gray-400 dark:text-gray-500"><img src={q.author.avatar || DEFAULT_AVATAR} className="w-5 h-5 rounded-full border border-gray-100" alt="" decoding="async" /><span>{q.author.name}</span></div></div></Link>))}</div>)}
                </div>
            </div>
       ) : (
@@ -367,7 +391,7 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
                   return (
                       <React.Fragment key={q.id}>
                           {shouldShowAd && (adConfig.provider === 'adsense' ? <AdBanner className="mx-4 md:mx-0" debugLabel={`Ad #${index}`} /> : <a href={adConfig.homeAd?.link || '#'} target="_blank" rel="noopener noreferrer" className="block group"><div className="bg-white dark:bg-dark-card p-5 rounded-[1.5rem] shadow-sm border border-gray-100 hover:border-yellow-300 transition-all relative overflow-hidden"><div className="flex items-start justify-between mb-3 relative z-10"><div className="flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center text-[10px] font-bold text-green-700">Ad</div><div><p className="text-xs font-bold text-textDark flex items-center gap-1">{adConfig.homeAd?.sponsorName || 'Nhà tài trợ'}<span className="bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded text-[9px] font-bold">Sponsored</span></p><p className="text-[10px] text-gray-400">Gợi ý dành cho bạn</p></div></div><MoreHorizontal size={16} className="text-gray-300"/></div><h3 className="text-[16px] font-bold text-textDark mb-2 leading-snug">{adConfig.homeAd?.title}</h3><p className="text-textGray text-sm line-clamp-2 mb-3 font-normal">{adConfig.homeAd?.content}</p>{adConfig.homeAd?.imageUrl && (<div className="mt-3 rounded-xl overflow-hidden border border-gray-100"><img src={adConfig.homeAd.imageUrl} className="w-full h-48 object-cover" alt="ad" decoding="async" /></div>)}<div className="flex items-center justify-between pt-3 border-t border-gray-50 mt-3"><div className="flex items-center gap-4 text-xs font-bold text-gray-400"><span className="flex items-center gap-1.5"><Heart size={14} /> 1.2k</span><span className="flex items-center gap-1.5"><MessageCircle size={14} /> 45</span></div><div className="text-[10px] font-bold text-white bg-blue-600 px-3 py-1.5 rounded-full flex items-center gap-1 group-hover:bg-blue-700 transition-colors">{adConfig.homeAd?.ctaText || 'Xem ngay'} <ExternalLink size={10}/></div></div></div></a>)}
-                          <Link to={`/question/${toSlug(q.title, q.id)}`} className="block group"><div className="bg-white dark:bg-dark-card p-5 rounded-[1.5rem] shadow-sm border border-gray-100 active:scale-[0.98] transition-all relative overflow-hidden">{q.answers.length === 0 && <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-orange-100 to-transparent dark:from-orange-900/10 rounded-bl-full -mr-8 -mt-8"></div>}<div className="flex items-start justify-between mb-3 relative z-10"><div className="flex items-center gap-2"><img src={q.author.avatar} className="w-8 h-8 rounded-full border border-gray-100 object-cover" decoding="async" /><div><p className="text-xs font-bold text-textDark dark:text-dark-text flex items-center gap-1">{q.author.name} {q.author.isExpert && <ShieldCheck size={10} className="text-blue-500" />}</p><p className="text-[10px] text-gray-400">{new Date(q.createdAt).toLocaleDateString('vi-VN')}</p></div></div><span className="bg-gray-50 dark:bg-slate-700 text-textGray dark:text-dark-muted text-[10px] font-bold px-2 py-1 rounded-lg border border-gray-100">{q.category}</span></div><h3 className="text-[16px] font-bold text-textDark dark:text-dark-text mb-2 leading-snug line-clamp-2">{q.title}</h3><p className="text-textGray dark:text-dark-muted text-sm line-clamp-2 mb-3 font-normal">{q.content}</p><FBImageGrid images={q.images || []} /><div className="flex items-center justify-between pt-3 border-t border-gray-50 mt-3"><div className="flex items-center gap-4 text-xs font-bold text-gray-400 dark:text-gray-500"><span className="flex items-center gap-1.5"><Heart size={14} className={likesCount > 0 || isLikedByCurrentUser ? "text-red-500 fill-red-500" : ""} /> {likesCount}</span><span className="flex items-center gap-1.5"><MessageCircle size={14} className={q.answers.length > 0 ? "text-blue-500 fill-blue-500" : ""} /> {q.answers.length}</span></div>{q.answers.length === 0 && <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-1 rounded-full">Chưa có trả lời</span>}</div></div></Link>
+                          <Link to={`/question/${toSlug(q.title, q.id)}`} className="block group"><div className="bg-white dark:bg-dark-card p-5 rounded-[1.5rem] shadow-sm border border-gray-100 active:scale-[0.98] transition-all relative overflow-hidden">{q.answers.length === 0 && <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-orange-100 to-transparent dark:from-orange-900/10 rounded-bl-full -mr-8 -mt-8"></div>}<div className="flex items-start justify-between mb-3 relative z-10"><div className="flex items-center gap-2"><img src={q.author.avatar || DEFAULT_AVATAR} className="w-8 h-8 rounded-full border border-gray-100 object-cover" decoding="async" /><div><p className="text-xs font-bold text-textDark dark:text-dark-text flex items-center gap-1">{q.author.name} {q.author.isExpert && <ShieldCheck size={10} className="text-blue-500" />}</p><p className="text-[10px] text-gray-400">{new Date(q.createdAt).toLocaleDateString('vi-VN')}</p></div></div><span className="bg-gray-50 dark:bg-slate-700 text-textGray dark:text-dark-muted text-[10px] font-bold px-2 py-1 rounded-lg border border-gray-100">{q.category}</span></div><h3 className="text-[16px] font-bold text-textDark dark:text-dark-text mb-2 leading-snug line-clamp-2">{q.title}</h3><p className="text-textGray dark:text-dark-muted text-sm line-clamp-2 mb-3 font-normal">{q.content}</p><FBImageGrid images={q.images || []} /><div className="flex items-center justify-between pt-3 border-t border-gray-50 mt-3"><div className="flex items-center gap-4 text-xs font-bold text-gray-400 dark:text-gray-500"><span className="flex items-center gap-1.5"><Heart size={14} className={likesCount > 0 || isLikedByCurrentUser ? "text-red-500 fill-red-500" : ""} /> {likesCount}</span><span className="flex items-center gap-1.5"><MessageCircle size={14} className={q.answers.length > 0 ? "text-blue-500 fill-blue-500" : ""} /> {q.answers.length}</span></div>{q.answers.length === 0 && <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-1 rounded-full">Chưa có trả lời</span>}</div></div></Link>
                       </React.Fragment>
                   );
               })}
