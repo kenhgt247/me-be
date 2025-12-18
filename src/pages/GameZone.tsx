@@ -444,4 +444,4 @@ export const GameZone: React.FC = () => {
     </div>
   );
 };
-
+export default GameZone;
