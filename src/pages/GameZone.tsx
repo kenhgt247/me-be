@@ -11,6 +11,8 @@ import {
   Bot,
   Gamepad2,
   BookOpen,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { Game, GameLevel, GameAsset, CategoryDef } from '../types';
 import { fetchAllGames, fetchCategories } from '../services/game';
@@ -57,7 +59,7 @@ const RotateDeviceOverlay: React.FC<{ orientation?: 'portrait' | 'landscape' | '
   );
 };
 
-// --- EMOJI UTILS (Làm đẹp emoji hệ thống thành hình ảnh) ---
+// --- EMOJI UTILS ---
 const getTwemojiUrl = (emoji: string) => {
   try {
     const codePoints = Array.from(emoji)
@@ -95,7 +97,7 @@ const EmojiIcon: React.FC<{ emoji: string; className?: string }> = ({ emoji, cla
 };
 
 // =============================================================================
-//  2. CUSTOM HOOKS (SAFE & ROBUST)
+//  2. CUSTOM HOOKS
 // =============================================================================
 
 const useAudio = (url?: string, opts?: { volume?: number; loop?: boolean }) => {
@@ -148,28 +150,25 @@ const useSafeSpeech = (lang: 'vi-VN' | 'en-US') => {
 };
 
 // =============================================================================
-//  3. GAME ENGINE (FIXED ERROR #300)
+//  3. GAME ENGINE
 // =============================================================================
 
 const PRAISE_VI = ['Đúng rồi! Bé giỏi quá!', 'Xuất sắc!', 'Tuyệt vời!', 'Bé thông minh lắm!'];
 const PRAISE_EN = ['Great job!', 'Awesome!', 'You did it!', 'Fantastic!'];
 
 const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ game, onBack }) => {
-  // --- 1. HOOKS (LUÔN KHAI BÁO ĐẦU TIÊN) ---
   const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
   const [score, setScore] = useState(0);
   const [isWrong, setIsWrong] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [gameFinished, setGameFinished] = useState(false);
 
-  // Memoize levels để tránh re-render không cần thiết
   const levels = useMemo(() => Array.isArray(game.levels) ? game.levels : [], [game.levels]);
   const currentLevel = levels[currentLevelIdx];
   const lang = (game as any).category === 'english' ? 'en-US' : 'vi-VN';
   
   const speak = useSafeSpeech(lang);
   
-  // Audio Config
   const correctSound = (game as any).config?.correctSoundUrl || 'https://www.soundjay.com/buttons/sounds/button-3.mp3';
   const wrongSound = (game as any).config?.wrongSoundUrl || 'https://www.soundjay.com/buttons/sounds/button-10.mp3';
   const winSound = 'https://www.soundjay.com/misc/sounds/magic-chime-01.mp3';
@@ -180,11 +179,9 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
   const { play: playWin } = useAudio(winSound, { volume: 0.8 });
   const { start: startBg, stop: stopBg } = useAudio(bgMusicUrl, { volume: 0.15, loop: true });
 
-  // Effect: Tự động phát hướng dẫn & nhạc nền
   useEffect(() => {
     if (!currentLevel) return;
     startBg();
-    
     const timer = setTimeout(() => {
       if (currentLevel.instruction?.audioUrl) {
         new Audio(currentLevel.instruction.audioUrl).play().catch(() => {});
@@ -192,15 +189,12 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
         speak(currentLevel.instruction?.text);
       }
     }, 500);
-
     return () => clearTimeout(timer);
   }, [currentLevelIdx, currentLevel]); // eslint-disable-line
 
   useEffect(() => {
     return () => stopBg();
   }, []); // eslint-disable-line
-
-  // --- 2. LOGIC GAME ---
 
   const handleCorrect = () => {
     playCorrect();
@@ -238,10 +232,8 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
     if (game.gameType === 'flashcard') {
       if (asset.audioUrl) new Audio(asset.audioUrl).play().catch(() => {});
       else speak(asset.text);
-      
       confetti({ particleCount: 30, spread: 50, origin: { y: 0.7 } });
       setScore(s => s + 1);
-      
       setTimeout(() => {
         if (currentLevelIdx < levels.length - 1) setCurrentLevelIdx(i => i + 1);
         else {
@@ -250,19 +242,16 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
         }
       }, 800);
     } else {
-      // Quiz Logic
       if (asset.id === currentLevel.correctAnswerId) handleCorrect();
       else handleWrong();
     }
   };
 
-  // --- 3. RENDERING (SAFE RETURNS) ---
-
   if (!levels || levels.length === 0) {
     return (
-      <div className="fixed inset-0 z-[100] bg-blue-50 flex flex-col items-center justify-center p-6 text-center">
+      <div className="fixed inset-0 z-[100] bg-blue-50 dark:bg-slate-900 flex flex-col items-center justify-center p-6 text-center">
         <div className="text-6xl mb-4">🧩</div>
-        <h2 className="text-xl font-bold mb-2 text-gray-800">Game này chưa có màn chơi</h2>
+        <h2 className="text-xl font-bold mb-2 text-gray-800 dark:text-white">Game này chưa có màn chơi</h2>
         <BouncyButton onClick={onBack} className="bg-blue-600 text-white px-6 py-2 rounded-full mt-4">
           Quay lại
         </BouncyButton>
@@ -272,9 +261,9 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
 
   if (gameFinished) {
     return (
-      <div className="fixed inset-0 z-[100] bg-yellow-50 flex flex-col items-center justify-center animate-fade-in p-6">
+      <div className="fixed inset-0 z-[100] bg-yellow-50 dark:bg-slate-900 flex flex-col items-center justify-center animate-fade-in p-6">
         <Trophy size={100} className="text-yellow-500 mb-6 animate-bounce" />
-        <h2 className="text-3xl md:text-4xl font-black text-orange-600 mb-4 text-center">
+        <h2 className="text-3xl md:text-4xl font-black text-orange-600 dark:text-orange-400 mb-4 text-center">
           Hoan hô! Bé thắng rồi!
         </h2>
         <div className="flex gap-4">
@@ -300,27 +289,25 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
   const instSplit = splitLeadingEmoji(currentLevel?.instruction?.text);
 
   return (
-    <div className="fixed inset-0 z-[100] bg-blue-50 flex flex-col h-[100dvh]">
-      {/* Header Game */}
-      <div className="px-4 py-3 flex justify-between items-center bg-white/60 backdrop-blur-md shadow-sm z-10 pt-safe-top">
-        <BouncyButton onClick={onBack} className="p-2 bg-white rounded-full shadow-sm text-gray-700">
+    <div className="fixed inset-0 z-[100] bg-blue-50 dark:bg-slate-950 flex flex-col h-[100dvh]">
+      <div className="px-4 py-3 flex justify-between items-center bg-white/60 dark:bg-slate-800/60 backdrop-blur-md shadow-sm z-10 pt-safe-top">
+        <BouncyButton onClick={onBack} className="p-2 bg-white dark:bg-slate-700 rounded-full shadow-sm text-gray-700 dark:text-white">
           <ArrowLeft size={24} />
         </BouncyButton>
 
-        <div className="flex-1 mx-4 h-4 bg-gray-200 rounded-full overflow-hidden border border-gray-100">
+        <div className="flex-1 mx-4 h-4 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden border border-gray-100 dark:border-slate-600">
           <div 
             className="h-full bg-gradient-to-r from-green-400 to-green-500 transition-all duration-500 ease-out rounded-full" 
             style={{ width: `${progressPct}%` }} 
           />
         </div>
 
-        <div className="bg-white px-3 py-1.5 rounded-full shadow-sm font-black text-yellow-500 flex items-center gap-1.5 border border-yellow-100">
+        <div className="bg-white dark:bg-slate-700 px-3 py-1.5 rounded-full shadow-sm font-black text-yellow-500 flex items-center gap-1.5 border border-yellow-100 dark:border-slate-600">
           <Star fill="currentColor" size={18} />
           <span>{score}</span>
         </div>
       </div>
 
-      {/* Main Play Area */}
       <div className={`flex-1 flex flex-col items-center justify-center p-4 overflow-y-auto ${isWrong ? 'animate-shake' : ''}`}>
         <div 
           onClick={() => {
@@ -332,13 +319,13 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
           {currentLevel.instruction?.imageUrl ? (
             <img 
               src={currentLevel.instruction.imageUrl} 
-              className="h-40 md:h-56 object-contain rounded-2xl shadow-xl bg-white p-2" 
+              className="h-40 md:h-56 object-contain rounded-2xl shadow-xl bg-white dark:bg-slate-800 p-2" 
               alt="instruction"
             />
           ) : (
             <div className="flex flex-col items-center gap-2">
               {instSplit.emoji && <EmojiIcon emoji={instSplit.emoji} className="w-20 h-20 drop-shadow-lg" />}
-              <h2 className="text-2xl md:text-4xl font-black text-blue-600 text-center drop-shadow-sm px-4">
+              <h2 className="text-2xl md:text-4xl font-black text-blue-600 dark:text-blue-300 text-center drop-shadow-sm px-4">
                 {instSplit.rest}
               </h2>
             </div>
@@ -355,7 +342,7 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
               <BouncyButton
                 key={item.id || idx}
                 onClick={() => handleAssetClick(item)}
-                className="aspect-square bg-white rounded-[1.5rem] shadow-[0_8px_0_rgba(0,0,0,0.05)] active:shadow-none active:translate-y-[4px] border-2 border-transparent hover:border-blue-200 flex flex-col items-center justify-center p-3 transition-all"
+                className="aspect-square bg-white dark:bg-slate-800 rounded-[1.5rem] shadow-[0_8px_0_rgba(0,0,0,0.05)] active:shadow-none active:translate-y-[4px] border-2 border-transparent hover:border-blue-200 dark:hover:border-slate-600 flex flex-col items-center justify-center p-3 transition-all"
               >
                 {item.imageUrl ? (
                   <img src={item.imageUrl} className="w-full h-full object-contain" alt={item.text} />
@@ -363,7 +350,7 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
                   <>
                     {itemSplit.emoji && <EmojiIcon emoji={itemSplit.emoji} className="w-14 h-14 md:w-16 md:h-16 mb-2" />}
                     {itemSplit.rest && (
-                      <span className="text-lg md:text-2xl font-bold text-slate-700 text-center leading-tight">
+                      <span className="text-lg md:text-2xl font-bold text-slate-700 dark:text-slate-200 text-center leading-tight">
                         {itemSplit.rest}
                       </span>
                     )}
@@ -377,7 +364,7 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
 
       {showSuccessModal && (
         <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
-          <div className="bg-white/90 backdrop-blur-sm px-8 py-4 rounded-3xl shadow-2xl animate-bounce-in">
+          <div className="bg-white/90 dark:bg-black/80 backdrop-blur-sm px-8 py-4 rounded-3xl shadow-2xl animate-bounce-in">
             <span className="text-4xl md:text-5xl font-black text-green-500 flex items-center gap-3">
               <Star fill="currentColor" className="animate-spin-slow text-yellow-400" /> 
               Giỏi quá!
@@ -390,7 +377,7 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
 };
 
 // =============================================================================
-//  4. OTHER ENGINES (HTML5, STORY, AI)
+//  4. OTHER ENGINES
 // =============================================================================
 
 const Html5Player: React.FC<{ game: Game; onBack: () => void }> = ({ game, onBack }) => {
@@ -444,17 +431,17 @@ const StoryReader: React.FC<{ game: Game; onBack: () => void }> = ({ game, onBac
   useEffect(() => () => window.speechSynthesis.cancel(), []);
 
   return (
-    <div className="fixed inset-0 z-[100] bg-[#FFF8E1] flex flex-col h-[100dvh]">
-      <div className="px-4 py-3 flex justify-between items-center bg-white/80 backdrop-blur-md shadow-sm pt-safe-top sticky top-0 z-10">
-        <button onClick={onBack} className="p-2 rounded-full hover:bg-black/5">
+    <div className="fixed inset-0 z-[100] bg-[#FFF8E1] dark:bg-slate-900 flex flex-col h-[100dvh]">
+      <div className="px-4 py-3 flex justify-between items-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-md shadow-sm pt-safe-top sticky top-0 z-10">
+        <button onClick={onBack} className="p-2 rounded-full hover:bg-black/5 dark:text-white">
           <ArrowLeft />
         </button>
-        <h2 className="font-bold text-lg truncate max-w-[200px]">{game.title}</h2>
+        <h2 className="font-bold text-lg dark:text-white truncate max-w-[200px]">{game.title}</h2>
         <div className="w-10" />
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 md:p-10 max-w-3xl mx-auto w-full">
-        <div className="prose prose-lg prose-slate md:prose-xl mx-auto font-medium leading-relaxed">
+        <div className="prose prose-lg prose-slate dark:prose-invert md:prose-xl mx-auto font-medium leading-relaxed">
           {game.storyContent ? (
             game.storyContent.split('\n').map((p, i) => <p key={i} className="mb-4">{p}</p>)
           ) : (
@@ -463,7 +450,7 @@ const StoryReader: React.FC<{ game: Game; onBack: () => void }> = ({ game, onBac
         </div>
       </div>
 
-      <div className="p-6 bg-gradient-to-t from-[#FFF8E1] to-transparent flex justify-center sticky bottom-0">
+      <div className="p-6 bg-gradient-to-t from-[#FFF8E1] to-transparent dark:from-slate-900 flex justify-center sticky bottom-0">
         <BouncyButton 
           onClick={handleRead} 
           className={`flex items-center gap-3 px-8 py-4 rounded-full font-bold text-lg shadow-xl transition-colors ${
@@ -599,9 +586,20 @@ export const GameZone: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [aiStoryMode, setAiStoryMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
-  // Load Data
+  // Load Data & Theme
   useEffect(() => {
+    // Check theme
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+      setIsDarkMode(true);
+    } else {
+      document.documentElement.classList.remove('dark');
+      setIsDarkMode(false);
+    }
+
     const load = async () => {
       setLoading(true);
       try {
@@ -614,6 +612,20 @@ export const GameZone: React.FC = () => {
     };
     load();
   }, []);
+
+  // Theme Toggle Function
+  const toggleTheme = () => {
+    const html = document.documentElement;
+    if (html.classList.contains('dark')) {
+      html.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+      setIsDarkMode(false);
+    } else {
+      html.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+      setIsDarkMode(true);
+    }
+  };
 
   // Filter Logic
   const filteredGames = useMemo(() => {
@@ -637,14 +649,14 @@ export const GameZone: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-blue-50 pb-24 transition-colors duration-300">
+    <div className="min-h-screen bg-blue-50 dark:bg-slate-950 pb-24 transition-colors duration-300">
       
       {/* Header */}
-      <header className="sticky top-0 inset-x-0 z-40 bg-white/80 backdrop-blur-lg border-b border-gray-100 px-4 py-3 flex justify-between items-center shadow-sm">
+      <header className="sticky top-0 inset-x-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-lg border-b border-gray-100 dark:border-slate-800 px-4 py-3 flex justify-between items-center shadow-sm">
         <div className="flex items-center gap-2">
            {activeCategory ? (
-             <button onClick={() => setActiveCategory(null)} className="p-1 -ml-2 rounded-full hover:bg-gray-100">
-               <ArrowLeft className="text-gray-600" />
+             <button onClick={() => setActiveCategory(null)} className="p-1 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800">
+               <ArrowLeft className="text-gray-600 dark:text-gray-300" />
              </button>
            ) : (
              <span className="text-2xl animate-bounce">🎡</span>
@@ -654,8 +666,16 @@ export const GameZone: React.FC = () => {
            </h1>
         </div>
         <div className="flex items-center gap-3">
+          {/* Dark Mode Toggle Button */}
+          <button
+             onClick={toggleTheme}
+             className="p-2 rounded-full bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-yellow-400 transition-colors shadow-sm"
+          >
+             {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+
           <a
-            className="relative w-9 h-9 flex items-center justify-center rounded-full bg-gray-100"
+            className="relative w-9 h-9 flex items-center justify-center rounded-full bg-gray-100 dark:bg-slate-800 dark:text-gray-300"
             href="/notifications"
           >
             <Bell size={20} />
@@ -675,7 +695,7 @@ export const GameZone: React.FC = () => {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
             <Loader2 className="animate-spin text-blue-500" size={48} />
-            <p className="text-gray-500 font-medium">Đang tải trò chơi...</p>
+            <p className="text-gray-500 dark:text-gray-400 font-medium">Đang tải trò chơi...</p>
           </div>
         ) : !activeCategory ? (
           /* CATEGORY VIEW */
@@ -721,25 +741,25 @@ export const GameZone: React.FC = () => {
                 <div
                   key={game.id}
                   onClick={() => setActiveGame(game)}
-                  className="group cursor-pointer bg-white p-4 rounded-[2rem] shadow-sm border border-gray-100 hover:shadow-xl hover:border-blue-200 transition-all flex items-center gap-4 relative overflow-hidden"
+                  className="group cursor-pointer bg-white dark:bg-slate-800 p-4 rounded-[2rem] shadow-sm border border-gray-100 dark:border-slate-700 hover:shadow-xl hover:border-blue-200 dark:hover:border-blue-500/30 transition-all flex items-center gap-4 relative overflow-hidden"
                 >
                   <div className={`w-20 h-20 rounded-2xl ${game.color} flex items-center justify-center text-4xl shadow-inner text-white flex-shrink-0 group-hover:scale-110 transition-transform`}>
                     {game.icon}
                   </div>
                   
                   <div className="flex-1 min-w-0 z-10">
-                    <h3 className="font-black text-gray-800 text-lg truncate mb-1">
+                    <h3 className="font-black text-gray-800 dark:text-white text-lg truncate mb-1">
                       {game.title}
                     </h3>
                     <div className="flex gap-2">
-                      <span className="bg-gray-100 text-gray-500 text-xs font-bold px-2 py-1 rounded-md uppercase">
+                      <span className="bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-300 text-xs font-bold px-2 py-1 rounded-md uppercase">
                         {game.gameType}
                       </span>
                       {game.gameType === 'html5' && <span className="bg-purple-100 text-purple-600 text-xs font-bold px-2 py-1 rounded-md">Online</span>}
                     </div>
                   </div>
 
-                  <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center group-hover:bg-blue-500 group-hover:text-white transition-colors shadow-sm">
+                  <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-slate-700 text-blue-500 dark:text-blue-300 flex items-center justify-center group-hover:bg-blue-500 group-hover:text-white transition-colors shadow-sm">
                     {game.gameType === 'story' ? <BookOpen size={20} /> : <Play size={20} fill="currentColor" />}
                   </div>
                 </div>
@@ -749,7 +769,7 @@ export const GameZone: React.FC = () => {
             {visibleGames.length === 0 && (
                <div className="text-center py-20">
                  <div className="text-6xl mb-4 grayscale opacity-50">📂</div>
-                 <p className="text-gray-500">Chưa có trò chơi nào trong mục này.</p>
+                 <p className="text-gray-500 dark:text-gray-400">Chưa có trò chơi nào trong mục này.</p>
                </div>
             )}
 
@@ -757,7 +777,7 @@ export const GameZone: React.FC = () => {
               <div className="flex justify-center mt-12">
                 <BouncyButton
                   onClick={() => setVisibleCount(p => p + PAGE_SIZE)}
-                  className="bg-white px-8 py-3 rounded-full font-bold text-blue-600 shadow-lg border border-gray-100"
+                  className="bg-white dark:bg-slate-800 px-8 py-3 rounded-full font-bold text-blue-600 dark:text-blue-400 shadow-lg border border-gray-100 dark:border-slate-700"
                 >
                   Xem thêm
                 </BouncyButton>
