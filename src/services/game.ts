@@ -15,6 +15,8 @@ import { Game, GameLevel, CategoryDef, DEFAULT_GAME_CATEGORIES } from "../types"
 
 const GAMES_COLLECTION = "games";
 const CATEGORIES_COLLECTION = "game_categories";
+// ✅ legacy fallback (bạn đang có sẵn dữ liệu cũ)
+const LEGACY_CATEGORIES_COLLECTION = "categories";
 
 // =============================================================================
 // HELPERS (AN TOÀN – KHÔNG PHÁ LOGIC)
@@ -33,6 +35,34 @@ const toIso = (v: any): string => {
 
 const ensureId = () => Math.random().toString(36).slice(2, 11);
 
+/**
+ * ✅ Firestore KHÔNG chấp nhận undefined (kể cả nested).
+ * Hàm này sẽ loại bỏ undefined sâu bên trong object/array.
+ */
+const deepStripUndefined = (value: any): any => {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+
+  if (Array.isArray(value)) {
+    const arr = value
+      .map((x) => deepStripUndefined(x))
+      .filter((x) => x !== undefined);
+    return arr;
+  }
+
+  if (typeof value === "object") {
+    const out: any = {};
+    for (const [k, v] of Object.entries(value)) {
+      const cleaned = deepStripUndefined(v);
+      if (cleaned === undefined) continue;
+      out[k] = cleaned;
+    }
+    return out;
+  }
+
+  return value;
+};
+
 const normalizeCategory = (c: any): CategoryDef => ({
   id: String(c?.id ?? "").trim(),
   label: String(c?.label ?? c?.name ?? "").trim(),
@@ -40,33 +70,6 @@ const normalizeCategory = (c: any): CategoryDef => ({
   color: String(c?.color ?? "bg-indigo-400"),
   isDefault: Boolean(c?.isDefault),
 });
-
-/**
- * ✅ PATCH QUAN TRỌNG:
- * Firestore KHÔNG chấp nhận undefined (kể cả trong object/array lồng nhau)
- * => Ta remove toàn bộ key có value === undefined trước khi ghi.
- */
-const stripUndefinedDeep = (value: any): any => {
-  if (value === undefined) return undefined;
-
-  if (value && typeof value === "object") {
-    if (Array.isArray(value)) {
-      const arr = value
-        .map(stripUndefinedDeep)
-        .filter((v) => v !== undefined);
-      return arr;
-    }
-
-    const out: any = {};
-    for (const [k, v] of Object.entries(value)) {
-      const cleaned = stripUndefinedDeep(v);
-      if (cleaned !== undefined) out[k] = cleaned;
-    }
-    return out;
-  }
-
-  return value;
-};
 
 const normalizeLevel = (lvl: any, fallbackOrder: number): GameLevel => {
   const levelId = String(lvl?.id ?? ensureId());
@@ -83,9 +86,8 @@ const normalizeLevel = (lvl: any, fallbackOrder: number): GameLevel => {
     color: it?.color ? String(it.color) : "",
   }));
 
-  // ✅ giữ logic như bạn (pairs/dropZones optional)
-  // nhưng để tránh undefined lọt vào Firestore, ta sẽ stripUndefinedDeep ở lúc updateDoc
-  return {
+  // ✅ IMPORTANT: KHÔNG gán pairs/dropZones = undefined (Firestore sẽ choke nếu nested undefined)
+  const out: any = {
     id: levelId,
     instruction: {
       id: instId,
@@ -96,10 +98,13 @@ const normalizeLevel = (lvl: any, fallbackOrder: number): GameLevel => {
     },
     items,
     correctAnswerId: lvl?.correctAnswerId ? String(lvl.correctAnswerId) : "",
-    pairs: Array.isArray(lvl?.pairs) ? lvl.pairs : undefined,
-    dropZones: Array.isArray(lvl?.dropZones) ? lvl.dropZones : undefined,
     order: Number.isFinite(Number(lvl?.order)) ? Number(lvl.order) : fallbackOrder,
   };
+
+  if (Array.isArray(lvl?.pairs)) out.pairs = lvl.pairs;
+  if (Array.isArray(lvl?.dropZones)) out.dropZones = lvl.dropZones;
+
+  return out as GameLevel;
 };
 
 const dedupeById = <T extends { id: string }>(arr: T[]): T[] => {
@@ -151,20 +156,27 @@ const normalizeGame = (id: string, data: any): Game => {
 };
 
 // =============================================================================
-// 1) DANH MỤC GAME
+// 1) DANH MỤC GAME (có fallback collection cũ)
 // =============================================================================
 export const fetchCategories = async (): Promise<CategoryDef[]> => {
   if (!db) return DEFAULT_GAME_CATEGORIES;
 
-  try {
-    const qRef = query(collection(db, CATEGORIES_COLLECTION), orderBy("label", "asc"));
+  const readCats = async (collectionName: string) => {
+    const qRef = query(collection(db, collectionName), orderBy("label", "asc"));
     const snap = await getDocs(qRef);
-
-    const cats = snap.docs
+    return snap.docs
       .map((d) => normalizeCategory({ id: d.id, ...d.data() }))
       .filter((c) => c.id && c.label);
+  };
 
-    return cats.length > 0 ? cats : DEFAULT_GAME_CATEGORIES;
+  try {
+    // 1) ưu tiên game_categories
+    const cats = await readCats(CATEGORIES_COLLECTION);
+    if (cats.length > 0) return cats;
+
+    // 2) fallback categories (legacy)
+    const legacy = await readCats(LEGACY_CATEGORIES_COLLECTION);
+    return legacy.length > 0 ? legacy : DEFAULT_GAME_CATEGORIES;
   } catch (error) {
     console.error("fetchCategories error:", error);
     return DEFAULT_GAME_CATEGORIES;
@@ -176,7 +188,7 @@ export const addCategory = async (cat: CategoryDef) => {
   const safe = normalizeCategory(cat);
   if (!safe.id || !safe.label) throw new Error("Category id/label is required");
   const ref = doc(db, CATEGORIES_COLLECTION, safe.id);
-  await setDoc(ref, stripUndefinedDeep(safe), { merge: true });
+  await setDoc(ref, deepStripUndefined(safe), { merge: true });
 };
 
 export const deleteCategory = async (categoryId: string) => {
@@ -230,8 +242,7 @@ export const createGame = async (gameData: Partial<Game>): Promise<string> => {
     levels: Array.isArray(gameData.levels) ? gameData.levels : [],
   };
 
-  // ✅ PATCH: strip undefined trước khi addDoc
-  const docRef = await addDoc(collection(db, GAMES_COLLECTION), stripUndefinedDeep(payload));
+  const docRef = await addDoc(collection(db, GAMES_COLLECTION), deepStripUndefined(payload));
   return docRef.id;
 };
 
@@ -250,8 +261,7 @@ export const updateGame = async (gameId: string, data: Partial<Game>) => {
     payload.levels = sortLevels(normalized);
   }
 
-  // ✅ PATCH: strip undefined trước khi updateDoc
-  await updateDoc(doc(db, GAMES_COLLECTION, gameId), stripUndefinedDeep(payload));
+  await updateDoc(doc(db, GAMES_COLLECTION, gameId), deepStripUndefined(payload));
 };
 
 export const deleteGame = async (gameId: string) => {
@@ -261,7 +271,7 @@ export const deleteGame = async (gameId: string) => {
 };
 
 // =============================================================================
-// 3) LEVELS (MÀN CHƠI) – LOGIC ỔN ĐỊNH, KHÔNG DÙNG arrayUnion ĐỂ TRÁNH LỖI
+// 3) LEVELS (KHÔNG dùng arrayUnion)
 // =============================================================================
 export const addLevelToGame = async (gameId: string, level: GameLevel) => {
   if (!db) return;
@@ -274,15 +284,10 @@ export const addLevelToGame = async (gameId: string, level: GameLevel) => {
   const normalized = normalizeLevel(level, nextOrder);
 
   const merged = sortLevels(dedupeById([...current, normalized]));
-
-  // ✅ PATCH
-  await updateDoc(
-    doc(db, GAMES_COLLECTION, gameId),
-    stripUndefinedDeep({
-      levels: merged,
-      updatedAt: nowIso(),
-    })
-  );
+  await updateDoc(doc(db, GAMES_COLLECTION, gameId), deepStripUndefined({
+    levels: merged,
+    updatedAt: nowIso(),
+  }));
 };
 
 export const updateLevelInGame = async (gameId: string, level: GameLevel) => {
@@ -295,14 +300,10 @@ export const updateLevelInGame = async (gameId: string, level: GameLevel) => {
   const updated = current.map((l) => (l.id === level.id ? normalizeLevel(level, l.order || 1) : l));
   const merged = sortLevels(dedupeById(updated));
 
-  // ✅ PATCH
-  await updateDoc(
-    doc(db, GAMES_COLLECTION, gameId),
-    stripUndefinedDeep({
-      levels: merged,
-      updatedAt: nowIso(),
-    })
-  );
+  await updateDoc(doc(db, GAMES_COLLECTION, gameId), deepStripUndefined({
+    levels: merged,
+    updatedAt: nowIso(),
+  }));
 };
 
 export const deleteLevelFromGame = async (gameId: string, levelId: string) => {
@@ -315,22 +316,12 @@ export const deleteLevelFromGame = async (gameId: string, levelId: string) => {
   const filtered = current.filter((l) => l.id !== levelId);
   const reordered = sortLevels(filtered).map((l, idx) => ({ ...l, order: idx + 1 }));
 
-  // ✅ PATCH
-  await updateDoc(
-    doc(db, GAMES_COLLECTION, gameId),
-    stripUndefinedDeep({
-      levels: reordered,
-      updatedAt: nowIso(),
-    })
-  );
+  await updateDoc(doc(db, GAMES_COLLECTION, gameId), deepStripUndefined({
+    levels: reordered,
+    updatedAt: nowIso(),
+  }));
 };
 
-/**
- * Import batch levels từ AI:
- * - Không dùng arrayUnion(...levels) để tránh giới hạn & tránh trùng
- * - Auto order nối tiếp vào cuối
- * - Auto normalize (id/instruction/items/order)
- */
 export const importLevelsBatch = async (gameId: string, incomingLevels: GameLevel[]) => {
   if (!db) return;
   if (!gameId) return;
@@ -355,12 +346,8 @@ export const importLevelsBatch = async (gameId: string, incomingLevels: GameLeve
 
   const merged = sortLevels(dedupeById([...current, ...normalizedIncoming]));
 
-  // ✅ PATCH QUAN TRỌNG NHẤT (chỗ bạn đang lỗi)
-  await updateDoc(
-    doc(db, GAMES_COLLECTION, gameId),
-    stripUndefinedDeep({
-      levels: merged,
-      updatedAt: nowIso(),
-    })
-  );
+  await updateDoc(doc(db, GAMES_COLLECTION, gameId), deepStripUndefined({
+    levels: merged,
+    updatedAt: nowIso(),
+  }));
 };
