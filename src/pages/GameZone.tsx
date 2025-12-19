@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Volume2, Star, Trophy, Sparkles, Play, Loader2, RotateCcw, ArrowDown, Moon, Sun, Bell, Bot } from 'lucide-react';
-import { Game, GameLevel, GameCategory, CategoryDef, GameAsset } from '../types';
+import { ArrowLeft, Volume2, Star, Trophy, Play, Loader2, RotateCcw, Moon, Sun, Bell, Bot } from 'lucide-react';
+import { Game, GameCategory, CategoryDef, GameAsset } from '../types';
 // Import từ service
 import { fetchAllGames, fetchCategories } from '../services/game';
 import { generateStory } from '../services/gemini';
@@ -11,7 +11,7 @@ import confetti from 'canvas-confetti';
 // =============================================================================
 
 const BouncyButton: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ children, onClick, className, ...props }) => (
-  <button 
+  <button
     onClick={(e) => {
       const btn = e.currentTarget;
       btn.style.transform = "scale(0.9)";
@@ -25,7 +25,7 @@ const BouncyButton: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({
   </button>
 );
 
-const RotateDeviceOverlay: React.FC<{ orientation?: 'portrait' | 'landscape' }> = ({ orientation }) => {
+const RotateDeviceOverlay: React.FC<{ orientation?: 'portrait' | 'landscape' | 'auto' }> = ({ orientation }) => {
   if (!orientation || orientation === 'auto') return null;
   return (
     <div className={`fixed inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center text-white p-6 text-center 
@@ -43,19 +43,23 @@ const RotateDeviceOverlay: React.FC<{ orientation?: 'portrait' | 'landscape' }> 
 
 const useAudio = (url?: string) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
   useEffect(() => {
     if (url) {
-        audioRef.current = new Audio(url);
-        audioRef.current.load();
+      audioRef.current = new Audio(url);
+      audioRef.current.load();
+    } else {
+      audioRef.current = null;
     }
   }, [url]);
 
   const play = () => {
     if (audioRef.current) {
-        audioRef.current.currentTime = 0;
-        audioRef.current.play().catch(() => {});
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(() => {});
     }
   };
+
   return play;
 };
 
@@ -69,11 +73,18 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
   const levels = game.levels || [];
   const currentLevel = levels[currentLevelIdx];
 
-  const playCorrect = useAudio((game as any).config?.correctSoundUrl || 'https://www.soundjay.com/buttons/sounds/button-3.mp3'); 
+  // ✅ Mechanic ưu tiên lấy từ level (V2), nếu không có thì fallback về gameType (cũ)
+  const mechanic = (currentLevel as any)?.mechanic || game.gameType;
+  const isMemoryMatch = mechanic === 'memory_match';
+  const isQuiz = mechanic === 'quiz';
+  const isFlashcard = mechanic === 'flashcard';
+
+  const playCorrect = useAudio((game as any).config?.correctSoundUrl || 'https://www.soundjay.com/buttons/sounds/button-3.mp3');
   const playWrong = useAudio((game as any).config?.wrongSoundUrl || 'https://www.soundjay.com/buttons/sounds/button-10.mp3');
   const playWin = useAudio('https://www.soundjay.com/misc/sounds/magic-chime-01.mp3');
 
-  const speak = (text: string) => {
+  const speak = (text?: string) => {
+    if (!text) return;
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = (game as any).category === 'english' ? 'en-US' : 'vi-VN';
@@ -81,61 +92,202 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
     window.speechSynthesis.speak(u);
   };
 
+  // Đọc đề bài khi vào level
   useEffect(() => {
-    if (currentLevel?.instruction) {
-      setTimeout(() => {
-        if(currentLevel.instruction.audioUrl) {
-            new Audio(currentLevel.instruction.audioUrl).play().catch(() => {});
-        } else {
-            speak(currentLevel.instruction.text);
-        }
-      }, 500);
-    }
-  }, [currentLevelIdx, currentLevel]);
+    if (!currentLevel?.instruction) return;
+
+    const t = setTimeout(() => {
+      if (currentLevel.instruction.audioUrl) {
+        new Audio(currentLevel.instruction.audioUrl).play().catch(() => {});
+      } else {
+        speak(currentLevel.instruction.text || "");
+      }
+    }, 500);
+
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentLevelIdx]);
 
   const handleCorrect = () => {
     playCorrect && playCorrect();
-    speak("Đúng rồi! Bé giỏi quá!");
+    speak((currentLevel as any)?.celebrate || "Đúng rồi! Bé giỏi quá!");
     confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
     setShowSuccessModal(true);
     setScore(s => s + 1);
+
     setTimeout(() => {
       setShowSuccessModal(false);
-      if (currentLevelIdx < levels.length - 1) setCurrentLevelIdx(i => i + 1);
-      else { playWin && playWin(); setGameFinished(true); speak("Chúc mừng bé đã hoàn thành!"); }
-    }, 2000);
+
+      if (currentLevelIdx < levels.length - 1) {
+        setCurrentLevelIdx(i => i + 1);
+      } else {
+        playWin && playWin();
+        setGameFinished(true);
+        speak("Chúc mừng bé đã hoàn thành!");
+      }
+    }, 1200);
   };
 
   const handleWrong = () => {
     playWrong && playWrong();
-    speak("Sai rồi, thử lại nhé!");
+    speak((currentLevel as any)?.hint || "Sai rồi, thử lại nhé!");
     setIsWrong(true);
-    setTimeout(() => setIsWrong(false), 500);
+    setTimeout(() => setIsWrong(false), 450);
   };
 
-  const handleAssetClick = (asset: GameAsset) => {
-    if (game.gameType === 'quiz') {
-      if (asset.id === currentLevel.correctAnswerId) handleCorrect();
-      else handleWrong();
-    } else if (game.gameType === 'flashcard') {
-       if(asset.audioUrl) new Audio(asset.audioUrl).play().catch(() => {});
-       else speak(asset.text || "");
-       confetti({ particleCount: 30, spread: 55, origin: { y: 0.65 } });
-       setScore(s => s + 1);
-       setTimeout(() => {
-         if (currentLevelIdx < levels.length - 1) setCurrentLevelIdx(i => i + 1);
-         else { playWin && playWin(); setGameFinished(true); }
-       }, 650);
+  // =====================================
+  // MEMORY MATCH (V2) - Lật thẻ ghép đôi
+  // =====================================
+  type MMCard = {
+    id: string;     // unique per card
+    pairId: string; // giống nhau cho 2 thẻ là 1 cặp
+    text?: string;
+    imageUrl?: string;
+    audioUrl?: string;
+  };
+
+  const [mmCards, setMmCards] = useState<MMCard[]>([]);
+  const [mmFlipped, setMmFlipped] = useState<string[]>([]);
+  const [mmMatched, setMmMatched] = useState<Set<string>>(new Set());
+  const [mmLock, setMmLock] = useState(false);
+
+  const mmWonRef = useRef(false);
+
+  const buildMemoryDeck = (level: any): MMCard[] => {
+    const pairs = level?.payload?.pairs;
+    if (!Array.isArray(pairs) || pairs.length < 2) return [];
+
+    const deck: MMCard[] = [];
+
+    pairs.forEach((p: any, idx: number) => {
+      const pairId = p?.pairId || `pair_${idx}`;
+
+      // Card A
+      deck.push({
+        id: `${pairId}_a_${Math.random().toString(16).slice(2)}`,
+        pairId,
+        text: p?.a?.text ?? p?.text ?? '',
+        imageUrl: p?.a?.imageUrl ?? p?.imageUrl ?? '',
+        audioUrl: p?.a?.audioUrl ?? p?.audioUrl ?? '',
+      });
+
+      // Card B
+      deck.push({
+        id: `${pairId}_b_${Math.random().toString(16).slice(2)}`,
+        pairId,
+        text: p?.b?.text ?? p?.matchText ?? p?.text ?? '',
+        imageUrl: p?.b?.imageUrl ?? p?.matchImageUrl ?? p?.imageUrl ?? '',
+        audioUrl: p?.b?.audioUrl ?? p?.audioUrl ?? '',
+      });
+    });
+
+    // shuffle Fisher-Yates
+    for (let i = deck.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
+    return deck;
+  };
+
+  useEffect(() => {
+    if (!isMemoryMatch) {
+      setMmCards([]);
+      setMmFlipped([]);
+      setMmMatched(new Set());
+      setMmLock(false);
+      mmWonRef.current = false;
+      return;
+    }
+
+    const deck = buildMemoryDeck(currentLevel as any);
+    setMmCards(deck);
+    setMmFlipped([]);
+    setMmMatched(new Set());
+    setMmLock(false);
+    mmWonRef.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentLevelIdx, isMemoryMatch]);
+
+  const handleMMCardClick = (card: MMCard) => {
+    if (!isMemoryMatch) return;
+    if (mmLock) return;
+    if (mmFlipped.includes(card.id)) return;
+    if (mmMatched.has(card.pairId)) return;
+
+    const next = [...mmFlipped, card.id].slice(0, 2);
+    setMmFlipped(next);
+
+    if (card.audioUrl) new Audio(card.audioUrl).play().catch(() => {});
+    else speak(card.text);
+
+    if (next.length < 2) return;
+
+    const c1 = mmCards.find(c => c.id === next[0]);
+    const c2 = mmCards.find(c => c.id === next[1]);
+    if (!c1 || !c2) return;
+
+    if (c1.pairId === c2.pairId) {
+      setMmMatched(prev => {
+        const ns = new Set(prev);
+        ns.add(c1.pairId);
+        return ns;
+      });
+      setTimeout(() => setMmFlipped([]), 320);
+    } else {
+      setMmLock(true);
+      handleWrong();
+      setTimeout(() => {
+        setMmFlipped([]);
+        setMmLock(false);
+      }, 650);
     }
   };
 
-  if (gameFinished) return (
-    <div className="fixed inset-0 z-[100] bg-[#FFF9C4] dark:bg-slate-900 flex flex-col items-center justify-center animate-fade-in">
-      <Trophy size={120} className="text-yellow-500 mb-4 animate-bounce" />
-      <h2 className="text-4xl font-black text-orange-600 dark:text-orange-400 mb-4">Hoan hô!</h2>
-      <BouncyButton onClick={onBack} className="bg-orange-500 text-white text-xl font-bold px-12 py-4 rounded-full shadow-xl">Chơi trò khác</BouncyButton>
-    </div>
-  );
+  useEffect(() => {
+    if (!isMemoryMatch) return;
+    if (!mmCards.length) return;
+
+    const totalPairs = new Set(mmCards.map(c => c.pairId)).size;
+    if (totalPairs > 0 && mmMatched.size === totalPairs && !mmWonRef.current) {
+      mmWonRef.current = true;
+      handleCorrect();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mmMatched, mmCards, isMemoryMatch]);
+
+  // Click asset cho quiz/flashcard (giữ nguyên hành vi cũ)
+  const handleAssetClick = (asset: GameAsset) => {
+    if (isQuiz) {
+      if (asset.id === currentLevel?.correctAnswerId) handleCorrect();
+      else handleWrong();
+    } else if (isFlashcard) {
+      if (asset.audioUrl) new Audio(asset.audioUrl).play().catch(() => {});
+      else speak(asset.text || "");
+
+      confetti({ particleCount: 30, spread: 55, origin: { y: 0.65 } });
+      setScore(s => s + 1);
+
+      setTimeout(() => {
+        if (currentLevelIdx < levels.length - 1) setCurrentLevelIdx(i => i + 1);
+        else {
+          playWin && playWin();
+          setGameFinished(true);
+        }
+      }, 650);
+    }
+  };
+
+  if (gameFinished) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-[#FFF9C4] dark:bg-slate-900 flex flex-col items-center justify-center animate-fade-in">
+        <Trophy size={120} className="text-yellow-500 mb-4 animate-bounce" />
+        <h2 className="text-4xl font-black text-orange-600 dark:text-orange-400 mb-4">Hoan hô!</h2>
+        <BouncyButton onClick={onBack} className="bg-orange-500 text-white text-xl font-bold px-12 py-4 rounded-full shadow-xl">
+          Chơi trò khác
+        </BouncyButton>
+      </div>
+    );
+  }
 
   if (!currentLevel) return <div className="p-10 text-center dark:text-white">Đang tải...</div>;
 
@@ -144,22 +296,79 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
   return (
     <div className="fixed inset-0 z-[100] bg-[#E0F7FA] dark:bg-slate-950 flex flex-col h-[100dvh]">
       <div className="p-4 flex justify-between items-center pt-safe-top">
-        <BouncyButton onClick={onBack} className="bg-white dark:bg-slate-800 p-3 rounded-full shadow-md dark:text-white"><ArrowLeft /></BouncyButton>
-        <div className="flex-1 mx-4 h-4 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-green-500 transition-all" style={{ width: `${progressPct}%` }} /></div>
-        <div className="bg-white dark:bg-slate-800 px-4 py-2 rounded-full shadow-sm font-black text-yellow-500 flex items-center gap-2"><Star fill="currentColor" /> {score}</div>
+        <BouncyButton onClick={onBack} className="bg-white dark:bg-slate-800 p-3 rounded-full shadow-md dark:text-white">
+          <ArrowLeft />
+        </BouncyButton>
+
+        <div className="flex-1 mx-4 h-4 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
+          <div className="h-full bg-green-500 transition-all" style={{ width: `${progressPct}%` }} />
+        </div>
+
+        <div className="bg-white dark:bg-slate-800 px-4 py-2 rounded-full shadow-sm font-black text-yellow-500 flex items-center gap-2">
+          <Star fill="currentColor" /> {score}
+        </div>
       </div>
+
       <div className={`flex-1 flex flex-col items-center justify-center p-4 ${isWrong ? 'animate-shake' : ''}`}>
-        <div onClick={() => speak(currentLevel.instruction.text)} className="mb-8 cursor-pointer">
-           {currentLevel.instruction.imageUrl ? <img src={currentLevel.instruction.imageUrl} className="h-48 object-contain rounded-xl shadow-lg" /> : <h2 className="text-4xl font-black text-blue-600 dark:text-blue-400 text-center">{currentLevel.instruction.text}</h2>}
+        <div onClick={() => speak(currentLevel?.instruction?.text)} className="mb-8 cursor-pointer">
+          {currentLevel.instruction.imageUrl ? (
+            <img src={currentLevel.instruction.imageUrl} className="h-48 object-contain rounded-xl shadow-lg" />
+          ) : (
+            <h2 className="text-4xl font-black text-blue-600 dark:text-blue-400 text-center">
+              {currentLevel.instruction.text}
+            </h2>
+          )}
         </div>
-        <div className={`grid gap-4 w-full max-w-4xl ${currentLevel.items.length <= 2 ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-4'}`}>
-            {currentLevel.items.map((item, idx) => (
-                <BouncyButton key={idx} onClick={() => handleAssetClick(item)} className="aspect-square bg-white dark:bg-slate-800 rounded-[2rem] shadow-lg flex flex-col items-center justify-center p-4 dark:border dark:border-slate-700">
-                    {item.imageUrl ? <img src={item.imageUrl} className="w-full h-full object-contain" /> : <span className="text-4xl font-bold text-slate-700 dark:text-white">{item.text}</span>}
+
+        {/* ====== GRID ITEMS / MEMORY MATCH ====== */}
+        {isMemoryMatch ? (
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-4 w-full max-w-4xl">
+            {mmCards.map((card) => {
+              const isFaceUp = mmFlipped.includes(card.id) || mmMatched.has(card.pairId);
+              return (
+                <BouncyButton
+                  key={card.id}
+                  onClick={() => handleMMCardClick(card)}
+                  className="aspect-square bg-white dark:bg-slate-800 rounded-[2rem] shadow-lg flex flex-col items-center justify-center p-4 dark:border dark:border-slate-700"
+                >
+                  {isFaceUp ? (
+                    card.imageUrl ? (
+                      <img src={card.imageUrl} className="w-full h-full object-contain" />
+                    ) : (
+                      <span className="text-4xl font-bold text-slate-700 dark:text-white text-center">
+                        {card.text || '🙂'}
+                      </span>
+                    )
+                  ) : (
+                    <span className="text-4xl">❓</span>
+                  )}
                 </BouncyButton>
+              );
+            })}
+          </div>
+        ) : (
+          <div className={`grid gap-4 w-full max-w-4xl ${currentLevel.items.length <= 2 ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-4'}`}>
+            {currentLevel.items.map((item, idx) => (
+              <BouncyButton
+                key={idx}
+                onClick={() => handleAssetClick(item)}
+                className="aspect-square bg-white dark:bg-slate-800 rounded-[2rem] shadow-lg flex flex-col items-center justify-center p-4 dark:border dark:border-slate-700"
+              >
+                {item.imageUrl ? (
+                  <img src={item.imageUrl} className="w-full h-full object-contain" />
+                ) : (
+                  <span className="text-4xl font-bold text-slate-700 dark:text-white">{item.text}</span>
+                )}
+              </BouncyButton>
             ))}
-        </div>
-        {showSuccessModal && <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-black/50 backdrop-blur-sm pointer-events-none"><div className="text-4xl font-black text-green-600 animate-bounce">Đúng rồi! 🎉</div></div>}
+          </div>
+        )}
+
+        {showSuccessModal && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-black/50 backdrop-blur-sm pointer-events-none">
+            <div className="text-4xl font-black text-green-600 animate-bounce">Đúng rồi! 🎉</div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -167,15 +376,41 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
 
 const StoryReader: React.FC<{ game: Game; onBack: () => void }> = ({ game, onBack }) => {
   const [isPlaying, setIsPlaying] = useState(false);
+
   const toggleRead = () => {
-    if (isPlaying) { window.speechSynthesis.cancel(); setIsPlaying(false); }
-    else { const u = new SpeechSynthesisUtterance(game.storyContent || ""); u.lang = 'vi-VN'; u.onend = () => setIsPlaying(false); window.speechSynthesis.speak(u); setIsPlaying(true); }
+    if (isPlaying) {
+      window.speechSynthesis.cancel();
+      setIsPlaying(false);
+    } else {
+      const u = new SpeechSynthesisUtterance(game.storyContent || "");
+      u.lang = 'vi-VN';
+      u.onend = () => setIsPlaying(false);
+      window.speechSynthesis.speak(u);
+      setIsPlaying(true);
+    }
   };
+
   return (
     <div className="fixed inset-0 z-[100] bg-[#FFF8E1] dark:bg-slate-900 flex flex-col h-[100dvh]">
-      <div className="px-4 py-3 flex justify-between bg-white/50 dark:bg-slate-800/50 backdrop-blur-md pt-safe-top"><button onClick={onBack} className="dark:text-white"><ArrowLeft /></button><h2 className="font-bold text-lg dark:text-white">{game.title}</h2><div className="w-6"></div></div>
-      <div className="flex-1 overflow-y-auto p-6 md:p-10 prose prose-lg dark:prose-invert max-w-none">{game.storyContent ? game.storyContent.split('\n').map((p, i) => <p key={i} className="dark:text-gray-300">{p}</p>) : <p>Chưa có nội dung.</p>}</div>
-      <div className="p-6 flex justify-center"><button onClick={toggleRead} className="bg-orange-500 text-white px-8 py-3 rounded-full font-bold flex gap-2">{isPlaying ? <Volume2 className="animate-pulse" /> : <Play />} {isPlaying ? 'Dừng' : 'Đọc truyện'}</button></div>
+      <div className="px-4 py-3 flex justify-between bg-white/50 dark:bg-slate-800/50 backdrop-blur-md pt-safe-top">
+        <button onClick={onBack} className="dark:text-white"><ArrowLeft /></button>
+        <h2 className="font-bold text-lg dark:text-white">{game.title}</h2>
+        <div className="w-6"></div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-6 md:p-10 prose prose-lg dark:prose-invert max-w-none">
+        {game.storyContent
+          ? game.storyContent.split('\n').map((p, i) => <p key={i} className="dark:text-gray-300">{p}</p>)
+          : <p>Chưa có nội dung.</p>
+        }
+      </div>
+
+      <div className="p-6 flex justify-center">
+        <button onClick={toggleRead} className="bg-orange-500 text-white px-8 py-3 rounded-full font-bold flex gap-2">
+          {isPlaying ? <Volume2 className="animate-pulse" /> : <Play />}
+          {isPlaying ? 'Dừng' : 'Đọc truyện'}
+        </button>
+      </div>
     </div>
   );
 };
@@ -185,7 +420,11 @@ const Html5Player: React.FC<{ game: Game; onBack: () => void }> = ({ game, onBac
   return (
     <div className="fixed inset-0 z-[100] bg-black flex flex-col h-[100dvh]">
       <RotateDeviceOverlay orientation={(game as any).orientation} />
-      <div className="h-10 bg-gray-900 flex items-center px-4"><button onClick={onBack} className="text-white flex items-center gap-2 font-bold bg-white/10 px-3 py-1 rounded-full"><ArrowLeft size={16} /> Thoát</button></div>
+      <div className="h-10 bg-gray-900 flex items-center px-4">
+        <button onClick={onBack} className="text-white flex items-center gap-2 font-bold bg-white/10 px-3 py-1 rounded-full">
+          <ArrowLeft size={16} /> Thoát
+        </button>
+      </div>
       <iframe src={game.gameUrl} className="flex-1 w-full h-full border-none" allowFullScreen />
     </div>
   );
@@ -197,19 +436,76 @@ const AiStoryTeller: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [lesson, setLesson] = useState('');
   const [story, setStory] = useState<{ title: string, content: string } | null>(null);
   const [loading, setLoading] = useState(false);
+
   const handleGenerate = async () => {
     setLoading(true);
-    try { const res = await generateStory(char, lesson); setStory(res); setStep(3); } 
-    catch (e) { alert("Lỗi kết nối AI"); } finally { setLoading(false); }
+    try {
+      const res = await generateStory(char, lesson);
+      setStory(res);
+      setStep(3);
+    } catch (e) {
+      alert("Lỗi kết nối AI");
+    } finally {
+      setLoading(false);
+    }
   };
+
   return (
     <div className="fixed inset-0 z-[100] bg-gradient-to-b from-indigo-900 to-purple-900 text-white flex flex-col h-[100dvh]">
       <div className="p-4 pt-safe-top"><button onClick={onBack}><ArrowLeft /></button></div>
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-lg mx-auto">
-        {step === 1 && <><h3 className="text-2xl font-bold mb-6">Bé chọn nhân vật nhé?</h3><div className="grid grid-cols-2 gap-4">{['Thỏ con', 'Gấu Pooh', 'Khủng long', 'Công chúa'].map(c => (<button key={c} onClick={() => { setChar(c); setStep(2); }} className="bg-white/10 p-6 rounded-2xl font-bold">{c}</button>))}</div></>}
-        {step === 2 && !loading && <><h3 className="text-2xl font-bold mb-6">Câu chuyện về bài học gì?</h3><div className="grid grid-cols-1 gap-3 w-full">{['Lòng dũng cảm', 'Sự thật thà', 'Tình bạn'].map(l => (<button key={l} onClick={() => { setLesson(l); handleGenerate(); }} className="bg-white/10 p-4 rounded-xl font-bold">{l}</button>))}</div></>}
+        {step === 1 && (
+          <>
+            <h3 className="text-2xl font-bold mb-6">Bé chọn nhân vật nhé?</h3>
+            <div className="grid grid-cols-2 gap-4">
+              {['Thỏ con', 'Gấu Pooh', 'Khủng long', 'Công chúa'].map(c => (
+                <button key={c} onClick={() => { setChar(c); setStep(2); }} className="bg-white/10 p-6 rounded-2xl font-bold">
+                  {c}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {step === 2 && !loading && (
+          <>
+            <h3 className="text-2xl font-bold mb-6">Câu chuyện về bài học gì?</h3>
+            <div className="grid grid-cols-1 gap-3 w-full">
+              {['Lòng dũng cảm', 'Sự thật thà', 'Tình bạn'].map(l => (
+                <button key={l} onClick={() => { setLesson(l); handleGenerate(); }} className="bg-white/10 p-4 rounded-xl font-bold">
+                  {l}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
         {loading && <Loader2 className="animate-spin" size={40} />}
-        {step === 3 && story && <StoryReader game={{ id: 'temp', title: story.title, storyContent: story.content, gameType: 'story', icon: '🤖', color: '', minAge: 0, maxAge: 0, isActive: true, config: {}, levels: [], totalPlays: 0, createdAt: '', updatedAt: '', order: 0, slug: '', category: 'story' } as any} onBack={onBack} />}
+
+        {step === 3 && story && (
+          <StoryReader
+            game={{
+              id: 'temp',
+              title: story.title,
+              storyContent: story.content,
+              gameType: 'story',
+              icon: '🤖',
+              color: '',
+              minAge: 0,
+              maxAge: 0,
+              isActive: true,
+              config: {},
+              levels: [],
+              totalPlays: 0,
+              createdAt: '',
+              updatedAt: '',
+              order: 0,
+              slug: '',
+              category: 'story'
+            } as any}
+            onBack={onBack}
+          />
+        )}
       </div>
     </div>
   );
@@ -229,14 +525,14 @@ export const GameZone: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [aiStoryMode, setAiStoryMode] = useState(false);
-  
+
   // STATE CHO DARK MODE
   const [isDarkMode, setIsDarkMode] = useState(false);
 
   useEffect(() => {
     // 1. Kiểm tra theme hiện tại
     if (document.documentElement.classList.contains('dark')) {
-        setIsDarkMode(true);
+      setIsDarkMode(true);
     }
 
     // 2. Load Data
@@ -254,13 +550,13 @@ export const GameZone: React.FC = () => {
   const toggleTheme = () => {
     const html = document.documentElement;
     if (html.classList.contains('dark')) {
-        html.classList.remove('dark');
-        localStorage.setItem('theme', 'light');
-        setIsDarkMode(false);
+      html.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+      setIsDarkMode(false);
     } else {
-        html.classList.add('dark');
-        localStorage.setItem('theme', 'dark');
-        setIsDarkMode(true);
+      html.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+      setIsDarkMode(true);
     }
   };
 
@@ -276,29 +572,28 @@ export const GameZone: React.FC = () => {
 
   return (
     <div className="min-h-screen pb-24 bg-[#E0F7FA] dark:bg-slate-950 flex flex-col pt-16 overflow-x-hidden transition-colors">
-      
+
       {/* ================================================== */}
       {/* 🟢 HEADER CHUẨN APP (Đã thêm Logic Toggle Theme) */}
       {/* ================================================== */}
       <header className="md:hidden fixed top-0 inset-x-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-gray-100 dark:border-slate-800 px-4 py-2 flex justify-between items-center shadow-sm">
         <a className="text-xl font-black text-blue-600 dark:text-blue-400" href="/" data-discover="true">Asking.vn</a>
         <div className="flex items-center gap-3">
-            {/* 👇 NÚT NÀY ĐÃ ĐƯỢC GẮN HÀM TOGGLE 👇 */}
-            <button 
-                onClick={toggleTheme}
-                className="p-2 rounded-full transition-all duration-300 bg-orange-50 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-yellow-400 dark:hover:bg-slate-600 shadow-sm border border-gray-200 dark:border-slate-600" 
-                aria-label="Chuyển chế độ tối/sáng" 
-                title="Bật chế độ sáng"
-            >
-                {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-            </button>
-            
-            <a className="relative w-9 h-9 flex items-center justify-center rounded-full bg-gray-100 dark:bg-slate-800 dark:text-gray-200" href="/notifications" data-discover="true">
-                <Bell size={20} />
-            </a>
-            <a className="w-9 h-9 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500 flex items-center justify-center text-white shadow" href="/ai-chat" data-discover="true">
-                <Bot size={20} />
-            </a>
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-full transition-all duration-300 bg-orange-50 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-yellow-400 dark:hover:bg-slate-600 shadow-sm border border-gray-200 dark:border-slate-600"
+            aria-label="Chuyển chế độ tối/sáng"
+            title="Bật chế độ sáng"
+          >
+            {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+
+          <a className="relative w-9 h-9 flex items-center justify-center rounded-full bg-gray-100 dark:bg-slate-800 dark:text-gray-200" href="/notifications" data-discover="true">
+            <Bell size={20} />
+          </a>
+          <a className="w-9 h-9 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500 flex items-center justify-center text-white shadow" href="/ai-chat" data-discover="true">
+            <Bot size={20} />
+          </a>
         </div>
       </header>
       {/* ================================================== */}
