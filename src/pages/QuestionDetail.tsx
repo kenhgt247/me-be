@@ -799,7 +799,8 @@ export default function QuestionDetail({
       </div>
 
       {/* --- FOOTER / BOTTOM SHEET INPUT --- */}
-      <div className={`fixed bottom-0 left-0 right-0 pointer-events-none flex flex-col justify-end ${isInputOpen ? 'z-[60]' : 'z-40'}`}>
+      {/* UPDATE FIX: Thêm logic điều chỉnh vị trí bottom khi ở trên mobile để tránh menu chân trang */}
+      <div className={`fixed left-0 right-0 pointer-events-none flex flex-col justify-end ${isInputOpen ? 'bottom-0 z-[60]' : 'bottom-[60px] lg:bottom-0 z-50'}`}>
         <div className="max-w-6xl w-full mx-auto px-0 md:px-6">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div className="lg:col-span-8 relative">
