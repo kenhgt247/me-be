@@ -651,8 +651,11 @@ export const GameZone: React.FC = () => {
   return (
     <div className="min-h-screen bg-blue-50 dark:bg-slate-950 pb-24 transition-colors duration-300">
       
-      {/* Header */}
-      <header className="sticky top-0 inset-x-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-lg border-b border-gray-100 dark:border-slate-800 px-4 py-3 flex justify-between items-center shadow-sm">
+      {/* ✅ FIX: MOBILE HEADER 
+        - md:hidden: Ẩn trên máy tính (để không bị trùng với header chính)
+        - sticky top-0: Giữ header khi cuộn trên mobile
+      */}
+      <header className="md:hidden sticky top-0 inset-x-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-lg border-b border-gray-100 dark:border-slate-800 px-4 py-3 flex justify-between items-center shadow-sm">
         <div className="flex items-center gap-2">
            {activeCategory ? (
              <button onClick={() => setActiveCategory(null)} className="p-1 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800">
@@ -666,7 +669,7 @@ export const GameZone: React.FC = () => {
            </h1>
         </div>
         <div className="flex items-center gap-3">
-          {/* Dark Mode Toggle Button */}
+          {/* Dark Mode Button (Mobile Only) */}
           <button
              onClick={toggleTheme}
              className="p-2 rounded-full bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-yellow-400 transition-colors shadow-sm"
@@ -692,6 +695,15 @@ export const GameZone: React.FC = () => {
       {/* Content */}
       <div className="max-w-6xl mx-auto px-4 py-6">
         
+        {/* ✅ FIX: DESKTOP TITLE
+          - hidden md:flex: Chỉ hiện trên máy tính
+          - Thay thế cho header bị ẩn đi, giúp giao diện không bị trống
+        */}
+        <div className="hidden md:flex items-center gap-3 mb-8">
+           <span className="text-4xl animate-bounce">🎡</span>
+           <h1 className="text-4xl font-black text-gray-800 dark:text-white">Góc Bé Chơi</h1>
+        </div>
+
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
             <Loader2 className="animate-spin text-blue-500" size={48} />
@@ -736,6 +748,16 @@ export const GameZone: React.FC = () => {
         ) : (
           /* GAME LIST VIEW */
           <div className="animate-fade-in-right">
+            {/* Desktop Back Button */}
+            <div className="hidden md:block mb-6">
+               <button 
+                 onClick={() => setActiveCategory(null)}
+                 className="flex items-center gap-2 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 font-bold transition-colors"
+               >
+                 <ArrowLeft size={20} /> Quay lại danh mục
+               </button>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
               {visibleGames.map((game) => (
                 <div
