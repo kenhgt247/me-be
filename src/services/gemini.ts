@@ -125,34 +125,49 @@ export const generateGameContent = async (
   if (!ai) throw new Error("AI not initialized");
 
   const model = "gemini-2.5-flash";
+
   const prompt = `
-    Bối cảnh: Bạn là GIÁO VIÊN MẦM NON & CHUYÊN GIA THIẾT KẾ GAME cho trẻ 2–6 tuổi trên Asking.vn.
-    Nhiệm vụ: Sinh dữ liệu cho trò chơi giáo dục. KHÔNG ĐƯỢC TỰ ĐOÁN ngoài thông tin sau:
+Bạn là GIÁO VIÊN MẦM NON + GAME DESIGNER (2–7 tuổi) cho Asking.vn.
+Mục tiêu: tạo dữ liệu level thật cuốn hút (mini-story, khen ngợi, emoji vui), nhưng vẫn DỄ cho bé.
 
-    1. Tiêu đề: "${topic}"
-    2. Chuyên mục: "${category}" (Ví dụ: english, math, logic...)
-    3. Ngôn ngữ: "${language}" (Quan trọng: Tiếng Việt / Tiếng Anh / Song ngữ)
-    4. Độ tuổi: "${ageRange}"
-    5. Mục tiêu học tập: "${learningGoal}"
-    6. Số lượng: ${count} câu hỏi
-    7. Yêu cầu thêm: "${extraRequirement}"
+INPUT:
+- Chủ đề: "${topic}"
+- Chuyên mục: "${category}" (english, math, logic, vietnamese, general...)
+- Ngôn ngữ: "${language}" (Tiếng Việt / Tiếng Anh / Song ngữ)
+- Độ tuổi: "${ageRange}"
+- Mục tiêu học tập: "${learningGoal}"
+- Số lượng level: ${count}
+- Yêu cầu thêm: "${extraRequirement}"
+- displayType: "${displayType}"
 
-    QUY TẮC NGÔN NGỮ & CHUYÊN MỤC CỰC KỲ QUAN TRỌNG:
-    - Nếu category="english" HOẶC language="Tiếng Anh": Toàn bộ nội dung 'q', 'opts', 'a' PHẢI dùng tiếng Anh đơn giản (cat, dog, apple...).
-    - Nếu language="Song ngữ": Câu hỏi 'q' dùng Tiếng Việt, nhưng các lựa chọn 'opts' và đáp án 'a' PHẢI dùng Tiếng Anh.
-    - Nếu category="math": Tập trung vào nhận biết số lượng, hình khối, phép tính đơn giản.
-    - Câu hỏi 'q' phải ngắn gọn, dễ hiểu cho trẻ nhỏ.
+NGUYÊN TẮC SIÊU QUAN TRỌNG:
+1) Không nội dung đáng sợ, bạo lực, nhạy cảm. Không thương hiệu/nhân vật bản quyền.
+2) Mỗi level = 1 nhiệm vụ rõ ràng, câu ngắn, thân thiện.
+3) Tăng dần độ khó rất nhẹ (level 1 dễ nhất).
+4) "opts" phải 3 hoặc 4 lựa chọn. Không trùng nhau.
+5) "a" phải TRÙNG CHÍNH XÁC 1 phần tử trong opts.
+6) Nếu displayType="emoji": 
+   - Mỗi option trong opts nên bắt đầu bằng 1 emoji liên quan, ví dụ: "🍎 Apple", "🐶 Dog"
+   - Câu hỏi q cũng nên có emoji nhẹ (1-2 emoji).
+7) Quy tắc ngôn ngữ:
+   - Nếu category="english" hoặc language="Tiếng Anh": q/opts/a đều là tiếng Anh đơn giản.
+   - Nếu language="Song ngữ": q bằng tiếng Việt, còn opts/a bằng tiếng Anh đơn giản.
+   - Nếu category="math": ưu tiên đếm số, so sánh nhiều/ít, hình khối, phép cộng trừ rất nhỏ.
+8) Style câu hỏi (để bé hứng thú): dùng mini-story 1 câu:
+   Ví dụ: "🐰 Thỏ con muốn tìm quả táo. Quả nào là Apple?"
+   hoặc "🚗 Xe con đang đếm bánh xe. 2 + 1 = ?"
 
-    ĐỊNH DẠNG JSON OUTPUT (STRICT):
-    [
-      {
-        "q": "Câu hỏi rõ ràng",
-        "opts": ["Lựa chọn 1", "Lựa chọn 2", "Lựa chọn 3"],
-        "a": "Đáp án đúng (phải nằm trong opts)",
-        "displayType": "${displayType}"
-      }
-    ]
-  `;
+OUTPUT JSON (STRICT):
+[
+  {
+    "q": "câu hỏi",
+    "opts": ["opt1", "opt2", "opt3"],
+    "a": "opt đúng",
+    "displayType": "${displayType}",
+    "hint": "gợi ý cực ngắn (<= 10 từ, optional)"
+  }
+]
+`;
 
   try {
     const response = await ai.models.generateContent({
@@ -168,25 +183,63 @@ export const generateGameContent = async (
               q: { type: Type.STRING },
               opts: { type: Type.ARRAY, items: { type: Type.STRING } },
               a: { type: Type.STRING },
-              displayType: { type: Type.STRING }
+              displayType: { type: Type.STRING },
+              hint: { type: Type.STRING }
             },
             required: ["q", "opts", "a", "displayType"]
           }
         },
-        temperature: 0.7,
+        temperature: 0.8,
       },
     });
 
-    // FIX: Bọc ngoặc để tránh lỗi Build
     const text = ((response as any).text ?? (response as any).response?.text?.()) || "";
-    
     if (!text) return [];
-    return JSON.parse(text);
+
+    const parsed = JSON.parse(text);
+    if (!Array.isArray(parsed)) return [];
+
+    // Soft-validate để tránh AI trả bậy làm vỡ UI
+    const cleaned = parsed
+      .filter((x) => x && typeof x.q === 'string' && Array.isArray(x.opts) && typeof x.a === 'string')
+      .map((x) => {
+        const q = String(x.q || "").trim();
+        let opts = (x.opts || []).map((o: any) => String(o || "").trim()).filter(Boolean);
+
+        // đảm bảo 3-4 options
+        opts = Array.from(new Set(opts)).slice(0, 4);
+        if (opts.length < 3) {
+          // bơm thêm option an toàn nếu thiếu
+          const fillers = displayType === 'emoji'
+            ? ["⭐", "🌈", "🎈", "🍀"].map(e => `${e} Option`)
+            : ["Option A", "Option B", "Option C", "Option D"];
+          for (const f of fillers) {
+            if (opts.length >= 3) break;
+            if (!opts.includes(f)) opts.push(f);
+          }
+        }
+
+        let a = String(x.a || "").trim();
+
+        // nếu đáp án không nằm trong opts -> ép về phần tử đầu
+        if (!opts.includes(a)) a = opts[0];
+
+        return {
+          q,
+          opts,
+          a,
+          displayType: String(x.displayType || displayType),
+          hint: typeof x.hint === 'string' ? x.hint.trim() : ""
+        };
+      });
+
+    return cleaned;
   } catch (error) {
     console.error("Generate Game Error:", error);
     throw error;
   }
 };
+
 
 /**
  * Sinh truyện kể cho bé (Storytelling)
