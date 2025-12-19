@@ -13,9 +13,10 @@ import {
   Bot,
 } from 'lucide-react';
 import { Game, GameLevel, GameCategory, CategoryDef, GameAsset } from '../types';
-import { fetchAllGames, fetchCategories } from '../services/game';
+import { fetchAllGames, fetchCategories, getGameById } from '../services/game';
 import { generateStory } from '../services/gemini';
 import confetti from 'canvas-confetti';
+
 
 // =============================================================================
 //  UTILS UI
