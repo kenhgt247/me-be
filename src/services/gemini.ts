@@ -23,7 +23,23 @@ if (apiKey && apiKey.trim() !== "") {
   console.warn("⚠️ VITE_API_KEY is missing. Gemini AI features are disabled.");
 }
 
-// --- 2. CÁC HÀM CŨ (ĐÃ SỬA LỖI CÚ PHÁP) ---
+// =============================================================================
+//  SMALL UTILS (AN TOÀN, KHÔNG PHÁ LOGIC)
+// =============================================================================
+const safeText = (x: any) => String(x ?? "").trim();
+const uniq = (arr: string[]) => Array.from(new Set(arr));
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
+
+const ensureAnswerInOpts = (opts: string[], a: string) => {
+  const ans = safeText(a);
+  if (!ans) return { opts, a: opts[0] || "" };
+  const found = opts.find(o => safeText(o) === ans);
+  if (found) return { opts, a: found };
+  // fallback: nếu không có trong opts thì ép đáp án = opts[0]
+  return { opts, a: opts[0] || ans };
+};
+
+// --- 2. CÁC HÀM CŨ (GIỮ NGUYÊN) ---
 
 export const getAiAnswer = async (
   questionTitle: string,
@@ -42,9 +58,7 @@ export const getAiAnswer = async (
     `;
 
     const response = await ai.models.generateContent({ model, contents: prompt });
-    // FIX: Bọc ngoặc để sử dụng ?? và || cùng nhau
     const text = ((response as any).text ?? (response as any).response?.text?.()) || "";
-    
     return text || "Xin lỗi, hiện tại mình chưa thể trả lời câu hỏi này. Mẹ thử lại sau nhé!";
   } catch (error) {
     console.error("Gemini API Error:", error);
@@ -53,7 +67,7 @@ export const getAiAnswer = async (
 };
 
 export const suggestTitles = async (
-  title: string, 
+  title: string,
   content: string = ""
 ): Promise<string[]> => {
   if (!ai || !title || title.length < 5) return [];
@@ -109,8 +123,10 @@ export const generateDraftAnswer = async (
 };
 
 // =============================================================================
-// 🚀 3. HÀM NÂNG CẤP: GENERATE GAME CONTENT (BẮT BUỘC ĐỦ NGỮ CẢNH)
+// 🚀 3. NÂNG CẤP LỚN: GENERATE GAME CONTENT (HẤP DẪN + ĐÚNG FORMAT)
 // =============================================================================
+
+type GameGenType = 'quiz' | 'flashcard' | 'drag-drop';
 
 export const generateGameContent = async (
   topic: string,
@@ -120,39 +136,126 @@ export const generateGameContent = async (
   category: string = "general",
   language: string = "Tiếng Việt",
   learningGoal: string = "",
-  extraRequirement: string = ""
+  extraRequirement: string = "",
+  gameTypeHint: GameGenType = "quiz" // ✅ thêm ở CUỐI để không phá call cũ
 ): Promise<any[]> => {
   if (!ai) throw new Error("AI not initialized");
 
   const model = "gemini-2.5-flash";
+  const n = clamp(Number(count || 5), 1, 20);
+
+  const commonRules = `
+Bạn là GIÁO VIÊN MẦM NON & CHUYÊN GIA THIẾT KẾ GAME cho trẻ 2–7 tuổi trên Asking.vn.
+
+Thông tin:
+- Tiêu đề/chủ đề: "${topic}"
+- Chuyên mục: "${category}" (english/math/logic/general/...)
+- Độ tuổi: "${ageRange}"
+- Ngôn ngữ: "${language}"
+- Mục tiêu học tập (quan trọng): "${learningGoal}"
+- Số lượng: ${n}
+- Yêu cầu thêm: "${extraRequirement}"
+
+QUY TẮC CHUNG CỰC KỲ QUAN TRỌNG:
+- Nội dung SIÊU NGẮN + DỄ HIỂU cho trẻ.
+- Mỗi câu hỏi có 3–4 lựa chọn.
+- KHÔNG được trùng lựa chọn.
+- Đáp án "a" PHẢI nằm trong "opts" (trùng chính xác).
+- Ưu tiên sinh dữ liệu HẤP DẪN: có emoji ở đầu câu hỏi/đáp án (vd: "🍎 Apple", "🐶 Dog", "🚗 Car").
+- Không dùng kiến thức quá khó; ưu tiên nhận diện, phân loại, đếm, so sánh đơn giản.
+- CHỈ trả JSON thuần (không markdown, không giải thích).
+`;
+
+  // ==========================
+  //  A) FLASHCARD MODE
+  // ==========================
+  if (gameTypeHint === 'flashcard') {
+    const prompt = `
+${commonRules}
+
+CHẾ ĐỘ: FLASHCARD
+Mục tiêu: mỗi thẻ là 1 cặp (mặt trước -> mặt sau). Format tối ưu cho trẻ.
+- Trường "letter": mặt trước (nên bắt đầu bằng emoji + 1 từ/1 cụm từ ngắn). Ví dụ: "🍎 Apple", "🐱 Cat", "🔺 Triangle".
+- Trường "word": mặt sau (từ/ý tương ứng ngắn gọn).
+- Trường "vi": (nếu Song ngữ hoặc Tiếng Việt) ghi nghĩa tiếng Việt ngắn gọn.
+
+QUY TẮC NGÔN NGỮ:
+- Nếu language="Tiếng Anh" hoặc category="english": letter/word dùng tiếng Anh đơn giản.
+- Nếu language="Song ngữ": letter/word là tiếng Anh, vi là tiếng Việt.
+- Nếu language="Tiếng Việt": letter có thể là emoji + từ Việt, word là mô tả Việt ngắn.
+
+OUTPUT JSON STRICT:
+[
+  { "letter": "🍎 Apple", "word": "Apple", "vi": "Quả táo", "displayType": "${displayType}" }
+]
+`;
+    const response = await ai.models.generateContent({
+      model,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              letter: { type: Type.STRING },
+              word: { type: Type.STRING },
+              vi: { type: Type.STRING },
+              displayType: { type: Type.STRING }
+            },
+            required: ["letter", "word", "displayType"]
+          }
+        },
+        temperature: 0.75,
+      },
+    });
+
+    const text = ((response as any).text ?? (response as any).response?.text?.()) || "";
+    if (!text) return [];
+
+    const arr = Array.isArray(JSON.parse(text)) ? JSON.parse(text) : [];
+    // Post-process chống bẩn
+    const cleaned = arr
+      .map((x: any) => ({
+        letter: safeText(x?.letter),
+        word: safeText(x?.word),
+        vi: safeText(x?.vi),
+        displayType: safeText(x?.displayType || displayType),
+      }))
+      .filter((x: any) => x.letter && x.word)
+      .slice(0, n);
+
+    return cleaned;
+  }
+
+  // ==========================
+  //  B) QUIZ MODE (DEFAULT)
+  // ==========================
   const prompt = `
-    Bối cảnh: Bạn là GIÁO VIÊN MẦM NON & CHUYÊN GIA THIẾT KẾ GAME cho trẻ 2–6 tuổi trên Asking.vn.
-    Nhiệm vụ: Sinh dữ liệu cho trò chơi giáo dục. KHÔNG ĐƯỢC TỰ ĐOÁN ngoài thông tin sau:
+${commonRules}
 
-    1. Tiêu đề: "${topic}"
-    2. Chuyên mục: "${category}" (Ví dụ: english, math, logic...)
-    3. Ngôn ngữ: "${language}" (Quan trọng: Tiếng Việt / Tiếng Anh / Song ngữ)
-    4. Độ tuổi: "${ageRange}"
-    5. Mục tiêu học tập: "${learningGoal}"
-    6. Số lượng: ${count} câu hỏi
-    7. Yêu cầu thêm: "${extraRequirement}"
+CHẾ ĐỘ: QUIZ (TRẮC NGHIỆM)
+YÊU CẦU ĐẶC BIỆT ĐỂ GAME HAY HƠN:
+- Mỗi câu hỏi "q" nên mở đầu bằng emoji + câu ngắn. Ví dụ: "🐶 Con nào là chó?"
+- Mỗi lựa chọn trong "opts" nên bắt đầu bằng emoji + từ ngắn. Ví dụ: "🍎 Apple", "🍌 Banana", "🥕 Carrot"
+- "a" phải đúng y hệt 1 phần tử trong opts (copy nguyên).
 
-    QUY TẮC NGÔN NGỮ & CHUYÊN MỤC CỰC KỲ QUAN TRỌNG:
-    - Nếu category="english" HOẶC language="Tiếng Anh": Toàn bộ nội dung 'q', 'opts', 'a' PHẢI dùng tiếng Anh đơn giản (cat, dog, apple...).
-    - Nếu language="Song ngữ": Câu hỏi 'q' dùng Tiếng Việt, nhưng các lựa chọn 'opts' và đáp án 'a' PHẢI dùng Tiếng Anh.
-    - Nếu category="math": Tập trung vào nhận biết số lượng, hình khối, phép tính đơn giản.
-    - Câu hỏi 'q' phải ngắn gọn, dễ hiểu cho trẻ nhỏ.
+QUY TẮC NGÔN NGỮ & CHUYÊN MỤC:
+- Nếu category="english" HOẶC language="Tiếng Anh": q/opts/a dùng tiếng Anh đơn giản.
+- Nếu language="Song ngữ": q dùng tiếng Việt; opts & a dùng tiếng Anh (có emoji ở đầu).
+- Nếu category="math": dùng số lượng/đếm/so sánh/hình khối cực đơn giản (có emoji minh họa).
 
-    ĐỊNH DẠNG JSON OUTPUT (STRICT):
-    [
-      {
-        "q": "Câu hỏi rõ ràng",
-        "opts": ["Lựa chọn 1", "Lựa chọn 2", "Lựa chọn 3"],
-        "a": "Đáp án đúng (phải nằm trong opts)",
-        "displayType": "${displayType}"
-      }
-    ]
-  `;
+OUTPUT JSON STRICT:
+[
+  {
+    "q": "🐶 Con nào là chó?",
+    "opts": ["🐶 Dog", "🐱 Cat", "🐰 Rabbit"],
+    "a": "🐶 Dog",
+    "displayType": "${displayType}"
+  }
+]
+`;
 
   try {
     const response = await ai.models.generateContent({
@@ -173,15 +276,37 @@ export const generateGameContent = async (
             required: ["q", "opts", "a", "displayType"]
           }
         },
-        temperature: 0.7,
+        temperature: 0.75,
       },
     });
 
-    // FIX: Bọc ngoặc để tránh lỗi Build
     const text = ((response as any).text ?? (response as any).response?.text?.()) || "";
-    
     if (!text) return [];
-    return JSON.parse(text);
+
+    const raw = JSON.parse(text);
+    const safeArr: any[] = Array.isArray(raw) ? raw : [];
+
+    const cleaned = safeArr
+      .map((x: any) => {
+        const q = safeText(x?.q);
+        const opts = uniq((Array.isArray(x?.opts) ? x.opts : []).map((o: any) => safeText(o)).filter(Boolean))
+          .slice(0, 4);
+        const a = safeText(x?.a);
+
+        if (!q || opts.length < 2) return null;
+
+        const fixed = ensureAnswerInOpts(opts, a);
+        return {
+          q,
+          opts: fixed.opts,
+          a: fixed.a,
+          displayType: safeText(x?.displayType || displayType)
+        };
+      })
+      .filter(Boolean)
+      .slice(0, n);
+
+    return cleaned;
   } catch (error) {
     console.error("Generate Game Error:", error);
     throw error;
@@ -189,7 +314,7 @@ export const generateGameContent = async (
 };
 
 /**
- * Sinh truyện kể cho bé (Storytelling)
+ * Sinh truyện kể cho bé (Storytelling) - nâng cấp nhẹ: yêu cầu truyện chia đoạn dễ đọc
  */
 export const generateStory = async (
   topic: string,
@@ -198,7 +323,18 @@ export const generateStory = async (
   if (!ai) return { title: "Lỗi AI", content: "Chưa cấu hình API Key." };
 
   const model = "gemini-2.5-flash";
-  const prompt = `Sáng tác truyện cổ tích ngắn cho trẻ 3-6 tuổi. Chủ đề: "${topic}". Bài học: "${moralLesson}". Trả về JSON {title, content}.`;
+  const prompt = `
+Sáng tác truyện ngắn cho trẻ 3-7 tuổi.
+- Chủ đề: "${topic}"
+- Bài học: "${moralLesson}"
+Yêu cầu:
+- Có tiêu đề hấp dẫn.
+- Nội dung 6-10 đoạn ngắn (mỗi đoạn 1-2 câu), dễ đọc trên điện thoại.
+- Có emoji nhẹ nhàng (không quá nhiều).
+- Kết thúc bằng 1 câu hỏi tương tác cho bé (ví dụ: "Nếu là con, con sẽ làm gì?").
+
+Trả về JSON { "title": "...", "content": "..." } (content xuống dòng bằng \\n).
+`;
 
   try {
     const response = await ai.models.generateContent({

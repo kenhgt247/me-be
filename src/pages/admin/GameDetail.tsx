@@ -32,6 +32,40 @@ import {
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
+// =============================================================================
+//  ✅ TWEMOJI HELPERS (KHÔNG PHÁ LOGIC CŨ)
+//  - Nếu AI trả "🍎 Apple" -> imageUrl = Twemoji, text = "Apple"
+// =============================================================================
+const TWEMOJI_BASE = "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72";
+
+const emojiToTwemojiUrl = (emoji: string) => {
+  try {
+    const cps = Array.from(emoji)
+      .map((ch) => ch.codePointAt(0)!)
+      .filter((cp) => cp !== 0xfe0f) // remove variation selector
+      .map((cp) => cp.toString(16))
+      .join("-");
+    return cps ? `${TWEMOJI_BASE}/${cps}.png` : "";
+  } catch {
+    return "";
+  }
+};
+
+const splitEmojiLabel = (s: string): { emoji: string; label: string } => {
+  const text = (s || "").trim();
+  try {
+    // emoji đứng đầu (đa số trường hợp)
+    const m = text.match(
+      /^(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*)\s*(.*)$/u
+    );
+    if (!m) return { emoji: "", label: text };
+    return { emoji: m[1] || "", label: (m[2] || "").trim() };
+  } catch {
+    // nếu môi trường không hỗ trợ unicode property escapes
+    return { emoji: "", label: text };
+  }
+};
+
 export const GameDetail: React.FC = () => {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
@@ -71,6 +105,7 @@ export const GameDetail: React.FC = () => {
 
   useEffect(() => {
     if (gameId) loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameId]);
 
   const loadData = async () => {
@@ -157,7 +192,12 @@ export const GameDetail: React.FC = () => {
     setFormLevel({ ...formLevel, items: newItems });
   };
 
-  // Logic sinh game nâng cấp: Truyền đủ tham số cho gemini service
+  // =============================================================================
+  // ✅ NÂNG CẤP: AI -> LEVEL
+  // - Quiz: tách emoji -> twemoji imageUrl
+  // - Flashcard: tách emoji -> twemoji imageUrl
+  // - Soft validate để không crash
+  // =============================================================================
   const handleAiGenerate = async () => {
     if (!game) return;
     if (!aiTopic.trim() || !aiLearningGoal.trim()) return;
@@ -199,14 +239,17 @@ export const GameDetail: React.FC = () => {
               text = vi ? `${letter} – ${vi}` : `${letter} – ${word}`;
             }
 
+            const front = (letter || word || text).trim();
+            const sp = splitEmojiLabel(front);
+
             return {
               id: generateId(),
               instruction: { id: generateId(), text, audioUrl: '' },
               items: [
                 {
                   id: generateId(),
-                  text: letter || word || text,
-                  imageUrl: '',
+                  text: sp.label || front,
+                  imageUrl: sp.emoji ? emojiToTwemojiUrl(sp.emoji) : '',
                   audioUrl: ''
                 }
               ],
@@ -219,23 +262,42 @@ export const GameDetail: React.FC = () => {
           return;
         }
 
-        // ✅ DEFAULT (quiz/trắc nghiệm) — giữ nguyên logic cũ
+        // ✅ DEFAULT (quiz/trắc nghiệm) — GIỮ LOGIC CŨ + NÂNG CẤP emoji->imageUrl
         const convertedLevels: GameLevel[] = safeArr.map((q: any, idx: number) => {
-          const questionText = (q?.q ?? '').toString();
-          const opts: string[] = Array.isArray(q?.opts) ? q.opts : [];
-          const answer = (q?.a ?? '').toString();
+          const questionTextRaw = (q?.q ?? '').toString().trim();
+          const optsRaw: string[] = Array.isArray(q?.opts)
+            ? q.opts.map((x: any) => String(x || '').trim()).filter(Boolean)
+            : [];
+          const answerRaw = (q?.a ?? '').toString().trim();
+
+          // tách emoji ở câu hỏi (nếu có)
+          const qSplit = splitEmojiLabel(questionTextRaw);
+          const instructionImage = qSplit.emoji ? emojiToTwemojiUrl(qSplit.emoji) : '';
+          const instructionText = qSplit.label || questionTextRaw;
 
           const correctId = generateId();
-          const items = opts.map((opt: string) => ({
-            id: opt === answer ? correctId : generateId(),
-            text: (opt ?? '').toString()
-          }));
+
+          const items: GameAsset[] = optsRaw.map((opt: string) => {
+            const { emoji, label } = splitEmojiLabel(opt);
+            const isCorrect = opt.trim() === answerRaw.trim();
+            return {
+              id: isCorrect ? correctId : generateId(),
+              text: label || opt,
+              imageUrl: emoji ? emojiToTwemojiUrl(emoji) : '',
+              audioUrl: ''
+            };
+          });
+
+          // safety: nếu đáp án không nằm trong items (AI lỗi), ép về item đầu
+          const ensuredCorrectId = items.some((it) => it.id === correctId)
+            ? correctId
+            : (items[0]?.id || correctId);
 
           return {
             id: generateId(),
-            instruction: { id: generateId(), text: questionText, audioUrl: '' },
-            items: items,
-            correctAnswerId: correctId,
+            instruction: { id: generateId(), text: instructionText, imageUrl: instructionImage, audioUrl: '' },
+            items,
+            correctAnswerId: ensuredCorrectId,
             order: levels.length + idx + 1
           };
         });
@@ -246,7 +308,7 @@ export const GameDetail: React.FC = () => {
       alert('Lỗi sinh dữ liệu: ' + (e?.message || e));
     } finally {
       setIsGenerating(false);
-      if (game.gameType === 'story') setShowAiModal(false);
+      if (game?.gameType === 'story') setShowAiModal(false);
     }
   };
 
@@ -541,7 +603,7 @@ export const GameDetail: React.FC = () => {
       )}
 
       {/* =============================================================================
-           🚀 NÂNG CẤP AI MODAL: THÊM CÁC TRƯỜNG NHẬP LIỆU BẮT BUỘC
+           🚀 AI MODAL (GIỮ NGUYÊN UI/LOGIC)
            ============================================================================= */}
       {showAiModal && (
         <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
