@@ -1,4 +1,11 @@
 // =============================================================================
+//  TYPES (CORE SYSTEM + GAME ENGINE V2 + OTHER MODULES)
+//  Safe upgrade: Backward-compatible (only adds OPTIONAL fields)
+// =============================================================================
+
+import type { Timestamp } from 'firebase/firestore';
+
+// =============================================================================
 //  CORE SYSTEM INTERFACES (USER, CHAT, NOTIFICATIONS)
 // =============================================================================
 
@@ -6,31 +13,36 @@ export interface User {
   id: string;
   name: string;
   avatar: string;
+
   isExpert: boolean;
   expertStatus?: 'none' | 'pending' | 'approved' | 'rejected';
-  specialty?: string; 
+  specialty?: string;
   workplace?: string;
+
   isAdmin?: boolean;
   isBanned?: boolean;
+
   bio?: string;
-  
-  username?: string; 
-  coverUrl?: string; 
-  
+
+  username?: string;
+  coverUrl?: string;
+
   points?: number;
   joinedAt?: string;
   isGuest?: boolean;
+
   followers?: string[];
   following?: string[];
   savedQuestions?: string[];
+
   isOnline?: boolean;
   lastActiveAt?: string;
   lastActive?: any;
-  email?: string;
-  
 
-// Push notification
-fcmTokens?: string[];
+  email?: string;
+
+  // Push notification
+  fcmTokens?: string[];
 }
 
 export interface Answer {
@@ -38,12 +50,17 @@ export interface Answer {
   questionId: string;
   author: User;
   content: string;
+
   likes: number;
   usefulBy?: string[];
+
   isBestAnswer: boolean;
   isExpertVerified?: boolean;
+
   createdAt: string;
+
   isAi: boolean;
+
   isHidden?: boolean;
   reportCount?: number;
   isFake?: boolean;
@@ -56,31 +73,47 @@ export interface Question {
   category: string;
   author: User;
   answers: Answer[];
+
   likes: number;
   views: number;
+
   createdAt: string;
-  images?: string[]; 
+
+  images?: string[];
+
   isHidden?: boolean;
   reportCount?: number;
   isFake?: boolean;
 }
-// --- NEW: Interface cho Quản lý Danh mục câu hỏi (Admin) ---
+
+// --- Admin: Quản lý danh mục câu hỏi ---
 export interface Category {
   id: string;
   name: string;
   slug: string;
-  // Thêm 3 trường này:
-  icon?: string;  // Tên icon (VD: 'Baby', 'Heart', 'Book')
-  color?: string; // Class màu chữ (VD: 'text-pink-600')
-  bg?: string;    // Class màu nền (VD: 'bg-pink-50')
+
+  icon?: string;  // VD: 'Baby', 'Heart', 'Book' (hoặc emoji)
+  color?: string; // VD: 'text-pink-600'
+  bg?: string;    // VD: 'bg-pink-50'
 }
+
 export interface Notification {
   id: string;
-  userId: string; 
+  userId: string;
   sender: { name: string; avatar: string };
-  type: 'LIKE' | 'ANSWER' | 'VERIFY' | 'SYSTEM' | 'BEST_ANSWER' | 'FOLLOW' | 'MESSAGE';
+
+  type:
+    | 'LIKE'
+    | 'ANSWER'
+    | 'VERIFY'
+    | 'SYSTEM'
+    | 'BEST_ANSWER'
+    | 'FOLLOW'
+    | 'MESSAGE';
+
   content: string;
   link: string;
+
   isRead: boolean;
   createdAt: string;
 }
@@ -89,23 +122,24 @@ export interface Message {
   id: string;
   senderId: string;
   content: string;
-  createdAt: Timestamp; // Thời gian từ Firestore
-  
-  // CẬP NHẬT: Thêm 'story_reply' vào danh sách type
-  type: 'text' | 'image' | 'story_reply';
-  
-  readBy: string[]; // Mảng chứa ID những người đã xem
 
-  // CẬP NHẬT: Các trường bổ sung cho tính năng Story Reply (Optional)
-  storyId?: string;  // ID của story được reply
-  storyUrl?: string; // Link ảnh story (để hiện thumbnail bé xíu trong đoạn chat)
+  createdAt: Timestamp;
+
+  // Thêm 'story_reply'
+  type: 'text' | 'image' | 'story_reply';
+
+  readBy: string[];
+
+  // Story Reply (optional)
+  storyId?: string;
+  storyUrl?: string;
 }
 
 export interface ChatSession {
   id: string;
   participants: string[];
-  
-  // Snapshot thông tin user (để hiển thị nhanh ở danh sách inbox)
+
+  // Snapshot data để hiển thị nhanh
   participantData: {
     [uid: string]: {
       name: string;
@@ -116,23 +150,29 @@ export interface ChatSession {
 
   lastMessage: string;
   lastMessageAt: Timestamp;
+
   unread: { [uid: string]: number };
   deletedFor?: { [uid: string]: boolean };
 }
 
 export interface Story {
   id: string;
-  userId: string;          
-  userName: string;        
-  userAvatar: string;      
-  userIsExpert?: boolean;  
-  mediaUrl: string;        
+
+  userId: string;
+  userName: string;
+  userAvatar: string;
+  userIsExpert?: boolean;
+
+  mediaUrl: string;
   mediaType: 'image' | 'video';
-  caption?: string;        
-  createdAt: string;       
-  expiresAt: string;       
-  viewers: string[];       
-  likes: string[];         
+
+  caption?: string;
+
+  createdAt: string;
+  expiresAt: string;
+
+  viewers: string[];
+  likes: string[];
 }
 
 // =============================================================================
@@ -141,14 +181,14 @@ export interface Story {
 
 export type GameCategory = string;
 
-// Mở rộng các loại game để hỗ trợ nhiều tính năng hơn
-export type GameType = 
-  | 'quiz'          // Trắc nghiệm
-  | 'flashcard'     // Thẻ học (Hình + Tiếng)
-  | 'drag-drop'     // Kéo thả
-  | 'html5'         // Game nhúng (Iframe)
-  | 'story'         // Truyện đọc
-  | 'ai-story';     // AI kể chuyện
+// Giữ nguyên các loại game đang dùng
+export type GameType =
+  | 'quiz'       // Trắc nghiệm
+  | 'flashcard'  // Thẻ học (Hình + Tiếng)
+  | 'drag-drop'  // Kéo thả
+  | 'html5'      // Game nhúng (Iframe)
+  | 'story'      // Truyện đọc
+  | 'ai-story';  // AI kể chuyện
 
 export type GameOrientation = 'portrait' | 'landscape' | 'auto';
 
@@ -160,68 +200,117 @@ export interface CategoryDef {
   isDefault?: boolean;
 }
 
-// Định nghĩa một "Tài sản" trong game (Dùng chung cho cả Đáp án, Câu hỏi, Vật thể)
+// Tài sản trong game (đề bài / đáp án / vật thể)
 export interface GameAsset {
   id: string;
-  text?: string;        // Chữ hiển thị
-  imageUrl?: string;    // URL Hình ảnh
-  audioUrl?: string;    // URL Âm thanh (Giọng đọc)
-  color?: string;       // Màu nền (nếu không có ảnh)
+
+  text?: string;
+  imageUrl?: string;
+  audioUrl?: string;
+
+  // optional UI
+  color?: string;
 }
 
-// Cấu hình âm thanh & hiệu ứng (Juice)
+// Cấu hình âm thanh & hiệu ứng
 export interface GameConfig {
-  bgMusicUrl?: string;       // Nhạc nền
-  correctSoundUrl?: string;  // Tiếng khi chọn đúng
-  wrongSoundUrl?: string;    // Tiếng khi chọn sai
-  successConfetti?: boolean; // Bắn pháo hoa khi thắng
-  mascotGuide?: boolean;     // Hiển thị nhân vật hướng dẫn
+  bgMusicUrl?: string;
+  correctSoundUrl?: string;
+  wrongSoundUrl?: string;
+
+  successConfetti?: boolean;
+  mascotGuide?: boolean;
 }
 
-// Dữ liệu của MỘT màn chơi (Level) - Thay thế GameQuestion cũ
+// ===============================
+// GAMEPLAY UPGRADE (BACKWARD-SAFE)
+// ===============================
+
+// Mechanic = "cơ chế chơi" theo từng level.
+// -> OPTIONAL để không phá level cũ.
+export type GameMechanic =
+  | 'quiz'          // bấm chọn đáp án đúng
+  | 'flashcard'     // học thẻ
+  | 'memory_match'  // lật hình ghép đôi
+  | 'odd_one_out'   // tìm cái sai
+  | 'tap_sequence'  // bấm theo thứ tự
+  | 'drag_drop';    // kéo thả (level-based)
+
+// Dữ liệu một màn chơi (Level)
+// NOTE: giữ nguyên fields hiện có để code cũ không gãy.
+// NOTE: chỉ thêm fields OPTIONAL để nâng cấp.
 export interface GameLevel {
   id: string;
-  instruction: GameAsset; // Đề bài (Có thể là Text hoặc Audio đọc đề)
-  items: GameAsset[];     // Danh sách các lựa chọn/thẻ bài
-  correctAnswerId?: string; // ID của đáp án đúng (cho Quiz)
-  pairs?: { itemId: string; targetId: string }[]; // Cặp đúng (cho Kéo thả)
-  dropZones?: GameAsset[]; // Vùng thả (cho Kéo thả)
+
+  // đề bài (có thể là text hoặc audio)
+  instruction: GameAsset;
+
+  // danh sách lựa chọn/thẻ/vật thể (quiz/flashcard/drag-drop dùng chung)
+  items: GameAsset[];
+
+  // ===== Legacy / Existing =====
+  correctAnswerId?: string; // cho quiz
+  pairs?: { itemId: string; targetId: string }[]; // cho kéo thả
+  dropZones?: GameAsset[]; // vùng thả
+
   order: number;
+
+  // ===== New (Optional, V2) =====
+  mechanic?: GameMechanic;
+
+  /**
+   * payload: chứa dữ liệu riêng theo mechanic mà không làm nổ interface cũ.
+   * Ví dụ memory_match:
+   * payload = { pairs: [{ pairId:'p1', a:{...}, b:{...} }, ...] }
+   */
+  payload?: Record<string, any>;
+
+  // “Juice” giúp game cuốn hơn (AI có thể sinh)
+  hint?: string;        // gợi ý sau vài lần sai
+  celebrate?: string;   // câu khen riêng cho level
+  difficulty?: 1 | 2 | 3 | 4 | 5;
+
+  // Time / attempts (optional)
+  timeLimitSec?: number;
+  maxMistakes?: number;
 }
 
-// Interface Game Chính (Updated V2)
+// Game chính (V2)
 export interface Game {
   id: string;
   title: string;
-  slug: string; 
+  slug: string;
+
   icon: string;
   color: string;
-  
+
   gameType: GameType;
   category: GameCategory;
   orientation?: GameOrientation;
-  
+
   minAge: number;
   maxAge: number;
-  
+
   isActive: boolean;
   isPro?: boolean;
   order: number;
-  
-  // Dữ liệu nội dung (Legacy & V2)
-  gameUrl?: string;       // Cho game HTML5
-  storyContent?: string;  // Cho truyện đọc
-  
-  // Cấu hình V2
-  config: GameConfig;     
-  levels: GameLevel[];    // Mảng chứa toàn bộ màn chơi
-  
+
+  // Legacy fields
+  gameUrl?: string;      // html5 iframe
+  storyContent?: string; // story
+
+  // config V2
+  config: GameConfig;
+
+  // levels
+  levels: GameLevel[];
+
   totalPlays: number;
   createdAt: string;
   updatedAt: string;
-  
-  // Trường cũ (có thể giữ lại để tránh lỗi type ở code cũ chưa clean)
-  questionCount?: number; 
+
+  // Legacy compatibility
+  questionCount?: number;
 }
 
 // =============================================================================
@@ -231,13 +320,18 @@ export interface Game {
 export interface ExpertApplication {
   id: string;
   userId: string;
+
   fullName: string;
   phone: string;
   workplace: string;
   specialty: string;
+
   proofImages: string[];
+
   status: 'pending' | 'approved' | 'rejected';
+
   createdAt: string;
+
   reviewedBy?: string;
   rejectionReason?: string;
   reviewedAt?: string;
@@ -247,20 +341,27 @@ export interface Report {
   id: string;
   targetId: string;
   targetType: 'question' | 'answer';
+
   reason: string;
   reportedBy: string;
+
   createdAt: string;
+
   status: 'open' | 'resolved' | 'dismissed';
 }
 
 export interface AdConfig {
   isEnabled: boolean;
   provider: 'adsense' | 'custom';
+
   adsenseClientId?: string;
   adsenseSlotId?: string;
+
   customBannerUrl?: string;
   customTargetUrl?: string;
+
   frequency: number;
+
   homeAd?: {
     enabled: boolean;
     frequency: number;
@@ -271,6 +372,7 @@ export interface AdConfig {
     link: string;
     sponsorName: string;
   };
+
   sidebarAd?: {
     enabled: boolean;
     title: string;
@@ -279,6 +381,7 @@ export interface AdConfig {
     link: string;
     gradient: string;
   };
+
   blogFeedAd?: {
     enabled: boolean;
     frequency: number;
@@ -289,6 +392,7 @@ export interface AdConfig {
     link: string;
     sponsorName: string;
   };
+
   documentAd?: {
     enabled: boolean;
     frequency: number;
@@ -299,6 +403,7 @@ export interface AdConfig {
     link: string;
     sponsorName: string;
   };
+
   questionDetailAd?: {
     enabled: boolean;
     title: string;
@@ -315,6 +420,7 @@ export interface BlogCategory {
   name: string;
   slug: string;
   iconEmoji: string;
+
   order: number;
   isActive: boolean;
 }
@@ -323,21 +429,29 @@ export interface BlogPost {
   id: string;
   title: string;
   slug: string;
+
   excerpt: string;
   content: string;
+
   coverImageUrl?: string;
   iconEmoji?: string;
+
   youtubeUrl?: string;
   sourceUrl?: string;
   sourceLabel?: string;
+
   categoryId?: string;
   tags?: string[];
+
   authorId: string;
   authorName: string;
   authorAvatar: string;
   authorIsExpert: boolean;
+
   status: 'draft' | 'published';
+
   views: number;
+
   createdAt: string;
   updatedAt: string;
 }
@@ -345,11 +459,15 @@ export interface BlogPost {
 export interface BlogComment {
   id: string;
   postId: string;
+
   content: string;
+
   authorId: string;
   authorName: string;
   authorAvatar: string;
+
   isExpert: boolean;
+
   createdAt: string;
   updatedAt: string;
 }
@@ -359,6 +477,7 @@ export interface DocumentCategory {
   name: string;
   slug: string;
   iconEmoji: string;
+
   order: number;
   isActive: boolean;
 }
@@ -367,23 +486,40 @@ export interface Document {
   id: string;
   title: string;
   slug: string;
+
   description: string;
-  isExternal?: boolean; 
-  externalLink?: string; 
-  fileUrl?: string;      
-  fileType: 'pdf' | 'docx' | 'xlsx' | 'pptx' | 'image' | 'video' | 'link' | 'other';
+
+  isExternal?: boolean;
+  externalLink?: string;
+
+  fileUrl?: string;
+  fileType:
+    | 'pdf'
+    | 'docx'
+    | 'xlsx'
+    | 'pptx'
+    | 'image'
+    | 'video'
+    | 'link'
+    | 'other';
+
   fileName?: string;
   fileSize?: number;
+
   categoryId: string;
   tags: string[];
+
   authorId: string;
   authorName: string;
   authorAvatar: string;
   authorIsExpert: boolean;
+
   views: number;
   downloads: number;
-  rating: number; 
+
+  rating: number;
   ratingCount: number;
+
   createdAt: string;
   updatedAt: string;
 }
@@ -391,11 +527,14 @@ export interface Document {
 export interface DocumentReview {
   id: string;
   documentId: string;
+
   userId: string;
   userName: string;
   userAvatar: string;
+
   rating: number;
   comment: string;
+
   createdAt: string;
 }
 
@@ -404,14 +543,14 @@ export interface DocumentReview {
 // =============================================================================
 
 export const CATEGORIES = [
-  "Mang thai",
-  "Dinh dưỡng",
-  "Sức khỏe",
-  "0-1 tuổi",
-  "1-3 tuổi",
-  "Tâm lý",
-  "Giáo dục sớm",
-  "Gia đình"
+  'Mang thai',
+  'Dinh dưỡng',
+  'Sức khỏe',
+  '0-1 tuổi',
+  '1-3 tuổi',
+  'Tâm lý',
+  'Giáo dục sớm',
+  'Gia đình',
 ];
 
 export const DEFAULT_GAME_CATEGORIES: CategoryDef[] = [
@@ -429,24 +568,20 @@ export const GAME_CATEGORIES = DEFAULT_GAME_CATEGORIES;
 
 export const toSlug = (title: string, id?: string) => {
   if (!title) return '';
+
   let slug = title.toLowerCase();
-  slug = slug.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  slug = slug.replace(/[đĐ]/g, "d");
-  slug = slug.replace(/([^0-9a-z-\s])/g, "");
-  slug = slug.replace(/(\s+)/g, "-");
-  slug = slug.replace(/-+/g, "-");
-  slug = slug.replace(/^-+|-+$/g, "");
-  if (id) {
-    return `${slug}-${id}`;
-  }
-  return slug;
+  slug = slug.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  slug = slug.replace(/[đĐ]/g, 'd');
+  slug = slug.replace(/([^0-9a-z-\s])/g, '');
+  slug = slug.replace(/(\s+)/g, '-');
+  slug = slug.replace(/-+/g, '-');
+  slug = slug.replace(/^-+|-+$/g, '');
+
+  return id ? `${slug}-${id}` : slug;
 };
 
 export const getIdFromSlug = (slug: string | undefined): string => {
   if (!slug) return '';
   const lastHyphenIndex = slug.lastIndexOf('-');
-  if (lastHyphenIndex !== -1) {
-      return slug.substring(lastHyphenIndex + 1);
-  }
-  return slug;
+  return lastHyphenIndex !== -1 ? slug.substring(lastHyphenIndex + 1) : slug;
 };
