@@ -217,6 +217,7 @@ export default function QuestionDetail({
   const [sortOption, setSortOption] = useState<'best' | 'newest' | 'oldest'>('newest');
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [showFloatingInput, setShowFloatingInput] = useState(false); // ✅ NEW STATE: Kiểm soát việc hiển thị thanh input khi cuộn
   
   // Answer Form State
   const [newAnswer, setNewAnswer] = useState('');
@@ -260,6 +261,18 @@ export default function QuestionDetail({
       setIsSaved(currentUser.savedQuestions?.includes(question.id) || false);
     }
   }, [currentUser, question]);
+
+  // ✅ NEW EFFECT: Lắng nghe sự kiện cuộn trang
+  useEffect(() => {
+    const handleScroll = () => {
+      // Nếu cuộn quá 100px (người dùng vuốt lên), hiện thanh input.
+      // Nếu ở đầu trang (ít hơn 100px), ẩn đi.
+      setShowFloatingInput(window.scrollY > 100);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -799,8 +812,21 @@ export default function QuestionDetail({
       </div>
 
       {/* --- FOOTER / BOTTOM SHEET INPUT --- */}
-      {/* UPDATE FIX: Thêm logic điều chỉnh vị trí bottom khi ở trên mobile để tránh menu chân trang */}
-      <div className={`fixed left-0 right-0 pointer-events-none flex flex-col justify-end ${isInputOpen ? 'bottom-0 z-[60]' : 'bottom-[60px] lg:bottom-0 z-50'}`}>
+      {/* ✅ UPDATE LOGIC:
+         - Nếu Input Đang Mở (isInputOpen): Luôn hiển thị ở bottom-0, z-60.
+         - Nếu Input Đóng:
+             - Nếu đã cuộn (showFloatingInput): Hiển thị ở bottom-[60px] (để tránh menu), z-50.
+             - Nếu chưa cuộn (ở đầu trang): Ẩn đi (translate-y-full, opacity-0) để giao diện thoáng.
+      */}
+      <div 
+        className={`fixed left-0 right-0 pointer-events-none flex flex-col justify-end transition-all duration-300 ease-in-out
+        ${isInputOpen 
+            ? 'bottom-0 z-[60] opacity-100 translate-y-0' 
+            : showFloatingInput 
+                ? 'bottom-[60px] lg:bottom-0 z-50 opacity-100 translate-y-0' 
+                : 'bottom-0 opacity-0 translate-y-full' // Ẩn hoàn toàn xuống dưới
+        }`}
+      >
         <div className="max-w-6xl w-full mx-auto px-0 md:px-6">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div className="lg:col-span-8 relative">
