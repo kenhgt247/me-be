@@ -41,6 +41,33 @@ const normalizeCategory = (c: any): CategoryDef => ({
   isDefault: Boolean(c?.isDefault),
 });
 
+/**
+ * ✅ PATCH QUAN TRỌNG:
+ * Firestore KHÔNG chấp nhận undefined (kể cả trong object/array lồng nhau)
+ * => Ta remove toàn bộ key có value === undefined trước khi ghi.
+ */
+const stripUndefinedDeep = (value: any): any => {
+  if (value === undefined) return undefined;
+
+  if (value && typeof value === "object") {
+    if (Array.isArray(value)) {
+      const arr = value
+        .map(stripUndefinedDeep)
+        .filter((v) => v !== undefined);
+      return arr;
+    }
+
+    const out: any = {};
+    for (const [k, v] of Object.entries(value)) {
+      const cleaned = stripUndefinedDeep(v);
+      if (cleaned !== undefined) out[k] = cleaned;
+    }
+    return out;
+  }
+
+  return value;
+};
+
 const normalizeLevel = (lvl: any, fallbackOrder: number): GameLevel => {
   const levelId = String(lvl?.id ?? ensureId());
 
@@ -56,6 +83,8 @@ const normalizeLevel = (lvl: any, fallbackOrder: number): GameLevel => {
     color: it?.color ? String(it.color) : "",
   }));
 
+  // ✅ giữ logic như bạn (pairs/dropZones optional)
+  // nhưng để tránh undefined lọt vào Firestore, ta sẽ stripUndefinedDeep ở lúc updateDoc
   return {
     id: levelId,
     instruction: {
@@ -125,7 +154,6 @@ const normalizeGame = (id: string, data: any): Game => {
 // 1) DANH MỤC GAME
 // =============================================================================
 export const fetchCategories = async (): Promise<CategoryDef[]> => {
-  // Fallback không lỗi nếu db chưa init
   if (!db) return DEFAULT_GAME_CATEGORIES;
 
   try {
@@ -136,7 +164,6 @@ export const fetchCategories = async (): Promise<CategoryDef[]> => {
       .map((d) => normalizeCategory({ id: d.id, ...d.data() }))
       .filter((c) => c.id && c.label);
 
-    // Nếu chưa có dữ liệu trên Firestore => trả default
     return cats.length > 0 ? cats : DEFAULT_GAME_CATEGORIES;
   } catch (error) {
     console.error("fetchCategories error:", error);
@@ -149,7 +176,7 @@ export const addCategory = async (cat: CategoryDef) => {
   const safe = normalizeCategory(cat);
   if (!safe.id || !safe.label) throw new Error("Category id/label is required");
   const ref = doc(db, CATEGORIES_COLLECTION, safe.id);
-  await setDoc(ref, safe, { merge: true });
+  await setDoc(ref, stripUndefinedDeep(safe), { merge: true });
 };
 
 export const deleteCategory = async (categoryId: string) => {
@@ -203,7 +230,8 @@ export const createGame = async (gameData: Partial<Game>): Promise<string> => {
     levels: Array.isArray(gameData.levels) ? gameData.levels : [],
   };
 
-  const docRef = await addDoc(collection(db, GAMES_COLLECTION), payload);
+  // ✅ PATCH: strip undefined trước khi addDoc
+  const docRef = await addDoc(collection(db, GAMES_COLLECTION), stripUndefinedDeep(payload));
   return docRef.id;
 };
 
@@ -216,14 +244,14 @@ export const updateGame = async (gameId: string, data: Partial<Game>) => {
     updatedAt: nowIso(),
   };
 
-  // Nếu cập nhật levels từ admin/service khác => normalize nhẹ để khỏi bẩn doc
   if (Array.isArray((data as any).levels)) {
     const lvls = (data as any).levels as any[];
     const normalized = dedupeById(lvls.map((l, idx) => normalizeLevel(l, idx + 1)));
     payload.levels = sortLevels(normalized);
   }
 
-  await updateDoc(doc(db, GAMES_COLLECTION, gameId), payload);
+  // ✅ PATCH: strip undefined trước khi updateDoc
+  await updateDoc(doc(db, GAMES_COLLECTION, gameId), stripUndefinedDeep(payload));
 };
 
 export const deleteGame = async (gameId: string) => {
@@ -246,10 +274,15 @@ export const addLevelToGame = async (gameId: string, level: GameLevel) => {
   const normalized = normalizeLevel(level, nextOrder);
 
   const merged = sortLevels(dedupeById([...current, normalized]));
-  await updateDoc(doc(db, GAMES_COLLECTION, gameId), {
-    levels: merged,
-    updatedAt: nowIso(),
-  });
+
+  // ✅ PATCH
+  await updateDoc(
+    doc(db, GAMES_COLLECTION, gameId),
+    stripUndefinedDeep({
+      levels: merged,
+      updatedAt: nowIso(),
+    })
+  );
 };
 
 export const updateLevelInGame = async (gameId: string, level: GameLevel) => {
@@ -262,10 +295,14 @@ export const updateLevelInGame = async (gameId: string, level: GameLevel) => {
   const updated = current.map((l) => (l.id === level.id ? normalizeLevel(level, l.order || 1) : l));
   const merged = sortLevels(dedupeById(updated));
 
-  await updateDoc(doc(db, GAMES_COLLECTION, gameId), {
-    levels: merged,
-    updatedAt: nowIso(),
-  });
+  // ✅ PATCH
+  await updateDoc(
+    doc(db, GAMES_COLLECTION, gameId),
+    stripUndefinedDeep({
+      levels: merged,
+      updatedAt: nowIso(),
+    })
+  );
 };
 
 export const deleteLevelFromGame = async (gameId: string, levelId: string) => {
@@ -276,13 +313,16 @@ export const deleteLevelFromGame = async (gameId: string, levelId: string) => {
   const current = Array.isArray(game?.levels) ? game!.levels : [];
 
   const filtered = current.filter((l) => l.id !== levelId);
-  // Re-order cho đẹp (không bắt buộc nhưng giúp admin dễ nhìn)
   const reordered = sortLevels(filtered).map((l, idx) => ({ ...l, order: idx + 1 }));
 
-  await updateDoc(doc(db, GAMES_COLLECTION, gameId), {
-    levels: reordered,
-    updatedAt: nowIso(),
-  });
+  // ✅ PATCH
+  await updateDoc(
+    doc(db, GAMES_COLLECTION, gameId),
+    stripUndefinedDeep({
+      levels: reordered,
+      updatedAt: nowIso(),
+    })
+  );
 };
 
 /**
@@ -305,7 +345,6 @@ export const importLevelsBatch = async (gameId: string, incomingLevels: GameLeve
   const normalizedIncoming = safeIncoming
     .map((lvl, idx) => normalizeLevel(lvl, baseOrder + idx + 1))
     .filter((lvl) => {
-      // lọc level rỗng để tránh “màn trắng”
       const hasInstruction =
         !!lvl.instruction?.text ||
         !!(lvl.instruction as any)?.imageUrl ||
@@ -316,8 +355,12 @@ export const importLevelsBatch = async (gameId: string, incomingLevels: GameLeve
 
   const merged = sortLevels(dedupeById([...current, ...normalizedIncoming]));
 
-  await updateDoc(doc(db, GAMES_COLLECTION, gameId), {
-    levels: merged,
-    updatedAt: nowIso(),
-  });
+  // ✅ PATCH QUAN TRỌNG NHẤT (chỗ bạn đang lỗi)
+  await updateDoc(
+    doc(db, GAMES_COLLECTION, gameId),
+    stripUndefinedDeep({
+      levels: merged,
+      updatedAt: nowIso(),
+    })
+  );
 };
