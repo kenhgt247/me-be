@@ -18,7 +18,7 @@ import { generateStory } from '../services/gemini';
 import confetti from 'canvas-confetti';
 
 // =============================================================================
-//  1. UTILS UI & HELPERS
+//  1. UI UTILS & HELPERS
 // =============================================================================
 
 const BouncyButton: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({
@@ -57,6 +57,7 @@ const RotateDeviceOverlay: React.FC<{ orientation?: 'portrait' | 'landscape' | '
   );
 };
 
+// --- EMOJI UTILS (Làm đẹp emoji hệ thống thành hình ảnh) ---
 const getTwemojiUrl = (emoji: string) => {
   try {
     const codePoints = Array.from(emoji)
@@ -94,7 +95,7 @@ const EmojiIcon: React.FC<{ emoji: string; className?: string }> = ({ emoji, cla
 };
 
 // =============================================================================
-//  2. CUSTOM HOOKS (AN TOÀN)
+//  2. CUSTOM HOOKS (SAFE & ROBUST)
 // =============================================================================
 
 const useAudio = (url?: string, opts?: { volume?: number; loop?: boolean }) => {
@@ -147,42 +148,43 @@ const useSafeSpeech = (lang: 'vi-VN' | 'en-US') => {
 };
 
 // =============================================================================
-//  3. COMPONENTS: ENGINES
+//  3. GAME ENGINE (FIXED ERROR #300)
 // =============================================================================
 
 const PRAISE_VI = ['Đúng rồi! Bé giỏi quá!', 'Xuất sắc!', 'Tuyệt vời!', 'Bé thông minh lắm!'];
 const PRAISE_EN = ['Great job!', 'Awesome!', 'You did it!', 'Fantastic!'];
 
-// --- UNIVERSAL GAME ENGINE (FIXED ERROR #300) ---
 const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ game, onBack }) => {
-  // 1. Khai báo TẤT CẢ Hooks ở đầu (không được để trong if/else)
+  // --- 1. HOOKS (LUÔN KHAI BÁO ĐẦU TIÊN) ---
   const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
   const [score, setScore] = useState(0);
   const [isWrong, setIsWrong] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [gameFinished, setGameFinished] = useState(false);
 
+  // Memoize levels để tránh re-render không cần thiết
   const levels = useMemo(() => Array.isArray(game.levels) ? game.levels : [], [game.levels]);
   const currentLevel = levels[currentLevelIdx];
   const lang = (game as any).category === 'english' ? 'en-US' : 'vi-VN';
   
   const speak = useSafeSpeech(lang);
   
+  // Audio Config
   const correctSound = (game as any).config?.correctSoundUrl || 'https://www.soundjay.com/buttons/sounds/button-3.mp3';
   const wrongSound = (game as any).config?.wrongSoundUrl || 'https://www.soundjay.com/buttons/sounds/button-10.mp3';
   const winSound = 'https://www.soundjay.com/misc/sounds/magic-chime-01.mp3';
+  const bgMusicUrl = (game as any).config?.bgMusicUrl;
 
   const { play: playCorrect } = useAudio(correctSound, { volume: 0.8 });
   const { play: playWrong } = useAudio(wrongSound, { volume: 0.8 });
   const { play: playWin } = useAudio(winSound, { volume: 0.8 });
-  
-  const bgMusicUrl = (game as any).config?.bgMusicUrl;
   const { start: startBg, stop: stopBg } = useAudio(bgMusicUrl, { volume: 0.15, loop: true });
 
-  // Effect: Tự động phát âm thanh hướng dẫn
+  // Effect: Tự động phát hướng dẫn & nhạc nền
   useEffect(() => {
     if (!currentLevel) return;
     startBg();
+    
     const timer = setTimeout(() => {
       if (currentLevel.instruction?.audioUrl) {
         new Audio(currentLevel.instruction.audioUrl).play().catch(() => {});
@@ -190,6 +192,7 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
         speak(currentLevel.instruction?.text);
       }
     }, 500);
+
     return () => clearTimeout(timer);
   }, [currentLevelIdx, currentLevel]); // eslint-disable-line
 
@@ -197,7 +200,8 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
     return () => stopBg();
   }, []); // eslint-disable-line
 
-  // 2. Logic xử lý game
+  // --- 2. LOGIC GAME ---
+
   const handleCorrect = () => {
     playCorrect();
     const praise = lang === 'en-US' 
@@ -234,8 +238,10 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
     if (game.gameType === 'flashcard') {
       if (asset.audioUrl) new Audio(asset.audioUrl).play().catch(() => {});
       else speak(asset.text);
+      
       confetti({ particleCount: 30, spread: 50, origin: { y: 0.7 } });
       setScore(s => s + 1);
+      
       setTimeout(() => {
         if (currentLevelIdx < levels.length - 1) setCurrentLevelIdx(i => i + 1);
         else {
@@ -244,12 +250,14 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
         }
       }, 800);
     } else {
+      // Quiz Logic
       if (asset.id === currentLevel.correctAnswerId) handleCorrect();
       else handleWrong();
     }
   };
 
-  // 3. Render có điều kiện (Safe Returns)
+  // --- 3. RENDERING (SAFE RETURNS) ---
+
   if (!levels || levels.length === 0) {
     return (
       <div className="fixed inset-0 z-[100] bg-blue-50 flex flex-col items-center justify-center p-6 text-center">
@@ -293,6 +301,7 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
 
   return (
     <div className="fixed inset-0 z-[100] bg-blue-50 flex flex-col h-[100dvh]">
+      {/* Header Game */}
       <div className="px-4 py-3 flex justify-between items-center bg-white/60 backdrop-blur-md shadow-sm z-10 pt-safe-top">
         <BouncyButton onClick={onBack} className="p-2 bg-white rounded-full shadow-sm text-gray-700">
           <ArrowLeft size={24} />
@@ -311,6 +320,7 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
         </div>
       </div>
 
+      {/* Main Play Area */}
       <div className={`flex-1 flex flex-col items-center justify-center p-4 overflow-y-auto ${isWrong ? 'animate-shake' : ''}`}>
         <div 
           onClick={() => {
@@ -379,7 +389,10 @@ const UniversalGameEngine: React.FC<{ game: Game; onBack: () => void }> = ({ gam
   );
 };
 
-// --- HTML5 PLAYER ---
+// =============================================================================
+//  4. OTHER ENGINES (HTML5, STORY, AI)
+// =============================================================================
+
 const Html5Player: React.FC<{ game: Game; onBack: () => void }> = ({ game, onBack }) => {
   const url = (game.gameUrl || '').trim();
   return (
@@ -411,7 +424,6 @@ const Html5Player: React.FC<{ game: Game; onBack: () => void }> = ({ game, onBac
   );
 };
 
-// --- STORY READER ---
 const StoryReader: React.FC<{ game: Game; onBack: () => void }> = ({ game, onBack }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   
@@ -466,7 +478,6 @@ const StoryReader: React.FC<{ game: Game; onBack: () => void }> = ({ game, onBac
   );
 };
 
-// --- AI STORY TELLER (FULL LOGIC) ---
 const AiStoryTeller: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [step, setStep] = useState(1);
   const [char, setChar] = useState('');
@@ -575,7 +586,7 @@ const AiStoryTeller: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 };
 
 // =============================================================================
-//  4. MAIN COMPONENT: GAME ZONE
+//  5. MAIN PAGE: GAME ZONE
 // =============================================================================
 
 const PAGE_SIZE = 12;
@@ -670,7 +681,7 @@ export const GameZone: React.FC = () => {
           /* CATEGORY VIEW */
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6 animate-fade-in-up">
             
-            {/* AI Card (ĐÃ BẬT TÍNH NĂNG) */}
+            {/* AI Card */}
             <div className="col-span-2 relative group overflow-hidden rounded-[2rem] bg-gradient-to-br from-indigo-500 to-purple-600 shadow-xl cursor-pointer min-h-[160px] md:min-h-[200px]"
                  onClick={() => setAiStoryMode(true)}>
               <div className="absolute top-0 right-0 p-6 opacity-20 group-hover:scale-110 transition-transform duration-500">
@@ -738,7 +749,7 @@ export const GameZone: React.FC = () => {
             {visibleGames.length === 0 && (
                <div className="text-center py-20">
                  <div className="text-6xl mb-4 grayscale opacity-50">📂</div>
-                 <p className="text-gray-500">Bé ơi chưa có Game nào nhé, bé quay lại sau.</p>
+                 <p className="text-gray-500">Chưa có trò chơi nào trong mục này.</p>
                </div>
             )}
 
