@@ -431,7 +431,8 @@ const StoryReader: React.FC<{ game: Game; onBack: () => void }> = ({ game, onBac
   useEffect(() => () => window.speechSynthesis.cancel(), []);
 
   return (
-    <div className="fixed inset-0 z-[100] bg-[#FFF8E1] dark:bg-slate-900 flex flex-col h-[100dvh]">
+    // ✅ FIX CSS: Thêm text-slate-900 để đè lên text-white từ component cha
+    <div className="fixed inset-0 z-[100] bg-[#FFF8E1] dark:bg-slate-900 text-slate-900 dark:text-gray-100 flex flex-col h-[100dvh]">
       <div className="px-4 py-3 flex justify-between items-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-md shadow-sm pt-safe-top sticky top-0 z-10">
         <button onClick={onBack} className="p-2 rounded-full hover:bg-black/5 dark:text-white">
           <ArrowLeft />
@@ -441,7 +442,8 @@ const StoryReader: React.FC<{ game: Game; onBack: () => void }> = ({ game, onBac
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 md:p-10 max-w-3xl mx-auto w-full">
-        <div className="prose prose-lg prose-slate dark:prose-invert md:prose-xl mx-auto font-medium leading-relaxed">
+        {/* ✅ FIX CSS: Sử dụng prose-slate để đảm bảo màu chữ đậm rõ ràng */}
+        <div className="prose prose-lg prose-slate dark:prose-invert md:prose-xl mx-auto font-medium leading-relaxed text-slate-900 dark:text-gray-200">
           {game.storyContent ? (
             game.storyContent.split('\n').map((p, i) => <p key={i} className="mb-4">{p}</p>)
           ) : (
@@ -651,10 +653,7 @@ export const GameZone: React.FC = () => {
   return (
     <div className="min-h-screen bg-blue-50 dark:bg-slate-950 pb-24 transition-colors duration-300">
       
-      {/* ✅ FIX: MOBILE HEADER 
-        - md:hidden: Ẩn trên máy tính (để không bị trùng với header chính)
-        - sticky top-0: Giữ header khi cuộn trên mobile
-      */}
+      {/* Header Mobile Only */}
       <header className="md:hidden sticky top-0 inset-x-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-lg border-b border-gray-100 dark:border-slate-800 px-4 py-3 flex justify-between items-center shadow-sm">
         <div className="flex items-center gap-2">
            {activeCategory ? (
@@ -669,7 +668,7 @@ export const GameZone: React.FC = () => {
            </h1>
         </div>
         <div className="flex items-center gap-3">
-          {/* Dark Mode Button (Mobile Only) */}
+          {/* Dark Mode Toggle Button */}
           <button
              onClick={toggleTheme}
              className="p-2 rounded-full bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-yellow-400 transition-colors shadow-sm"
@@ -695,10 +694,7 @@ export const GameZone: React.FC = () => {
       {/* Content */}
       <div className="max-w-6xl mx-auto px-4 py-6">
         
-        {/* ✅ FIX: DESKTOP TITLE
-          - hidden md:flex: Chỉ hiện trên máy tính
-          - Thay thế cho header bị ẩn đi, giúp giao diện không bị trống
-        */}
+        {/* Desktop Title */}
         <div className="hidden md:flex items-center gap-3 mb-8">
            <span className="text-4xl animate-bounce">🎡</span>
            <h1 className="text-4xl font-black text-gray-800 dark:text-white">Góc Bé Chơi</h1>
