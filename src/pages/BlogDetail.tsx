@@ -12,8 +12,8 @@ import {
 } from 'lucide-react';
 import { AuthModal } from '../components/AuthModal';
 import { ShareModal } from '../components/ShareModal';
-// IMPORT COMPONENT MỚI
 import { ExpertPromoBox } from '../components/ExpertPromoBox';
+
 // --- CONSTANTS ---
 const PAGE_SIZE = 5;
 
@@ -42,7 +42,7 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
   const [mostViewedPosts, setMostViewedPosts] = useState<BlogPost[]>([]);
   const [comments, setComments] = useState<BlogCommentWithUI[]>([]);
   
-  // STATE MỚI: Cấu hình quảng cáo
+  // Cấu hình quảng cáo
   const [adConfig, setAdConfig] = useState<AdConfig | null>(null);
   
   const [loading, setLoading] = useState(true);
@@ -66,7 +66,7 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
       const postData = await fetchPostBySlug(slug);
       
       if (postData) {
-        // Fetch dữ liệu song song (bao gồm cả AdConfig)
+        // Fetch dữ liệu song song
         const [categories, related, initialComments, trending, adSettings] = await Promise.all([
             fetchBlogCategories(),
             fetchRelatedPosts(postData.id, postData.categoryId),
@@ -140,7 +140,6 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
   );
 
   return (
-    // THAY ĐỔI: bg-white -> dark:bg-dark-bg
     <div className="min-h-screen bg-white dark:bg-dark-bg animate-fade-in pb-32 transition-colors duration-300">
       
       {/* HEADER */}
@@ -188,28 +187,32 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
                     </div>
                 )}
 
-                {/* RICH TEXT CONTENT - ĐÃ CẬP NHẬT CLASS DARK MODE CHO CÁC THẺ CON */}
-                <div className="text-gray-800 dark:text-gray-200 text-lg leading-relaxed md:text-xl md:leading-[1.9] 
-                    [&>p]:mb-8 [&>p]:text-justify 
-                    [&>h2]:text-3xl [&>h2]:font-bold [&>h2]:text-gray-900 dark:[&>h2]:text-white [&>h2]:mt-12 [&>h2]:mb-6 
-                    [&>h3]:text-2xl [&>h3]:font-bold [&>h3]:text-gray-900 dark:[&>h3]:text-white [&>h3]:mt-10 [&>h3]:mb-4 
-                    [&>ul]:list-disc [&>ul]:pl-6 [&>ul]:mb-8 [&>ul>li]:mb-3 [&>ul>li]:pl-2 
-                    [&>ol]:list-decimal [&>ol]:pl-6 [&>ol]:mb-8 [&>ol>li]:mb-3 [&>ol>li]:pl-2 
-                    [&>blockquote]:border-l-4 [&>blockquote]:border-blue-500 dark:[&>blockquote]:border-blue-400 [&>blockquote]:pl-6 [&>blockquote]:italic [&>blockquote]:text-gray-600 dark:[&>blockquote]:text-gray-400 [&>blockquote]:mb-8 [&>blockquote]:text-xl 
-                    [&>img]:rounded-2xl [&>img]:w-full [&>img]:my-10 [&>img]:shadow-md 
-                    [&>a]:text-blue-600 dark:[&>a]:text-blue-400 [&>a]:underline [&>a]:font-medium 
-                    [&>strong]:font-bold [&>strong]:text-gray-900 dark:[&>strong]:text-white">
-                    
-                    <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-300 font-serif italic mb-10 leading-relaxed">{post.excerpt}</p>
-                    
+                {/* --- RICH TEXT CONTENT (ĐÃ SỬA LỖI FONT) --- */}
+                {/* Sử dụng class 'prose' của Tailwind Typography để tự động style HTML */}
+                <article className="prose prose-lg md:prose-xl prose-slate dark:prose-invert max-w-none 
+                    prose-headings:font-bold prose-headings:text-gray-900 dark:prose-headings:text-white 
+                    prose-p:text-gray-700 dark:prose-p:text-gray-300 prose-p:leading-loose 
+                    prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline
+                    prose-img:rounded-3xl prose-img:shadow-lg prose-img:my-10
+                    prose-li:marker:text-blue-500
+                    prose-blockquote:border-l-4 prose-blockquote:border-blue-500 prose-blockquote:bg-blue-50 dark:prose-blockquote:bg-blue-900/20 prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:rounded-r-lg prose-blockquote:not-italic
+                ">
+                    {/* Excerpt (Mô tả ngắn) */}
+                    <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-300 font-serif italic mb-10 leading-relaxed border-l-4 border-gray-300 pl-4">
+                        {post.excerpt}
+                    </p>
+
+                    {/* Youtube Video */}
                     {post.youtubeUrl && (
                         <div className="my-10 rounded-2xl overflow-hidden aspect-video bg-black shadow-lg">
                             <iframe src={`https://www.youtube.com/embed/${getYoutubeId(post.youtubeUrl)}`} className="w-full h-full border-none" allowFullScreen />
                         </div>
                     )}
                     
+                    {/* HTML Content (Phần nội dung chính từ Seeder) */}
                     <div dangerouslySetInnerHTML={{ __html: post.content }} />
-                </div>
+                </article>
+                {/* ------------------------------------------- */}
 
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-8 border-t border-b border-gray-100 dark:border-dark-border mt-8 mb-12">
                      {post.sourceUrl ? <a href={post.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-base font-bold text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"><ExternalLink size={18} /> Nguồn tham khảo</a> : <span></span>}
