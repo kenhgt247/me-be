@@ -187,31 +187,38 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
                     </div>
                 )}
 
-                {/* --- RICH TEXT CONTENT (ĐÃ SỬA LỖI FONT) --- */}
-                {/* Sử dụng class 'prose' của Tailwind Typography để tự động style HTML */}
-                <article className="prose prose-lg md:prose-xl prose-slate dark:prose-invert max-w-none 
-                    prose-headings:font-bold prose-headings:text-gray-900 dark:prose-headings:text-white 
-                    prose-p:text-gray-700 dark:prose-p:text-gray-300 prose-p:leading-loose 
-                    prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline
-                    prose-img:rounded-3xl prose-img:shadow-lg prose-img:my-10
-                    prose-li:marker:text-blue-500
-                    prose-blockquote:border-l-4 prose-blockquote:border-blue-500 prose-blockquote:bg-blue-50 dark:prose-blockquote:bg-blue-900/20 prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:rounded-r-lg prose-blockquote:not-italic
-                ">
-                    {/* Excerpt (Mô tả ngắn) */}
-                    <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-300 font-serif italic mb-10 leading-relaxed border-l-4 border-gray-300 pl-4">
-                        {post.excerpt}
-                    </p>
+               {/* RICH TEXT CONTENT - ĐÃ FIX FONT VÀ MÀU SẮC */}
+<article className="prose prose-lg md:prose-xl max-w-none 
+    font-sans  {/* QUAN TRỌNG: Ép dùng font Quicksand */}
+    text-gray-900 dark:text-gray-100 {/* Màu chữ mặc định đậm đen */}
+    
+    prose-headings:font-bold prose-headings:text-gray-900 dark:prose-headings:text-white 
+    prose-p:text-gray-800 dark:prose-p:text-gray-200 prose-p:leading-loose /* Chữ đoạn văn đậm hơn */
+    
+    prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline
+    prose-img:rounded-3xl prose-img:shadow-lg prose-img:my-10
+    prose-li:marker:text-blue-500 prose-li:text-gray-800 dark:prose-li:text-gray-200
+    
+    prose-strong:text-gray-900 dark:prose-strong:text-white prose-strong:font-bold
+    
+    prose-blockquote:border-l-4 prose-blockquote:border-blue-500 prose-blockquote:bg-blue-50 dark:prose-blockquote:bg-blue-900/20 prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:rounded-r-lg prose-blockquote:not-italic prose-blockquote:text-gray-700 dark:prose-blockquote:text-gray-300
+">
+    
+    {/* Excerpt */}
+    <div className="text-xl md:text-2xl text-gray-700 dark:text-gray-300 font-sans font-medium italic mb-10 leading-relaxed border-l-4 border-orange-400 pl-4 bg-orange-50 dark:bg-orange-900/10 py-4 pr-4 rounded-r-2xl">
+        {post.excerpt}
+    </div>
 
-                    {/* Youtube Video */}
-                    {post.youtubeUrl && (
-                        <div className="my-10 rounded-2xl overflow-hidden aspect-video bg-black shadow-lg">
-                            <iframe src={`https://www.youtube.com/embed/${getYoutubeId(post.youtubeUrl)}`} className="w-full h-full border-none" allowFullScreen />
-                        </div>
-                    )}
-                    
-                    {/* HTML Content (Phần nội dung chính từ Seeder) */}
-                    <div dangerouslySetInnerHTML={{ __html: post.content }} />
-                </article>
+    {/* Youtube Video */}
+    {post.youtubeUrl && (
+        <div className="my-10 rounded-2xl overflow-hidden aspect-video bg-black shadow-lg">
+            <iframe src={`https://www.youtube.com/embed/${getYoutubeId(post.youtubeUrl)}`} className="w-full h-full border-none" allowFullScreen />
+        </div>
+    )}
+
+    {/* HTML Content */}
+    <div dangerouslySetInnerHTML={{ __html: post.content }} />
+</article>
                 {/* ------------------------------------------- */}
 
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-8 border-t border-b border-gray-100 dark:border-dark-border mt-8 mb-12">
