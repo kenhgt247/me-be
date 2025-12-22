@@ -187,31 +187,39 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
                     </div>
                 )}
 
-               {/* RICH TEXT CONTENT - ĐÃ FIX FONT VÀ MÀU SẮC */}
-<article className="prose prose-lg md:prose-xl max-w-none 
-    font-sans  {/* QUAN TRỌNG: Ép dùng font Quicksand */}
-    text-gray-900 dark:text-gray-100 {/* Màu chữ mặc định đậm đen */}
+              {/* RICH TEXT CONTENT - PHIÊN BẢN TO & RÕ (BIG FONT) */}
+<article className="prose prose-xl md:prose-2xl max-w-none 
+    font-sans font-medium {/* Tăng độ đậm lên Medium cho dễ đọc */}
+    text-gray-900 dark:text-gray-50 {/* Màu chữ đen đậm */}
     
     prose-headings:font-bold prose-headings:text-gray-900 dark:prose-headings:text-white 
-    prose-p:text-gray-800 dark:prose-p:text-gray-200 prose-p:leading-loose /* Chữ đoạn văn đậm hơn */
+    prose-headings:mt-12 prose-headings:mb-6
     
-    prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline
-    prose-img:rounded-3xl prose-img:shadow-lg prose-img:my-10
-    prose-li:marker:text-blue-500 prose-li:text-gray-800 dark:prose-li:text-gray-200
+    prose-p:text-gray-800 dark:prose-p:text-gray-100 
+    prose-p:leading-loose {/* Giãn dòng rộng cho thoáng mắt */}
+    prose-p:mb-8 prose-p:text-justify
     
-    prose-strong:text-gray-900 dark:prose-strong:text-white prose-strong:font-bold
+    prose-a:text-blue-700 dark:prose-a:text-blue-400 prose-a:font-bold prose-a:no-underline hover:prose-a:underline
     
-    prose-blockquote:border-l-4 prose-blockquote:border-blue-500 prose-blockquote:bg-blue-50 dark:prose-blockquote:bg-blue-900/20 prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:rounded-r-lg prose-blockquote:not-italic prose-blockquote:text-gray-700 dark:prose-blockquote:text-gray-300
+    prose-img:rounded-3xl prose-img:shadow-md prose-img:my-10 prose-img:w-full
+    
+    prose-li:text-gray-800 dark:prose-li:text-gray-100 prose-li:marker:text-blue-600
+    
+    prose-strong:text-black dark:prose-strong:text-white prose-strong:font-black
+    
+    prose-blockquote:border-l-8 prose-blockquote:border-blue-500 prose-blockquote:bg-blue-50 dark:prose-blockquote:bg-blue-900/20 
+    prose-blockquote:py-4 prose-blockquote:px-6 prose-blockquote:rounded-r-2xl prose-blockquote:not-italic 
+    prose-blockquote:text-xl prose-blockquote:font-semibold prose-blockquote:text-blue-900 dark:prose-blockquote:text-blue-100
 ">
     
-    {/* Excerpt */}
-    <div className="text-xl md:text-2xl text-gray-700 dark:text-gray-300 font-sans font-medium italic mb-10 leading-relaxed border-l-4 border-orange-400 pl-4 bg-orange-50 dark:bg-orange-900/10 py-4 pr-4 rounded-r-2xl">
+    {/* Excerpt - Sapo bài viết */}
+    <div className="text-xl md:text-2xl text-gray-800 dark:text-gray-100 font-sans font-semibold italic mb-12 leading-relaxed border-l-8 border-orange-400 pl-6 bg-orange-50 dark:bg-orange-900/10 py-6 pr-6 rounded-r-3xl">
         {post.excerpt}
     </div>
 
     {/* Youtube Video */}
     {post.youtubeUrl && (
-        <div className="my-10 rounded-2xl overflow-hidden aspect-video bg-black shadow-lg">
+        <div className="my-12 rounded-3xl overflow-hidden aspect-video bg-black shadow-xl ring-4 ring-gray-100 dark:ring-gray-700">
             <iframe src={`https://www.youtube.com/embed/${getYoutubeId(post.youtubeUrl)}`} className="w-full h-full border-none" allowFullScreen />
         </div>
     )}
