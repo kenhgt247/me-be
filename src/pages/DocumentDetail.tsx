@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Document, DocumentReview, User, AdConfig } from '../types';
 import { fetchDocumentBySlug, incrementDownload, fetchDocumentReviews, addDocumentReview, fetchDocuments } from '../services/documents'; 
-import { getAdConfig } from '../services/ads';
+import { getAdConfig, subscribeToAdConfig } from '../services/ads';
 import { loginAnonymously } from '../services/auth';
 import { 
   Loader2, ArrowLeft, Download, Star, FileText, Share2, Send, 
@@ -11,49 +11,15 @@ import {
   Eye, Calendar, CheckCircle2, Info, Sparkles, MousePointerClick
 } from 'lucide-react';
 import { ShareModal } from '../components/ShareModal';
-// IMPORT COMPONENT MỚI
 import { ExpertPromoBox } from '../components/ExpertPromoBox';
+import { SidebarAd } from '../components/ads/SidebarAd'; // Import Component Mới
+
 // --- TYPES & CONSTANTS ---
 interface ExpandedReview extends DocumentReview {
     isExpanded?: boolean;
 }
 const PAGE_SIZE = 5;
 const MAX_REVIEW_LENGTH = 150;
-
-// --- COMPONENT: NATIVE AD (SIDEBAR) ---
-const DocumentSidebarAd = ({ config }: { config: NonNullable<AdConfig['documentAd']> }) => {
-    if (!config.enabled) return null;
-    return (
-        <div className="bg-white dark:bg-dark-card rounded-2xl border border-indigo-100 dark:border-indigo-900/30 shadow-sm dark:shadow-none p-5 animate-fade-in relative overflow-hidden group hover:shadow-md transition-all">
-            <div className="absolute top-0 right-0 bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-300 text-[10px] px-2 py-0.5 rounded-bl-lg font-bold tracking-wider">AD</div>
-            <a href={config.link} target="_blank" rel="noopener noreferrer" className="flex flex-col gap-4">
-                <div className="flex gap-4 items-start">
-                    <div className="w-16 h-16 rounded-xl bg-gray-50 dark:bg-slate-800 shrink-0 overflow-hidden border border-gray-100 dark:border-slate-700 flex items-center justify-center">
-                        {config.imageUrl ? (
-                            <img src={config.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="ad"/>
-                        ) : (
-                            <span className="text-3xl">🎁</span>
-                        )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase mb-0.5 flex items-center gap-1">
-                            <Sparkles size={10} /> {config.sponsorName}
-                        </p>
-                        <h4 className="text-sm font-bold text-gray-900 dark:text-white leading-tight mb-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-2">
-                            {config.title}
-                        </h4>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 leading-snug">
-                            {config.description}
-                        </p>
-                    </div>
-                </div>
-                <button className="w-full py-2.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 font-bold text-xs rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors flex items-center justify-center gap-2">
-                    {config.ctaText} <MousePointerClick size={14}/>
-                </button>
-            </a>
-        </div>
-    );
-};
 
 export const DocumentDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }> = ({ currentUser, onOpenAuth }) => {
     const { slug } = useParams<{ slug: string }>();
@@ -171,7 +137,6 @@ export const DocumentDetail: React.FC<{ currentUser: User; onOpenAuth: () => voi
     );
 
     return (
-        // THAY ĐỔI: bg-[#F7F7F5] -> dark:bg-dark-bg
         <div className="min-h-screen bg-[#F7F7F5] dark:bg-dark-bg pb-24 animate-fade-in pt-safe-top transition-colors duration-300">
             
             {/* HEADER */}
@@ -337,38 +302,39 @@ export const DocumentDetail: React.FC<{ currentUser: User; onOpenAuth: () => voi
                     <aside className="lg:col-span-4 space-y-6">
                          <div className="sticky top-24 space-y-6">
                             {/* --- KHỐI ĐĂNG KÝ CHUYÊN GIA --- */}
-                    {!currentUser?.isExpert && (
-                        <div className="animate-slide-up">
-                            <ExpertPromoBox />
-                        </div>
-                    )}
-                             {/* 1. NATIVE AD (CẤU HÌNH TỪ ADMIN) */}
-                             {adConfig?.isEnabled && adConfig.documentAd && (
-                                 <div className="bg-white dark:bg-dark-card p-4 rounded-[1.5rem] border border-gray-200 dark:border-dark-border shadow-sm">
-                                     <h4 className="text-xs font-bold text-gray-400 uppercase mb-3 tracking-wider flex items-center gap-1"><Info size={12}/> Có thể bạn quan tâm</h4>
-                                     <DocumentSidebarAd config={adConfig.documentAd} />
-                                 </div>
-                             )}
+                            {!currentUser?.isExpert && (
+                                <div className="animate-slide-up">
+                                    <ExpertPromoBox />
+                                </div>
+                            )}
+                            
+                            {/* 1. NATIVE AD (CẤU HÌNH TỪ ADMIN) - TỰ ĐỘNG RANDOM */}
+                            {adConfig?.isEnabled && (
+                                <div className="bg-white dark:bg-dark-card p-4 rounded-[1.5rem] border border-gray-200 dark:border-dark-border shadow-sm">
+                                    <h4 className="text-xs font-bold text-gray-400 uppercase mb-3 tracking-wider flex items-center gap-1"><Info size={12}/> Có thể bạn quan tâm</h4>
+                                    <SidebarAd variant="minimal" />
+                                </div>
+                            )}
 
-                             {/* 2. RELATED DOCUMENTS */}
-                             {relatedDocs.length > 0 && (
-                                 <div className="bg-gray-50/50 dark:bg-dark-card rounded-[1.5rem] p-5 border border-gray-100 dark:border-dark-border">
-                                     <h4 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2 text-sm"><FileText size={16}/> Tài liệu liên quan</h4>
-                                     <div className="flex flex-col gap-3">
-                                         {relatedDocs.map(d => (
-                                             <Link key={d.id} to={`/documents/${d.slug}`} className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-gray-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-all group">
-                                                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg shrink-0 ${d.isExternal ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-green-50 dark:bg-green-900/20'}`}>
+                            {/* 2. RELATED DOCUMENTS */}
+                            {relatedDocs.length > 0 && (
+                                <div className="bg-gray-50/50 dark:bg-dark-card rounded-[1.5rem] p-5 border border-gray-100 dark:border-dark-border">
+                                    <h4 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2 text-sm"><FileText size={16}/> Tài liệu liên quan</h4>
+                                    <div className="flex flex-col gap-3">
+                                        {relatedDocs.map(d => (
+                                            <Link key={d.id} to={`/documents/${d.slug}`} className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-gray-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-all group">
+                                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg shrink-0 ${d.isExternal ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-green-50 dark:bg-green-900/20'}`}>
                                                      {d.isExternal ? <LinkIcon size={16} className="text-blue-500"/> : (d.fileType === 'pdf' ? '📕' : '📄')}
-                                                 </div>
-                                                 <div className="flex-1 min-w-0">
-                                                     <h5 className="text-xs font-bold text-gray-800 dark:text-gray-200 line-clamp-2 group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors">{d.title}</h5>
-                                                     <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{d.downloads} lượt tải</p>
-                                                 </div>
-                                             </Link>
-                                         ))}
-                                     </div>
-                                 </div>
-                             )}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <h5 className="text-xs font-bold text-gray-800 dark:text-gray-200 line-clamp-2 group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors">{d.title}</h5>
+                                                    <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{d.downloads} lượt tải</p>
+                                                </div>
+                                            </Link>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                          </div>
                     </aside>
