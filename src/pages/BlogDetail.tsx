@@ -1,18 +1,20 @@
 import React, { useEffect, useState } from 'react';
 // @ts-ignore
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { BlogPost, BlogComment, User, AdConfig } from '../../types';
-import { fetchPostBySlug, fetchRelatedPosts, fetchBlogComments, addBlogComment, fetchPublishedPosts, fetchBlogCategories } from '../../services/blog';
-import { getAdConfig, subscribeToAdConfig } from '../../services/ads'; 
-import { loginAnonymously } from '../../services/auth';
+// SỬA: ../ thay vì ../../
+import { BlogPost, BlogComment, User, AdConfig } from '../types';
+import { fetchPostBySlug, fetchRelatedPosts, fetchBlogComments, addBlogComment, fetchPublishedPosts, fetchBlogCategories } from '../services/blog';
+import { getAdConfig, subscribeToAdConfig } from '../services/ads'; 
+import { loginAnonymously } from '../services/auth';
 import { 
   Loader2, ArrowLeft, Calendar, Share2, MessageCircle, Send, 
   ExternalLink, ChevronRight, Eye, Home, Clock, 
   TrendingUp, Megaphone 
 } from 'lucide-react';
-import { ShareModal } from '../../components/ShareModal';
-import { ExpertPromoBox } from '../../components/ExpertPromoBox';
-import { SidebarAd } from '../../components/ads/SidebarAd'; // ✅ Import Component Mới
+// SỬA: ../ thay vì ../../
+import { ShareModal } from '../components/ShareModal';
+import { ExpertPromoBox } from '../components/ExpertPromoBox';
+import { SidebarAd } from '../components/ads/SidebarAd'; 
 
 // --- CONSTANTS ---
 const PAGE_SIZE = 5;
