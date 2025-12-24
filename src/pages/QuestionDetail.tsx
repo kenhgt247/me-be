@@ -17,6 +17,7 @@ import { ShareModal } from '../components/ShareModal';
 import { loginAnonymously } from '../services/auth';
 import { uploadFile } from '../services/storage';
 import { ExpertPromoBox } from '../components/ExpertPromoBox';
+import { SidebarAd } from '../components/ads/SidebarAd'; // ✅ IMPORT COMPONENT QUẢNG CÁO MỚI
 
 // --- INTERFACES ---
 
@@ -138,40 +139,6 @@ const RichTextRenderer: React.FC<{ content: string }> = ({ content }) => {
   );
 };
 
-const QuestionDetailAd = ({ config }: { config: NonNullable<AdConfig['questionDetailAd']> }) => {
-  if (!config || !config.enabled) return null;
-  return (
-    <div className="bg-white dark:bg-dark-card rounded-2xl border border-indigo-100 dark:border-indigo-900/30 shadow-sm dark:shadow-none p-4 animate-fade-in relative overflow-hidden group hover:shadow-md transition-all">
-      <div className="absolute top-0 right-0 bg-gray-100 dark:bg-slate-700 text-gray-400 dark:text-gray-300 text-[9px] px-2 py-0.5 rounded-bl-lg font-bold tracking-wider">AD</div>
-      <a href={config.link} target="_blank" rel="noopener noreferrer" className="flex flex-col gap-3">
-        <div className="flex gap-4 items-start">
-          <div className="w-16 h-16 rounded-xl bg-gray-50 dark:bg-slate-800 shrink-0 overflow-hidden border border-gray-100 dark:border-slate-700">
-            {config.imageUrl ? (
-              <img src={config.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="ad" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-2xl">📢</div>
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase mb-0.5 flex items-center gap-1">
-              <Sparkles size={10} /> {config.sponsorName}
-            </p>
-            <h4 className="text-sm font-bold text-gray-900 dark:text-white leading-tight mb-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-2">
-              {config.title}
-            </h4>
-            <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 leading-snug">
-              {config.description}
-            </p>
-          </div>
-        </div>
-        <button className="w-full py-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 font-bold text-xs rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors flex items-center justify-center gap-1">
-          {config.ctaText} <ExternalLink size={12} />
-        </button>
-      </a>
-    </div>
-  );
-};
-
 const ReportModal: React.FC<{ isOpen: boolean; onClose: () => void; onSubmit: (reason: string) => void }> = ({ isOpen, onClose, onSubmit }) => {
   const [reason, setReason] = useState('');
   if (!isOpen) return null;
@@ -217,7 +184,7 @@ export default function QuestionDetail({
   const [sortOption, setSortOption] = useState<'best' | 'newest' | 'oldest'>('newest');
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [showFloatingInput, setShowFloatingInput] = useState(false); // ✅ NEW STATE: Kiểm soát việc hiển thị thanh input khi cuộn
+  const [showFloatingInput, setShowFloatingInput] = useState(false); 
   
   // Answer Form State
   const [newAnswer, setNewAnswer] = useState('');
@@ -262,11 +229,8 @@ export default function QuestionDetail({
     }
   }, [currentUser, question]);
 
-  // ✅ NEW EFFECT: Lắng nghe sự kiện cuộn trang
   useEffect(() => {
     const handleScroll = () => {
-      // Nếu cuộn quá 100px (người dùng vuốt lên), hiện thanh input.
-      // Nếu ở đầu trang (ít hơn 100px), ẩn đi.
       setShowFloatingInput(window.scrollY > 100);
     };
 
@@ -304,7 +268,6 @@ export default function QuestionDetail({
     return questions
       .filter(q => q.id !== question.id)
       .sort((a, b) => {
-        // Safe access to likes if it's undefined
         const likesA = Array.isArray(a.likes) ? a.likes.length : (typeof a.likes === 'number' ? a.likes : 0);
         const likesB = Array.isArray(b.likes) ? b.likes.length : (typeof b.likes === 'number' ? b.likes : 0);
         return ((b.views || 0) + likesB) - ((a.views || 0) + likesA);
@@ -341,13 +304,12 @@ export default function QuestionDetail({
 
       if (sortOption === 'newest') return timeB - timeA;
       if (sortOption === 'oldest') return timeA - timeB;
-      if (sortOption === 'best') return b.likes - a.likes; // Answers use 'likes' as number
+      if (sortOption === 'best') return b.likes - a.likes; 
       
       return timeB - timeA;
     });
   }, [question, sortOption]);
 
-  // ✅ SỬA LỖI HIỂN THỊ LIKE: Tính toán số lượng và trạng thái
   const likesCount = useMemo(() => {
       if (!question) return 0;
       return Array.isArray(question.likes) ? question.likes.length : (typeof question.likes === 'number' ? question.likes : 0);
@@ -629,8 +591,6 @@ export default function QuestionDetail({
               {/* Actions */}
               <div className="flex items-center justify-between py-3 border-t border-gray-50 dark:border-slate-800">
                 <div className="flex items-center gap-6">
-                  
-                  {/* ✅ NÚT LIKE: CHỈ HIỂN THỊ SỐ LƯỢNG */}
                   <button onClick={handleLike} className={`flex items-center gap-2 text-sm font-bold transition-all active:scale-90 ${isLiked ? 'text-red-500' : 'text-gray-500 dark:text-gray-400 hover:text-red-500'}`}>
                     <Heart size={20} className={isLiked ? "fill-red-500" : ""} />
                     <span>{likesCount > 0 ? likesCount : 'Thích'}</span>
@@ -648,7 +608,9 @@ export default function QuestionDetail({
 
             {/* 2. MOBILE AD & PROMO */}
             <div className="lg:hidden space-y-6">
-              {adConfig?.isEnabled && adConfig.questionDetailAd && <QuestionDetailAd config={adConfig.questionDetailAd} />}
+              {/* ✅ QUẢNG CÁO RANDOM MỚI CHO MOBILE */}
+              {adConfig?.isEnabled && <SidebarAd variant="minimal" />}
+              
               {!currentUser?.isExpert && <ExpertPromoBox />}
             </div>
 
@@ -696,7 +658,6 @@ export default function QuestionDetail({
                           </div>
                         </div>
                         
-                        {/* Answer Actions Menu */}
                         <div className="flex items-center gap-2">
                           {(isOwner || isAdmin) && !isBest && (
                             <button onClick={() => onMarkBestAnswer(question.id, ans.id)} className="text-gray-300 hover:text-yellow-500 transition-colors p-1" title="Chọn hay nhất"><Sparkles size={18} /></button>
@@ -728,7 +689,6 @@ export default function QuestionDetail({
                       </div>
 
                       <div className="flex items-center gap-4 border-t border-gray-50 dark:border-slate-800 pt-3 mt-2">
-                        {/* ✅ NÚT HỮU ÍCH ĐÃ SỬA: SỬA MÀU SẮC ĐỂ KHÔNG BỊ TỆP MÀU NỀN */}
                         <button 
                           onClick={() => handleToggleUseful(ans)} 
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all active:scale-95 group 
@@ -737,7 +697,6 @@ export default function QuestionDetail({
                               : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 font-medium'}`}
                         >
                           <ThumbsUp size={16} className={`group-hover:scale-110 transition-transform ${isUseful ? 'fill-current scale-110' : ''}`} /> 
-                          {/* ✅ SỬA LOGIC: Luôn hiển thị số lượng */}
                           <span className="text-xs">Hữu ích ({ans.likes || 0})</span>
                         </button>
 
@@ -787,11 +746,11 @@ export default function QuestionDetail({
                 </div>
               )}
 
-              {/* Ads */}
-              {adConfig?.isEnabled && adConfig.questionDetailAd && (
+              {/* ✅ QUẢNG CÁO RANDOM (DESKTOP) */}
+              {adConfig?.isEnabled && (
                 <div className="bg-white dark:bg-dark-card p-4 rounded-[1.5rem] border border-gray-200 dark:border-dark-border shadow-sm">
                   <h4 className="text-xs font-bold text-gray-400 uppercase mb-3 tracking-wider flex items-center gap-1"><Info size={12} /> Gợi ý cho bạn</h4>
-                  <QuestionDetailAd config={adConfig.questionDetailAd} />
+                  <SidebarAd variant="minimal" />
                 </div>
               )}
 
@@ -812,19 +771,13 @@ export default function QuestionDetail({
       </div>
 
       {/* --- FOOTER / BOTTOM SHEET INPUT --- */}
-      {/* ✅ UPDATE LOGIC:
-         - Nếu Input Đang Mở (isInputOpen): Luôn hiển thị ở bottom-0, z-60.
-         - Nếu Input Đóng:
-             - Nếu đã cuộn (showFloatingInput): Hiển thị ở bottom-[60px] (để tránh menu), z-50.
-             - Nếu chưa cuộn (ở đầu trang): Ẩn đi (translate-y-full, opacity-0) để giao diện thoáng.
-      */}
       <div 
         className={`fixed left-0 right-0 pointer-events-none flex flex-col justify-end transition-all duration-300 ease-in-out
         ${isInputOpen 
             ? 'bottom-0 z-[60] opacity-100 translate-y-0' 
             : showFloatingInput 
                 ? 'bottom-[60px] lg:bottom-0 z-50 opacity-100 translate-y-0' 
-                : 'bottom-0 opacity-0 translate-y-full' // Ẩn hoàn toàn xuống dưới
+                : 'bottom-0 opacity-0 translate-y-full' 
         }`}
       >
         <div className="max-w-6xl w-full mx-auto px-0 md:px-6">
