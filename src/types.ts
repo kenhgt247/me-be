@@ -350,70 +350,7 @@ export interface Report {
   status: 'open' | 'resolved' | 'dismissed';
 }
 
-export interface AdConfig {
-  isEnabled: boolean;
-  provider: 'adsense' | 'custom';
 
-  adsenseClientId?: string;
-  adsenseSlotId?: string;
-
-  customBannerUrl?: string;
-  customTargetUrl?: string;
-
-  frequency: number;
-
-  homeAd?: {
-    enabled: boolean;
-    frequency: number;
-    title: string;
-    content: string;
-    imageUrl: string;
-    ctaText: string;
-    link: string;
-    sponsorName: string;
-  };
-
-  sidebarAd?: {
-    enabled: boolean;
-    title: string;
-    description: string;
-    buttonText: string;
-    link: string;
-    gradient: string;
-  };
-
-  blogFeedAd?: {
-    enabled: boolean;
-    frequency: number;
-    title: string;
-    excerpt: string;
-    imageUrl: string;
-    ctaText: string;
-    link: string;
-    sponsorName: string;
-  };
-
-  documentAd?: {
-    enabled: boolean;
-    frequency: number;
-    title: string;
-    description: string;
-    imageUrl: string;
-    ctaText: string;
-    link: string;
-    sponsorName: string;
-  };
-
-  questionDetailAd?: {
-    enabled: boolean;
-    title: string;
-    description: string;
-    imageUrl: string;
-    ctaText: string;
-    link: string;
-    sponsorName: string;
-  };
-}
 
 export interface BlogCategory {
   id: string;

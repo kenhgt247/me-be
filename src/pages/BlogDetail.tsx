@@ -3,16 +3,16 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { BlogPost, BlogComment, User, AdConfig } from '../types';
 import { fetchPostBySlug, fetchRelatedPosts, fetchBlogComments, addBlogComment, fetchPublishedPosts, fetchBlogCategories } from '../services/blog';
-import { getAdConfig } from '../services/ads'; 
+import { getAdConfig, subscribeToAdConfig } from '../services/ads'; 
 import { loginAnonymously } from '../services/auth';
 import { 
   Loader2, ArrowLeft, Calendar, Share2, MessageCircle, Send, 
   ExternalLink, ChevronRight, Eye, Home, Clock, 
   TrendingUp, Megaphone 
 } from 'lucide-react';
-import { AuthModal } from '../components/AuthModal';
 import { ShareModal } from '../components/ShareModal';
 import { ExpertPromoBox } from '../components/ExpertPromoBox';
+import { SidebarAd } from '../components/ads/SidebarAd'; // Import Component Mới
 
 // --- CONSTANTS ---
 const PAGE_SIZE = 5;
@@ -41,8 +41,6 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
   const [relatedPosts, setRelatedPosts] = useState<BlogPost[]>([]);
   const [mostViewedPosts, setMostViewedPosts] = useState<BlogPost[]>([]);
   const [comments, setComments] = useState<BlogCommentWithUI[]>([]);
-  
-  // Cấu hình quảng cáo
   const [adConfig, setAdConfig] = useState<AdConfig | null>(null);
   
   const [loading, setLoading] = useState(true);
@@ -66,7 +64,6 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
       const postData = await fetchPostBySlug(slug);
       
       if (postData) {
-        // Fetch dữ liệu song song
         const [categories, related, initialComments, trending, adSettings] = await Promise.all([
             fetchBlogCategories(),
             fetchRelatedPosts(postData.id, postData.categoryId),
@@ -187,47 +184,36 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
                     </div>
                 )}
 
-              {/* RICH TEXT CONTENT - PHIÊN BẢN TO & RÕ (BIG FONT) */}
-<article className="prose prose-xl md:prose-2xl max-w-none 
-    font-sans font-medium {/* Tăng độ đậm lên Medium cho dễ đọc */}
-    text-gray-900 dark:text-gray-50 {/* Màu chữ đen đậm */}
-    
-    prose-headings:font-bold prose-headings:text-gray-900 dark:prose-headings:text-white 
-    prose-headings:mt-12 prose-headings:mb-6
-    
-    prose-p:text-gray-800 dark:prose-p:text-gray-100 
-    prose-p:leading-loose {/* Giãn dòng rộng cho thoáng mắt */}
-    prose-p:mb-8 prose-p:text-justify
-    
-    prose-a:text-blue-700 dark:prose-a:text-blue-400 prose-a:font-bold prose-a:no-underline hover:prose-a:underline
-    
-    prose-img:rounded-3xl prose-img:shadow-md prose-img:my-10 prose-img:w-full
-    
-    prose-li:text-gray-800 dark:prose-li:text-gray-100 prose-li:marker:text-blue-600
-    
-    prose-strong:text-black dark:prose-strong:text-white prose-strong:font-black
-    
-    prose-blockquote:border-l-8 prose-blockquote:border-blue-500 prose-blockquote:bg-blue-50 dark:prose-blockquote:bg-blue-900/20 
-    prose-blockquote:py-4 prose-blockquote:px-6 prose-blockquote:rounded-r-2xl prose-blockquote:not-italic 
-    prose-blockquote:text-xl prose-blockquote:font-semibold prose-blockquote:text-blue-900 dark:prose-blockquote:text-blue-100
-">
-    
-    {/* Excerpt - Sapo bài viết */}
-    <div className="text-xl md:text-2xl text-gray-800 dark:text-gray-100 font-sans font-semibold italic mb-12 leading-relaxed border-l-8 border-orange-400 pl-6 bg-orange-50 dark:bg-orange-900/10 py-6 pr-6 rounded-r-3xl">
-        {post.excerpt}
-    </div>
+              {/* RICH TEXT CONTENT */}
+              <article className="prose prose-xl md:prose-2xl max-w-none 
+                  font-sans font-medium text-gray-900 dark:text-gray-50
+                  prose-headings:font-bold prose-headings:text-gray-900 dark:prose-headings:text-white 
+                  prose-headings:mt-12 prose-headings:mb-6
+                  prose-p:text-gray-800 dark:prose-p:text-gray-100 
+                  prose-p:leading-loose prose-p:mb-8 prose-p:text-justify
+                  prose-a:text-blue-700 dark:prose-a:text-blue-400 prose-a:font-bold prose-a:no-underline hover:prose-a:underline
+                  prose-img:rounded-3xl prose-img:shadow-md prose-img:my-10 prose-img:w-full
+                  prose-li:text-gray-800 dark:prose-li:text-gray-100 prose-li:marker:text-blue-600
+                  prose-strong:text-black dark:prose-strong:text-white prose-strong:font-black
+                  prose-blockquote:border-l-8 prose-blockquote:border-blue-500 prose-blockquote:bg-blue-50 dark:prose-blockquote:bg-blue-900/20 
+                  prose-blockquote:py-4 prose-blockquote:px-6 prose-blockquote:rounded-r-2xl prose-blockquote:not-italic 
+                  prose-blockquote:text-xl prose-blockquote:font-semibold prose-blockquote:text-blue-900 dark:prose-blockquote:text-blue-100
+              ">
+                  {/* Excerpt */}
+                  <div className="text-xl md:text-2xl text-gray-800 dark:text-gray-100 font-sans font-semibold italic mb-12 leading-relaxed border-l-8 border-orange-400 pl-6 bg-orange-50 dark:bg-orange-900/10 py-6 pr-6 rounded-r-3xl">
+                      {post.excerpt}
+                  </div>
 
-    {/* Youtube Video */}
-    {post.youtubeUrl && (
-        <div className="my-12 rounded-3xl overflow-hidden aspect-video bg-black shadow-xl ring-4 ring-gray-100 dark:ring-gray-700">
-            <iframe src={`https://www.youtube.com/embed/${getYoutubeId(post.youtubeUrl)}`} className="w-full h-full border-none" allowFullScreen />
-        </div>
-    )}
+                  {/* Youtube */}
+                  {post.youtubeUrl && (
+                      <div className="my-12 rounded-3xl overflow-hidden aspect-video bg-black shadow-xl ring-4 ring-gray-100 dark:ring-gray-700">
+                          <iframe src={`https://www.youtube.com/embed/${getYoutubeId(post.youtubeUrl)}`} className="w-full h-full border-none" allowFullScreen />
+                      </div>
+                  )}
 
-    {/* HTML Content */}
-    <div dangerouslySetInnerHTML={{ __html: post.content }} />
-</article>
-                {/* ------------------------------------------- */}
+                  {/* HTML Content */}
+                  <div dangerouslySetInnerHTML={{ __html: post.content }} />
+              </article>
 
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-8 border-t border-b border-gray-100 dark:border-dark-border mt-8 mb-12">
                      {post.sourceUrl ? <a href={post.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-base font-bold text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"><ExternalLink size={18} /> Nguồn tham khảo</a> : <span></span>}
@@ -276,6 +262,7 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
                             <ExpertPromoBox />
                         </div>
                     )}
+                    
                     {/* 1. MOST VIEWED */}
                     {mostViewedPosts.length > 0 && (
                         <div className="bg-white dark:bg-dark-card rounded-3xl p-6 border border-gray-100 dark:border-dark-border shadow-sm">
@@ -297,45 +284,9 @@ export const BlogDetail: React.FC<{ currentUser: User; onOpenAuth: () => void }>
                         </div>
                     )}
 
-                    {/* 2. DYNAMIC AD BANNER */}
-                    {adConfig?.isEnabled && adConfig.sidebarAd?.enabled && (
-                        <div className={`relative overflow-hidden rounded-3xl bg-gradient-to-br ${adConfig.sidebarAd.gradient} p-6 text-white shadow-lg text-center animate-fade-in`}>
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-white opacity-10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2"></div>
-                            <div className="relative z-10 flex flex-col items-center">
-                                <span className="bg-white/20 text-[10px] font-bold px-2 py-0.5 rounded uppercase mb-3 border border-white/20">Quảng cáo</span>
-                                <Megaphone size={32} className="mb-3 animate-bounce" />
-                                <h4 className="font-bold text-lg mb-1">{adConfig.sidebarAd.title}</h4>
-                                <p className="text-xs text-white/90 mb-4 px-2">{adConfig.sidebarAd.description}</p>
-                                <a 
-                                    href={adConfig.sidebarAd.link} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    className="bg-white text-gray-900 px-6 py-2 rounded-full text-xs font-bold hover:bg-opacity-90 transition-colors w-full shadow-sm block"
-                                >
-                                    {adConfig.sidebarAd.buttonText}
-                                </a>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* 3. RELATED POSTS */}
-                    {relatedPosts.length > 0 && (
-                        <div className="bg-gray-50/50 dark:bg-dark-card rounded-3xl p-6 border border-gray-100 dark:border-dark-border">
-                             <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-6 flex items-center gap-2"><span className="w-1 h-5 bg-blue-600 rounded-full"></span> Có thể mẹ quan tâm</h3>
-                            <div className="flex flex-col gap-4">
-                                {relatedPosts.map(p => (
-                                    <Link to={`/blog/${p.slug}`} key={p.id} className="group flex gap-3 items-center bg-white dark:bg-slate-800 p-2 rounded-xl border border-gray-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-all">
-                                        <div className="w-16 h-16 rounded-lg bg-gray-100 dark:bg-slate-700 overflow-hidden shrink-0 flex items-center justify-center">
-                                            {p.coverImageUrl ? <img src={p.coverImageUrl} className="w-full h-full object-cover" /> : <div className="text-xl">{p.iconEmoji}</div>}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <h4 className="font-bold text-xs text-gray-900 dark:text-gray-200 leading-snug group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2 mb-1">{p.title}</h4>
-                                            <span className="text-[10px] text-gray-400 dark:text-gray-500">{new Date(p.createdAt).toLocaleDateString('vi-VN')}</span>
-                                        </div>
-                                    </Link>
-                                ))}
-                            </div>
-                        </div>
+                    {/* 2. DYNAMIC AD BANNER (TỰ ĐỘNG RANDOM) */}
+                    {adConfig?.isEnabled && (
+                        <SidebarAd variant="gradient" />
                     )}
                 </div>
             </aside>
