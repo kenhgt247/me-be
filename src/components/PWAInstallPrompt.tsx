@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Download, Share, X, PlusSquare, Smartphone } from 'lucide-react';
 
@@ -8,107 +7,111 @@ export const PWAInstallPrompt: React.FC = () => {
   const [isIOS, setIsIOS] = useState(false);
 
   useEffect(() => {
-    // Check if already in standalone mode
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+    // 1. Kiểm tra nếu đã ở chế độ App (Standalone) thì không hiện nữa
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches 
+                         || (window.navigator as any).standalone === true;
     if (isStandalone) return;
 
-    // Detect iOS
+    // 2. Kiểm tra nếu người dùng đã tắt prompt trong vòng 24h qua
+    const dismissedAt = localStorage.getItem('pwaPromptDismissed');
+    if (dismissedAt) {
+      const isRecentlyDismissed = Date.now() - parseInt(dismissedAt, 10) < 24 * 60 * 60 * 1000;
+      if (isRecentlyDismissed) return;
+    }
+
+    // 3. Xử lý logic cho Android & Desktop (Chrome/Edge)
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      // Hiển thị sau 5 giây để người dùng kịp nhìn qua nội dung trang web
+      setTimeout(() => setShowPrompt(true), 5000);
+    };
+
+    // 4. Xử lý logic cho iOS (Safari không hỗ trợ beforeinstallprompt)
     const userAgent = window.navigator.userAgent.toLowerCase();
     const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
     setIsIOS(isIosDevice);
 
-    // Handle Android/Desktop Install Prompt
-    const handler = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      // Show prompt after a small delay for better UX
-      setTimeout(() => setShowPrompt(true), 3000);
-    };
-
-    // Handle App Installed Event
-    const installedHandler = () => {
-      setShowPrompt(false);
-      setDeferredPrompt(null);
-    };
-
-    window.addEventListener('beforeinstallprompt', handler);
-    window.addEventListener('appinstalled', installedHandler);
-
-    // Show iOS prompt logic (if not standalone)
     if (isIosDevice) {
-       // Check if we've shown it recently to avoid annoyance
-       const hasShown = localStorage.getItem('iosInstallPromptShown');
-       const lastShownTime = hasShown ? parseInt(hasShown, 10) : 0;
-       const now = Date.now();
-       
-       // Show again after 24 hours if dismissed
-       if (!hasShown || (now - lastShownTime > 24 * 60 * 60 * 1000)) {
-         setTimeout(() => setShowPrompt(true), 3000);
-       }
+      setTimeout(() => setShowPrompt(true), 5000);
     }
 
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    
+    // Tự động ẩn khi đã cài đặt thành công
+    window.addEventListener('appinstalled', () => {
+      setShowPrompt(false);
+      setDeferredPrompt(null);
+    });
+
     return () => {
-      window.removeEventListener('beforeinstallprompt', handler);
-      window.removeEventListener('appinstalled', installedHandler);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
   }, []);
 
   const handleInstallClick = async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        setDeferredPrompt(null);
-        setShowPrompt(false);
-      }
+    if (!deferredPrompt) return;
+    
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+      setShowPrompt(false);
     }
   };
 
   const handleClose = () => {
     setShowPrompt(false);
-    if (isIOS) {
-        localStorage.setItem('iosInstallPromptShown', Date.now().toString());
-    }
+    // Lưu thời điểm tắt để 24h sau mới hiện lại
+    localStorage.setItem('pwaPromptDismissed', Date.now().toString());
   };
 
   if (!showPrompt) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[60] p-4 pb-safe-bottom animate-fade-in">
-      <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100 p-5 md:max-w-md md:mx-auto md:mb-4 relative overflow-hidden">
-        {/* Decorative Background */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary/10 to-secondary/20 rounded-full blur-3xl -z-10 translate-x-1/3 -translate-y-1/3"></div>
+    <div className="fixed bottom-0 left-0 right-0 z-[100] p-4 pb-safe-bottom animate-in fade-in slide-in-from-bottom duration-500">
+      <div className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.15)] border border-gray-200 dark:border-gray-800 p-5 md:max-w-md md:mx-auto relative overflow-hidden">
         
+        {/* Nút đóng */}
         <button 
-            onClick={handleClose}
-            className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 p-1 bg-gray-50 rounded-full transition-colors"
+          onClick={handleClose}
+          className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1.5 bg-gray-100 dark:bg-gray-800 rounded-full transition-colors"
         >
-            <X size={18} />
+          <X size={16} />
         </button>
 
-        <div className="flex items-start gap-4 pr-6">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-primary to-[#26A69A] flex items-center justify-center text-white shadow-lg shrink-0 border border-white/20">
-             <Smartphone size={28} />
+        <div className="flex items-start gap-4 pr-4">
+          {/* App Icon Mockup */}
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#26A69A] to-[#4DB6AC] flex items-center justify-center text-white shadow-lg shrink-0 border border-white/20">
+            <Smartphone size={28} />
           </div>
+
           <div className="flex-1">
-            <h3 className="font-bold text-textDark text-lg leading-tight mb-1">Cài đặt Ứng dụng</h3>
-            <p className="text-sm text-textGray leading-snug mb-3">
-              Thêm <strong>Asking.vn</strong> vào màn hình chính để truy cập nhanh và mượt mà hơn.
+            <h3 className="font-bold text-gray-900 dark:text-white text-lg leading-tight mb-1">
+              Cài đặt Asking.vn
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 leading-snug mb-4">
+              Trải nghiệm mượt mà, truy cập nhanh từ màn hình chính và tiết kiệm dữ liệu.
             </p>
             
             {isIOS ? (
-              <div className="text-sm bg-gray-50 p-3 rounded-xl border border-gray-100">
-                <p className="flex items-center gap-2 mb-2 text-textDark font-medium">
-                  1. Nhấn nút <Share size={16} className="text-blue-500" /> bên dưới
+              /* Hướng dẫn riêng cho iOS */
+              <div className="text-sm bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl border border-blue-100 dark:border-blue-800/30">
+                <p className="flex items-center gap-2 mb-2 text-blue-900 dark:text-blue-200 font-medium">
+                  1. Nhấn nút <Share size={16} className="text-blue-500" /> ở thanh menu Safari
                 </p>
-                <p className="flex items-center gap-2 text-textDark font-medium">
-                  2. Chọn <span className="inline-flex items-center gap-1 bg-white border border-gray-200 px-1.5 py-0.5 rounded text-xs text-gray-700 font-bold"><PlusSquare size={14} /> Thêm vào MH chính</span>
+                <p className="flex items-center gap-2 text-blue-900 dark:text-blue-200 font-medium">
+                  2. Chọn <span className="inline-flex items-center gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-1.5 py-0.5 rounded text-[11px] font-bold">
+                    <PlusSquare size={12} /> Thêm vào MH chính
+                  </span>
                 </p>
               </div>
             ) : (
+              /* Nút cài đặt cho Android/PC */
               <button 
                 onClick={handleInstallClick}
-                className="w-full bg-textDark hover:bg-black text-white px-5 py-3 rounded-xl font-bold text-sm shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                className="w-full bg-[#26A69A] hover:bg-[#1f8c82] text-white px-5 py-3 rounded-xl font-bold text-sm shadow-md active:scale-[0.97] transition-all flex items-center justify-center gap-2"
               >
                 <Download size={18} />
                 Cài đặt ngay
