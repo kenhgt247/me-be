@@ -187,3 +187,28 @@ export const fetchAllDocuments = async () => {
   const snapshot = await getDocs(collection(db, 'documents'));
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
+// --- PHỤC HỒI HÀM CHO USER MANAGEMENT ---
+
+export const fetchAllUsers = async (): Promise<User[]> => {
+  if (!db) return [];
+  try {
+    const q = query(collection(db, 'users'), orderBy('joinedAt', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User));
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    return [];
+  }
+};
+
+export const updateUserInfo = async (userId: string, data: { name?: string; bio?: string; specialty?: string }) => {
+  if (!db) return;
+  try {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, data);
+    return true;
+  } catch (error) {
+    console.error("Lỗi khi update user info:", error);
+    throw error;
+  }
+};
