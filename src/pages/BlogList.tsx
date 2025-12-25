@@ -10,8 +10,8 @@ import {
 } from 'lucide-react';
 import { ExpertPromoBox } from '../components/ExpertPromoBox';
 import { BlogGridAd } from '../components/ads/BlogGridAd';
-import { BlogCard } from '../components/blog/BlogCard'; 
-import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
+import { SidebarAd } from '../components/ads/SidebarAd';
+import { BlogCard } from '../components/blog/BlogCard'; // Import component mới
 
 const PAGE_SIZE = 9;
 
@@ -38,13 +38,6 @@ const BlogSkeleton = () => (
 export const BlogList: React.FC = () => {
   const [categories, setCategories] = useState<BlogCategory[]>([]);
   const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [trendingPosts, setTrendingPosts] = useState<BlogPost[]>([]);
-  
-  // State Phân trang (LOGIC MỚI - GIỮ CÁI NÀY)
-  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-
   const [adConfig, setAdConfig] = useState<AdConfig | null>(null);
   const [activeCat, setActiveCat] = useState<string>('all');
   const [loading, setLoading] = useState(true);
@@ -54,7 +47,6 @@ export const BlogList: React.FC = () => {
   const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Initial Load
   useEffect(() => {
     const unsubAuth = subscribeToAuthChanges(user => setCurrentUser(user));
     const unsubAd = subscribeToAdConfig(setAdConfig);
@@ -86,24 +78,6 @@ export const BlogList: React.FC = () => {
     return () => { unsubAuth(); unsubAd(); };
   }, []);
 
-  // Load More Handler (LOGIC MỚI - GIỮ CÁI NÀY)
-  const handleLoadMore = async () => {
-    if (isLoadingMore || !hasMore || !lastDoc) return;
-    
-    setIsLoadingMore(true);
-    try {
-        const { posts: newPosts, lastDoc: newLastDoc, hasMore: newHasMore } = await fetchPostsPaginated(activeCat, lastDoc, PAGE_SIZE);
-        setPosts(prev => [...prev, ...newPosts]);
-        setLastDoc(newLastDoc);
-        setHasMore(newHasMore);
-    } catch (error) {
-        console.error("Lỗi tải thêm:", error);
-    } finally {
-        setIsLoadingMore(false);
-    }
-  };
-
-  // Filter Handler (LOGIC MỚI - GIỮ CÁI NÀY)
   const handleFilter = async (catId: string) => {
     if (catId === activeCat) return;
 
@@ -136,9 +110,17 @@ export const BlogList: React.FC = () => {
 
   const isExpertOrAdmin = currentUser && (currentUser.isExpert || currentUser.isAdmin);
 
-  const visiblePosts = searchTerm 
-    ? posts.filter(post => post.title.toLowerCase().includes(searchTerm.toLowerCase()))
-    : posts;
+  const filteredPosts = posts.filter(post => 
+    post.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (post.excerpt && post.excerpt.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  const trendingPosts = useMemo(() => {
+    if (searchTerm || activeCat !== 'all') return []; 
+    return [...posts]
+        .sort((a, b) => (b.views || 0) - (a.views || 0))
+        .slice(0, 5); 
+  }, [posts, searchTerm, activeCat]);
 
   const showHero = !searchTerm && visiblePosts.length > 0 && activeCat === 'all';
   const heroPost = showHero ? visiblePosts[0] : null;
@@ -168,7 +150,7 @@ export const BlogList: React.FC = () => {
                 <div className="flex flex-col md:flex-row gap-4 items-start md:items-center pb-2">
                     <div className="relative w-full md:w-auto md:flex-1 max-w-md group shrink-0">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary transition-colors" size={20} />
-                        <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Tìm kiếm bài viết đã tải..." className="w-full pl-12 pr-10 py-3 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium text-sm text-textDark dark:text-white placeholder-gray-400 dark:placeholder-gray-500 shadow-inner" />
+                        <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Tìm kiếm kiến thức..." className="w-full pl-12 pr-10 py-3 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium text-sm text-textDark dark:text-white placeholder-gray-400 dark:placeholder-gray-500 shadow-inner" />
                         {searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"><X size={16} /></button>}
                     </div>
 
@@ -222,9 +204,23 @@ export const BlogList: React.FC = () => {
                         </div>
                         <div className="flex gap-4 overflow-x-auto no-scrollbar pb-4 snap-x -mx-4 px-4 md:mx-0 md:px-0">
                              {trendingPosts.map((post, index) => (
-                                 <div key={post.id} className="snap-start flex-shrink-0 w-72">
-                                     <BlogCard post={post} categoryName={categories.find(c => c.id === post.categoryId)?.name} />
-                                 </div>
+                                 <Link to={`/blog/${post.slug}`} key={post.id} className="snap-start flex-shrink-0 w-72 bg-white dark:bg-dark-card rounded-[1.5rem] p-3 border border-gray-100 dark:border-dark-border shadow-sm dark:shadow-none hover:shadow-md transition-all active:scale-95 group relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 bg-gray-900/10 dark:bg-white/5 text-gray-900 dark:text-white font-black text-[4rem] leading-none -mt-2 -mr-2 opacity-10 select-none pointer-events-none group-hover:scale-110 transition-transform">{index + 1}</div>
+                                    <div className="flex gap-3">
+                                        <div className="w-20 h-20 rounded-xl bg-gray-100 dark:bg-slate-700 shrink-0 overflow-hidden relative">
+                                            {post.coverImageUrl ? (
+                                                <img src={post.coverImageUrl} className="w-full h-full object-cover" loading="lazy" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center text-2xl bg-blue-50 dark:bg-slate-800">{post.iconEmoji}</div>
+                                            )}
+                                            <div className="absolute top-1 left-1 bg-black/50 backdrop-blur-sm text-white text-[10px] font-bold px-1.5 rounded-md">#{index + 1}</div>
+                                        </div>
+                                        <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                            <div className="text-[10px] font-bold text-orange-500 dark:text-orange-400 uppercase tracking-wide mb-1 flex items-center gap-1"><Eye size={10} /> {post.views || 0} lượt xem</div>
+                                            <h4 className="font-bold text-sm text-gray-800 dark:text-white line-clamp-2 leading-snug group-hover:text-primary transition-colors">{post.title}</h4>
+                                        </div>
+                                    </div>
+                                 </Link>
                              ))}
                         </div>
                      </div>
@@ -236,7 +232,7 @@ export const BlogList: React.FC = () => {
                  </div>
                  
                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 animate-slide-up" style={{ animationDelay: '0.1s' }}>
-                     {gridPosts.map((post, index) => {
+                     {visibleGridPosts.map((post, index) => {
                          const freq = adConfig?.frequencies?.blog || 4;
                          const shouldShowAd = adConfig?.isEnabled && (index + 1) % freq === 0;
                          const categoryName = categories.find(c => c.id === post.categoryId)?.name;
@@ -253,13 +249,8 @@ export const BlogList: React.FC = () => {
                  {/* LOAD MORE BUTTON */}
                  {hasMore && !searchTerm && (
                     <div className="flex justify-center mt-12 pb-8">
-                        <button 
-                            onClick={handleLoadMore} 
-                            disabled={isLoadingMore}
-                            className="px-8 py-3 rounded-full bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border text-sm font-bold text-gray-900 dark:text-white shadow-sm hover:bg-gray-50 dark:hover:bg-slate-700 active:scale-95 transition-all flex items-center gap-2 group disabled:opacity-70"
-                        >
-                           {isLoadingMore ? <Loader2 className="animate-spin" size={16} /> : 'Xem thêm bài viết'} 
-                           {!isLoadingMore && <ArrowDown size={16} className="group-hover:translate-y-1 transition-transform" />}
+                        <button onClick={() => setVisibleCount(prev => prev + PAGE_SIZE)} className="px-8 py-3 rounded-full bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border text-sm font-bold text-gray-900 dark:text-white shadow-sm hover:bg-gray-50 dark:hover:bg-slate-700 active:scale-95 transition-all flex items-center gap-2 group">
+                           Xem thêm bài viết <ArrowDown size={16} className="group-hover:translate-y-1 transition-transform" />
                         </button>
                     </div>
                  )}

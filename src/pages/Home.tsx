@@ -2,17 +2,15 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Search, Plus, X, Sparkles, Clock, Flame, MessageSquareOff, 
-  BookOpen, FileText, ShieldCheck, Download, Loader2, ArrowDown
+  BookOpen, FileText, ShieldCheck, Download
 } from 'lucide-react';
 import { Question, User, BlogPost, Document, AdConfig, Story } from '../types';
 import { subscribeToAdConfig } from '../services/ads';
 import { fetchPublishedPosts } from '../services/blog';
 import { fetchDocuments } from '../services/documents';
 import { fetchStories } from '../services/stories';
-import { fetchQuestionsPaginated } from '../services/db'; 
-import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 
-// --- IMPORT CÁC COMPONENT ---
+// --- IMPORT CÁC COMPONENT ĐÃ TÁCH (Sạch đẹp!) ---
 import { QuestionCard } from '../components/QuestionCard';
 import { FeedAd } from '../components/ads/FeedAd';
 import { AdBanner } from '../components/AdBanner'; 
@@ -23,15 +21,14 @@ import { SearchTabs } from '../components/common/SearchTabs';
 import { removeVietnameseTones } from '../utils/textUtils';
 
 const DEFAULT_AVATAR = "https://cdn-icons-png.flaticon.com/512/3177/3177440.png";
-const PAGE_SIZE = 10; 
+const PAGE_SIZE = 20;
 
 export interface HomeProps {
   categories: string[];
   currentUser: User | null;
 }
 
-export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
-  // State Filter
+export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }) => {
   const [activeCategory, setActiveCategory] = useState<string>('Tất cả');
   const [viewFilter, setViewFilter] = useState<'newest' | 'active' | 'unanswered'>('newest');
   
@@ -195,6 +192,7 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
 
   return (
     <div className="space-y-4 animate-fade-in min-h-screen">
+      {/* 0. MODALS (Đã thay bằng component mới) */}
       {activeStory && <StoryViewer story={activeStory} currentUser={currentUser} onClose={() => setActiveStory(null)} />}
       {showCreateStory && currentUser && <CreateStoryModal currentUser={currentUser} onClose={() => setShowCreateStory(false)} onSuccess={handleStoryCreated} />}
 
@@ -210,7 +208,7 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
       </div>
 
       {debouncedQuery ? (
-        // --- SEARCH RESULTS VIEW ---
+        // --- SEARCH RESULTS VIEW (Dùng Component Mới) ---
         <div className="animate-slide-up space-y-4">
             <SearchTabs activeTab={searchTab} onChange={setSearchTab} counts={{ questions: searchResults.questions.length, blogs: searchResults.blogs.length, docs: searchResults.docs.length, users: searchResults.users.length }} />
             <div className="px-4 md:px-0 space-y-4 pb-20">
@@ -224,7 +222,7 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
         // --- NORMAL FEED VIEW ---
         <div className="space-y-4">
           
-          {/* STORIES */}
+          {/* STORIES (Đã sửa logic hiển thị avatar để hết lỗi thỏ con) */}
           <div className="px-4 md:px-0">
               <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 snap-x">
                 <div className="snap-start shrink-0 relative group cursor-pointer w-[85px] h-[130px] md:w-[100px] md:h-[150px]" onClick={handleOpenCreateStory}>
@@ -242,8 +240,14 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
                                 <img src={story.mediaUrl} className="w-full h-full object-cover" />
                                 <div className="absolute inset-0 bg-black/20"></div>
                                 <div className="absolute top-2 left-2 w-8 h-8 rounded-full border-2 border-blue-500 overflow-hidden">
-                                    <img src={story.author?.avatar || story.userAvatar || DEFAULT_AVATAR} className="w-full h-full object-cover" onError={(e) => e.currentTarget.src = DEFAULT_AVATAR} />
+                                    {/* SỬA LỖI AVATAR THỎ Ở ĐÂY */}
+                                    <img 
+                                        src={story.author?.avatar || story.userAvatar || DEFAULT_AVATAR} 
+                                        className="w-full h-full object-cover" 
+                                        onError={(e) => e.currentTarget.src = DEFAULT_AVATAR}
+                                    />
                                 </div>
+                                {/* SỬA LỖI TÊN Ở ĐÂY */}
                                 <span className="absolute bottom-2 left-2 right-2 text-[10px] font-bold text-white truncate text-shadow">
                                     {story.author?.name || story.userName || "Người dùng"}
                                 </span>
@@ -264,7 +268,9 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
             <div className="space-y-3 pt-2 px-4 md:px-0">
               <div className="flex justify-between items-center px-1">
                 <Link to="/blog" className="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-all duration-300">
-                  <div className="p-1 bg-blue-100 dark:bg-blue-800 rounded-full group-hover:scale-110 transition-transform"><BookOpen size={16} className="text-blue-600 dark:text-blue-300" /></div>
+                  <div className="p-1 bg-blue-100 dark:bg-blue-800 rounded-full group-hover:scale-110 transition-transform">
+                      <BookOpen size={16} className="text-blue-600 dark:text-blue-300" />
+                  </div>
                   <h3 className="font-bold text-blue-700 dark:text-blue-300 text-sm uppercase tracking-wide">Kiến thức Chuyên gia</h3>
                 </Link>
                 <Link to="/blog" className="text-xs font-bold text-gray-400 hover:text-blue-500 hover:underline transition-colors">Xem tất cả</Link>
@@ -286,7 +292,9 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
             <div className="space-y-3 pt-2 px-4 md:px-0">
               <div className="flex justify-between items-center px-1">
                 <Link to="/documents" className="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/40 transition-all duration-300">
-                  <div className="p-1 bg-green-100 dark:bg-green-800 rounded-full group-hover:scale-110 transition-transform"><FileText size={16} className="text-green-600 dark:text-green-300" /></div>
+                  <div className="p-1 bg-green-100 dark:bg-green-800 rounded-full group-hover:scale-110 transition-transform">
+                       <FileText size={16} className="text-green-600 dark:text-green-300" />
+                  </div>
                   <h3 className="font-bold text-green-700 dark:text-green-300 text-sm uppercase tracking-wide">Tài liệu chia sẻ</h3>
                 </Link>
                 <Link to="/documents" className="text-xs font-bold text-gray-400 hover:text-green-500 hover:underline transition-colors">Xem tất cả</Link>
@@ -310,11 +318,7 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
           </div>
 
           <div className="px-4 md:px-0 flex items-center justify-between mt-6 mb-4">
-            <h3 className="font-bold text-lg text-textDark dark:text-dark-text flex items-center gap-2">
-              Cộng đồng hỏi đáp
-              {/* --- GIỮ CÁI NÀY: HIỂN THỊ BADGE ĐẸP --- */}
-              {renderFilterBadge()}
-            </h3>
+            <h3 className="font-bold text-lg text-textDark dark:text-dark-text flex items-center gap-2">Cộng đồng hỏi đáp <span className="text-xs font-normal px-2 py-0.5 bg-gray-100 dark:bg-slate-800 rounded-full text-gray-500">Mới nhất</span></h3>
             <div className="flex bg-white dark:bg-dark-card p-1 rounded-full border border-gray-100 dark:border-dark-border shadow-sm gap-1">
               <button onClick={() => setViewFilter('newest')} title="Mới nhất" className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${viewFilter === 'newest' ? 'bg-gray-900 text-white shadow-sm dark:bg-white dark:text-black' : 'text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800'}`}><Clock size={18} /></button>
               <button onClick={() => setViewFilter('active')} title="Sôi nổi nhất" className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${viewFilter === 'active' ? 'bg-gradient-to-tr from-orange-500 to-red-500 text-white shadow-sm shadow-orange-200 dark:shadow-none' : 'text-gray-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20'}`}><Flame size={18} fill={viewFilter === 'active' ? "currentColor" : "none"} /></button>
@@ -324,42 +328,17 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
           
           {/* FEED QUESTIONS (SỬ DỤNG DISPLAY LIST CHUẨN) */}
           <div className="px-4 md:px-0 space-y-4 pb-10">
-              {isInitialLoading ? (
-                  // Loading Skeleton
-                  <div className="space-y-4">
-                      {[1,2,3].map(i => <div key={i} className="h-40 bg-white dark:bg-dark-card rounded-2xl animate-pulse" />)}
-                  </div>
-              ) : displayList.length === 0 ? (
-                  <div className="text-center py-10 text-gray-500">Chưa có câu hỏi nào.</div>
-              ) : (
-                  <>
-                      {/* Hiển thị danh sách câu hỏi */}
-                      {displayList.map((q, index) => {
-                          const frequency = adConfig?.frequencies?.home || 5;
-                          const shouldShowAd = adConfig?.isEnabled && (index + 1) % frequency === 0;
-                          return (
-                              <React.Fragment key={q.id}>
-                                  {shouldShowAd && (adConfig.provider === 'adsense' ? <AdBanner placement="home" /> : <FeedAd />)}
-                                  <QuestionCard q={q} currentUser={currentUser} />
-                              </React.Fragment>
-                          );
-                      })}
-
-                      {/* NÚT TẢI THÊM */}
-                      {hasMore && !debouncedQuery && (
-                          <div className="flex justify-center pt-2">
-                              <button 
-                                  onClick={handleLoadMore} 
-                                  disabled={isLoadingMore}
-                                  className="px-6 py-2.5 rounded-full bg-white dark:bg-dark-card border border-gray-200 text-sm font-bold text-textDark dark:text-dark-text shadow-sm hover:bg-gray-50 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50"
-                              >
-                                  {isLoadingMore ? <Loader2 className="animate-spin" size={16}/> : 'Xem thêm câu hỏi'}
-                                  {!isLoadingMore && <ArrowDown size={16}/>}
-                              </button>
-                          </div>
-                      )}
-                  </>
-              )}
+              {paginatedList.map((q, index) => {
+                  const frequency = adConfig?.frequencies?.home || 5;
+                  const shouldShowAd = adConfig?.isEnabled && (index + 1) % frequency === 0;
+                  return (
+                      <React.Fragment key={q.id}>
+                          {shouldShowAd && (adConfig.provider === 'adsense' ? <AdBanner placement="home" /> : <FeedAd />)}
+                          <QuestionCard q={q} currentUser={currentUser} />
+                      </React.Fragment>
+                  );
+              })}
+              {paginatedList.length < displayList.length && (<div className="flex justify-center pt-2"><button onClick={() => setVisibleCount(prev => prev + 20)} className="px-6 py-2.5 rounded-full bg-white dark:bg-dark-card border border-gray-200 text-sm font-bold text-textDark dark:text-dark-text shadow-sm hover:bg-gray-50 active:scale-95 transition-all">Xem thêm câu hỏi</button></div>)}
           </div>
         </div>
       )}
@@ -368,3 +347,4 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
 };
 
 export default Home;
+
