@@ -5,7 +5,7 @@ import {
     Share2, Users, UserPlus, UserCheck, ArrowLeft, Loader2, LogIn, X, Save, 
     Image as ImageIcon, Camera, AtSign 
 } from 'lucide-react';
-// @ts-ignore
+
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { followUser, unfollowUser, sendNotification } from '../services/db';
 import { db } from '../firebaseConfig';

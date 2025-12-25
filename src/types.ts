@@ -1,6 +1,6 @@
 // =============================================================================
 //  TYPES (CORE SYSTEM + GAME ENGINE V2 + OTHER MODULES)
-//  Safe upgrade: Backward-compatible (only adds OPTIONAL fields)
+//  Safe upgrade: Backward-compatible
 // =============================================================================
 
 import type { Timestamp } from 'firebase/firestore';
@@ -92,7 +92,7 @@ export interface Category {
   name: string;
   slug: string;
 
-  icon?: string;  // VD: 'Baby', 'Heart', 'Book' (hoặc emoji)
+  icon?: string;   // VD: 'Baby', 'Heart', 'Book' (hoặc emoji)
   color?: string; // VD: 'text-pink-600'
   bg?: string;    // VD: 'bg-pink-50'
 }
@@ -155,13 +155,17 @@ export interface ChatSession {
   deletedFor?: { [uid: string]: boolean };
 }
 
+// --- CẬP NHẬT QUAN TRỌNG: STORY VỚI AUTHOR OBJECT ---
 export interface Story {
   id: string;
 
-  userId: string;
-  userName: string;
-  userAvatar: string;
-  userIsExpert?: boolean;
+  // Gom nhóm thông tin tác giả để đồng bộ với logic Chat/Message
+  author: {
+    id: string;
+    name: string;
+    avatar: string;
+    isExpert: boolean;
+  };
 
   mediaUrl: string;
   mediaType: 'image' | 'video';
@@ -173,6 +177,8 @@ export interface Story {
 
   viewers: string[];
   likes: string[];
+  
+  views?: number; // Optional views count
 }
 
 // =============================================================================
@@ -181,7 +187,6 @@ export interface Story {
 
 export type GameCategory = string;
 
-// Giữ nguyên các loại game đang dùng
 export type GameType =
   | 'quiz'       // Trắc nghiệm
   | 'flashcard'  // Thẻ học (Hình + Tiếng)
@@ -200,82 +205,56 @@ export interface CategoryDef {
   isDefault?: boolean;
 }
 
-// Tài sản trong game (đề bài / đáp án / vật thể)
 export interface GameAsset {
   id: string;
-
   text?: string;
   imageUrl?: string;
   audioUrl?: string;
-
-  // optional UI
   color?: string;
 }
 
-// Cấu hình âm thanh & hiệu ứng
 export interface GameConfig {
   bgMusicUrl?: string;
   correctSoundUrl?: string;
   wrongSoundUrl?: string;
-
   successConfetti?: boolean;
   mascotGuide?: boolean;
 }
 
 // ===============================
-// GAMEPLAY UPGRADE (BACKWARD-SAFE)
+// GAMEPLAY UPGRADE
 // ===============================
 
-// Mechanic = "cơ chế chơi" theo từng level.
-// -> OPTIONAL để không phá level cũ.
 export type GameMechanic =
-  | 'quiz'          // bấm chọn đáp án đúng
-  | 'flashcard'     // học thẻ
-  | 'memory_match'  // lật hình ghép đôi
-  | 'odd_one_out'   // tìm cái sai
-  | 'tap_sequence'  // bấm theo thứ tự
-  | 'drag_drop';    // kéo thả (level-based)
+  | 'quiz'          
+  | 'flashcard'     
+  | 'memory_match'  
+  | 'odd_one_out'   
+  | 'tap_sequence'  
+  | 'drag_drop';    
 
-// Dữ liệu một màn chơi (Level)
-// NOTE: giữ nguyên fields hiện có để code cũ không gãy.
-// NOTE: chỉ thêm fields OPTIONAL để nâng cấp.
 export interface GameLevel {
   id: string;
-
-  // đề bài (có thể là text hoặc audio)
   instruction: GameAsset;
-
-  // danh sách lựa chọn/thẻ/vật thể (quiz/flashcard/drag-drop dùng chung)
   items: GameAsset[];
 
   // ===== Legacy / Existing =====
-  correctAnswerId?: string; // cho quiz
-  pairs?: { itemId: string; targetId: string }[]; // cho kéo thả
-  dropZones?: GameAsset[]; // vùng thả
-
+  correctAnswerId?: string; 
+  pairs?: { itemId: string; targetId: string }[]; 
+  dropZones?: GameAsset[]; 
   order: number;
 
   // ===== New (Optional, V2) =====
   mechanic?: GameMechanic;
-
-  /**
-   * payload: chứa dữ liệu riêng theo mechanic mà không làm nổ interface cũ.
-   * Ví dụ memory_match:
-   * payload = { pairs: [{ pairId:'p1', a:{...}, b:{...} }, ...] }
-   */
   payload?: Record<string, any>;
-
-  // “Juice” giúp game cuốn hơn (AI có thể sinh)
-  hint?: string;        // gợi ý sau vài lần sai
-  celebrate?: string;   // câu khen riêng cho level
+  hint?: string;        
+  celebrate?: string;   
   difficulty?: 1 | 2 | 3 | 4 | 5;
 
-  // Time / attempts (optional)
   timeLimitSec?: number;
   maxMistakes?: number;
 }
 
-// Game chính (V2)
 export interface Game {
   id: string;
   title: string;
@@ -296,8 +275,8 @@ export interface Game {
   order: number;
 
   // Legacy fields
-  gameUrl?: string;      // html5 iframe
-  storyContent?: string; // story
+  gameUrl?: string;      
+  storyContent?: string; 
 
   // config V2
   config: GameConfig;
@@ -309,7 +288,6 @@ export interface Game {
   createdAt: string;
   updatedAt: string;
 
-  // Legacy compatibility
   questionCount?: number;
 }
 
@@ -320,18 +298,13 @@ export interface Game {
 export interface ExpertApplication {
   id: string;
   userId: string;
-
   fullName: string;
   phone: string;
   workplace: string;
   specialty: string;
-
   proofImages: string[];
-
   status: 'pending' | 'approved' | 'rejected';
-
   createdAt: string;
-
   reviewedBy?: string;
   rejectionReason?: string;
   reviewedAt?: string;
@@ -341,23 +314,17 @@ export interface Report {
   id: string;
   targetId: string;
   targetType: 'question' | 'answer';
-
   reason: string;
   reportedBy: string;
-
   createdAt: string;
-
   status: 'open' | 'resolved' | 'dismissed';
 }
-
-
 
 export interface BlogCategory {
   id: string;
   name: string;
   slug: string;
   iconEmoji: string;
-
   order: number;
   isActive: boolean;
 }
@@ -366,29 +333,21 @@ export interface BlogPost {
   id: string;
   title: string;
   slug: string;
-
   excerpt: string;
   content: string;
-
   coverImageUrl?: string;
   iconEmoji?: string;
-
   youtubeUrl?: string;
   sourceUrl?: string;
   sourceLabel?: string;
-
   categoryId?: string;
   tags?: string[];
-
   authorId: string;
   authorName: string;
   authorAvatar: string;
   authorIsExpert: boolean;
-
   status: 'draft' | 'published';
-
   views: number;
-
   createdAt: string;
   updatedAt: string;
 }
@@ -396,15 +355,11 @@ export interface BlogPost {
 export interface BlogComment {
   id: string;
   postId: string;
-
   content: string;
-
   authorId: string;
   authorName: string;
   authorAvatar: string;
-
   isExpert: boolean;
-
   createdAt: string;
   updatedAt: string;
 }
@@ -414,7 +369,6 @@ export interface DocumentCategory {
   name: string;
   slug: string;
   iconEmoji: string;
-
   order: number;
   isActive: boolean;
 }
@@ -423,12 +377,9 @@ export interface Document {
   id: string;
   title: string;
   slug: string;
-
   description: string;
-
   isExternal?: boolean;
   externalLink?: string;
-
   fileUrl?: string;
   fileType:
     | 'pdf'
@@ -439,24 +390,18 @@ export interface Document {
     | 'video'
     | 'link'
     | 'other';
-
   fileName?: string;
   fileSize?: number;
-
   categoryId: string;
   tags: string[];
-
   authorId: string;
   authorName: string;
   authorAvatar: string;
   authorIsExpert: boolean;
-
   views: number;
   downloads: number;
-
   rating: number;
   ratingCount: number;
-
   createdAt: string;
   updatedAt: string;
 }
@@ -464,14 +409,11 @@ export interface Document {
 export interface DocumentReview {
   id: string;
   documentId: string;
-
   userId: string;
   userName: string;
   userAvatar: string;
-
   rating: number;
   comment: string;
-
   createdAt: string;
 }
 
@@ -505,7 +447,6 @@ export const GAME_CATEGORIES = DEFAULT_GAME_CATEGORIES;
 
 export const toSlug = (title: string, id?: string) => {
   if (!title) return '';
-
   let slug = title.toLowerCase();
   slug = slug.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   slug = slug.replace(/[đĐ]/g, 'd');
@@ -513,7 +454,6 @@ export const toSlug = (title: string, id?: string) => {
   slug = slug.replace(/(\s+)/g, '-');
   slug = slug.replace(/-+/g, '-');
   slug = slug.replace(/^-+|-+$/g, '');
-
   return id ? `${slug}-${id}` : slug;
 };
 
@@ -522,3 +462,21 @@ export const getIdFromSlug = (slug: string | undefined): string => {
   const lastHyphenIndex = slug.lastIndexOf('-');
   return lastHyphenIndex !== -1 ? slug.substring(lastHyphenIndex + 1) : slug;
 };
+
+// =============================================================================
+//  ADVERTISING CONFIG (CẤU HÌNH QUẢNG CÁO)
+// =============================================================================
+
+export interface AdConfig {
+  isEnabled: boolean;
+  provider: 'adsense' | 'native' | 'custom';
+  frequencies: {
+    home: number;
+    blog: number;
+    details: number;
+    document: number; // Đã thêm document để tránh lỗi
+  };
+  googleAdSenseId?: string;
+  nativeAdImage?: string;
+  nativeAdLink?: string;
+}

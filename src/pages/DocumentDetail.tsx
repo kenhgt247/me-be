@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-// @ts-ignore
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Document, DocumentReview, User, AdConfig } from '../types';
 import { fetchDocumentBySlug, incrementDownload, fetchDocumentReviews, addDocumentReview, fetchDocuments } from '../services/documents'; 

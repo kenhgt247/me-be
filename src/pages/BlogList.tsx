@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-// @ts-ignore
 import { Link, useNavigate } from 'react-router-dom';
 import { BlogPost, BlogCategory, User, AdConfig } from '../types';
 import { fetchBlogCategories, fetchPublishedPosts } from '../services/blog';

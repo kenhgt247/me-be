@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
-// @ts-ignore
 import { Link } from 'react-router-dom';
 import { 
   Search, LayoutGrid, HelpCircle, BookOpen, FileText, User as UserIcon, 

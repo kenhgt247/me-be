@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-// @ts-ignore
+
 import ScrollToTop from './components/ScrollToTop';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { Layout } from './components/Layout';
@@ -142,7 +142,7 @@ export default function App() {
 
       <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-primary" size={40} /></div>}>
         <Routes>
-          <Route path="/admin" element={<AdminLayout currentUser={currentUser} onLogout={handleLogout} />}>
+          <Route path="/admin" element={<AdminLayout currentUser={currentUser!} onLogout={handleLogout} />}>
             <Route index element={<Dashboard />} />
             <Route path="users" element={<UserManagement />} />
             <Route path="experts" element={<ExpertApprovals />} />
@@ -157,21 +157,21 @@ export default function App() {
           </Route>
 
           <Route element={<UserLayoutWrapper />}>
-            <Route path="/" element={<Home questions={questions} categories={categories} currentUser={currentUser} />} />
-            <Route path="/ask" element={<Ask onAddQuestion={handleAddQuestion} currentUser={currentUser} categories={categories} onAddCategory={handleAddCategory} onLogin={loginWithEmail} onRegister={registerWithEmail} onGoogleLogin={loginWithGoogle} />} />
-            <Route path="/notifications" element={<Notifications currentUser={currentUser} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
-            <Route path="/messages" element={<Messages currentUser={currentUser} />} />
-            <Route path="/messages/:userId" element={<ChatDetail currentUser={currentUser} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
+            <Route path="/" element={<Home questions={questions} categories={categories} currentUser={currentUser!} />} />
+            <Route path="/ask" element={<Ask onAddQuestion={handleAddQuestion} currentUser={currentUser!} categories={categories} onAddCategory={handleAddCategory} onLogin={loginWithEmail} onRegister={registerWithEmail} onGoogleLogin={loginWithGoogle} />} />
+            <Route path="/notifications" element={<Notifications currentUser={currentUser!} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
+            <Route path="/messages" element={<Messages currentUser={currentUser!} />} />
+            <Route path="/messages/:userId" element={<ChatDetail currentUser={currentUser!} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
             <Route path="/ai-chat" element={<AiChat />} />
-            <Route path="/question/:slug" element={<QuestionDetail questions={questions} currentUser={currentUser} onAddAnswer={handleAddAnswer} onMarkBestAnswer={handleMarkBestAnswer} onVerifyAnswer={handleVerifyAnswer} onOpenAuth={() => setShowGlobalAuthModal(true)} onEditQuestion={handleEditQuestion} onDeleteQuestion={handleDeleteQuestion} onHideQuestion={handleHideQuestion} onEditAnswer={handleEditAnswer} onDeleteAnswer={handleDeleteAnswer} onHideAnswer={handleHideAnswer} />} />
+            <Route path="/question/:slug" element={<QuestionDetail questions={questions} currentUser={currentUser!} onAddAnswer={handleAddAnswer} onMarkBestAnswer={handleMarkBestAnswer} onVerifyAnswer={handleVerifyAnswer} onOpenAuth={() => setShowGlobalAuthModal(true)} onEditQuestion={handleEditQuestion} onDeleteQuestion={handleDeleteQuestion} onHideQuestion={handleHideQuestion} onEditAnswer={handleEditAnswer} onDeleteAnswer={handleDeleteAnswer} onHideAnswer={handleHideAnswer} />} />
             <Route path="/games" element={<GameZone />} />
-            <Route path="/profile" element={<Profile user={currentUser} questions={questions} onLogout={handleLogout} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
-            <Route path="/profile/:userId" element={<Profile user={currentUser} questions={questions} onLogout={handleLogout} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
-            <Route path="/expert-register" element={<ExpertRegistration currentUser={currentUser} onSubmitApplication={handleExpertRegistration} />} />
+            <Route path="/profile" element={<Profile user={currentUser!} questions={questions} onLogout={handleLogout} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
+            <Route path="/profile/:userId" element={<Profile user={currentUser!} questions={questions} onLogout={handleLogout} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
+            <Route path="/expert-register" element={<ExpertRegistration currentUser={currentUser!} onSubmitApplication={handleExpertRegistration} />} />
             <Route path="/blog" element={<BlogList />} />
-            <Route path="/blog/:slug" element={<BlogDetail currentUser={currentUser} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
+            <Route path="/blog/:slug" element={<BlogDetail currentUser={currentUser!} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
             <Route path="/documents" element={<DocumentList />} />
-            <Route path="/documents/:slug" element={<DocumentDetail currentUser={currentUser} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
+            <Route path="/documents/:slug" element={<DocumentDetail currentUser={currentUser!} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
             <Route path="/about" element={<About />} /><Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} /><Route path="/contact" element={<Contact />} />
             <Route path="/faq" element={<FAQ />} />

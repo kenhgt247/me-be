@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-// @ts-ignore
+
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Heart, MessageCircle, ShieldCheck, Bell, Check, Loader2, Info } from 'lucide-react';
 import { subscribeToNotifications, markNotificationAsRead } from '../services/db';

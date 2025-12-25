@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-// @ts-ignore
+
 import { useParams, useNavigate, Link } from 'react-router-dom';
 // SỬA: ../ thay vì ../../
 import { BlogPost, BlogComment, User, AdConfig } from '../types';

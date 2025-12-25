@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { ShieldCheck, UploadCloud, FileText, CheckCircle, Clock, XCircle, ChevronRight, UserCheck, Heart, Stethoscope, Baby, Brain, BookOpen } from 'lucide-react';
-// @ts-ignore
+
 import { Link } from 'react-router-dom';
 
 interface ExpertRegistrationProps {

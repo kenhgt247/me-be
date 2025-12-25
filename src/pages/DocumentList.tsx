@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-// @ts-ignore
+
 import { Link, useNavigate } from 'react-router-dom';
 import { Document, DocumentCategory, User, AdConfig } from '../types';
 import { fetchDocuments, fetchDocumentCategories } from '../services/documents';

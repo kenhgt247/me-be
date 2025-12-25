@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-// @ts-ignore
+
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
