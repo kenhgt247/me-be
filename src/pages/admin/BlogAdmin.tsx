@@ -10,7 +10,7 @@ import { subscribeToAuthChanges } from '../../services/auth';
 import { 
   Plus, Trash2, Edit2, X, Image as ImageIcon, Video, Link as LinkIcon, 
   BookOpen, Layers, Sparkles, Loader2, RefreshCw, FileText, CheckCircle, 
-  AlertCircle, Eye, ChevronDown 
+  AlertCircle, Eye, ChevronDown, Search 
 } from 'lucide-react';
 import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 
@@ -69,7 +69,7 @@ export const BlogAdmin: React.FC = () => {
       if (user) loadInitialData(user);
     });
     return () => unsub();
-  }, [activeTab]); // Load lại khi đổi tab
+  }, [activeTab]);
 
   const loadInitialData = async (user: any) => {
     setLoading(true);
@@ -105,31 +105,55 @@ export const BlogAdmin: React.FC = () => {
     }
   };
 
-  // ✅ Khôi phục biến lọc tìm kiếm để không bị lỗi ReferenceError
-  const visiblePosts = useMemo(() => {
+  // ✅ Sử dụng filteredPosts để tránh lỗi ReferenceError: visiblePosts is not defined
+  const filteredPosts = useMemo(() => {
     return posts.filter(p => p.title.toLowerCase().includes(searchTerm.toLowerCase()));
   }, [posts, searchTerm]);
 
-  // Handlers
+  // Category Handlers
   const handleSaveCat = async () => {
     if (!catForm.name) return;
     const slug = toSlug(catForm.name);
-    if (editingCat) await updateBlogCategory(editingCat.id, { ...catForm, slug });
-    else await createBlogCategory({ ...catForm, slug });
-    setShowCatModal(false);
-    loadInitialData(currentUser);
+    try {
+      if (editingCat) await updateBlogCategory(editingCat.id, { ...catForm, slug });
+      else await createBlogCategory({ ...catForm, slug });
+      setShowCatModal(false);
+      loadInitialData(currentUser);
+    } catch (e) { alert("Lỗi lưu danh mục"); }
+  };
+
+  // Post Handlers
+  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newTitle = e.target.value;
+    setPostForm(prev => ({ 
+      ...prev, 
+      title: newTitle, 
+      slug: !editingPost ? toSlug(newTitle) : prev.slug 
+    }));
+  };
+
+  const handleRegenerateSlug = () => {
+    if (postForm.title) setPostForm(prev => ({ ...prev, slug: toSlug(prev.title) }));
   };
 
   const handleSavePost = async () => {
     if (!postForm.title || !currentUser) return;
     const slug = postForm.slug || toSlug(postForm.title);
-    const postData = { ...postForm, slug, authorId: currentUser.id, authorName: currentUser.name, authorAvatar: currentUser.avatar };
+    const postData = { 
+      ...postForm, 
+      slug, 
+      authorId: currentUser.id, 
+      authorName: currentUser.name, 
+      authorAvatar: currentUser.avatar,
+      authorIsExpert: currentUser.isExpert
+    };
     
-    if (editingPost) await updateBlogPost(editingPost.id, postData);
-    else await createBlogPost(postData);
-    
-    setShowPostModal(false);
-    loadInitialData(currentUser);
+    try {
+      if (editingPost) await updateBlogPost(editingPost.id, postData);
+      else await createBlogPost(postData);
+      setShowPostModal(false);
+      loadInitialData(currentUser);
+    } catch (e) { alert("Lỗi lưu bài viết"); }
   };
 
   const handleAiTitle = async () => {
@@ -149,7 +173,9 @@ export const BlogAdmin: React.FC = () => {
       setAiLoading(p => ({ ...p, content: false }));
   };
 
-  if (!currentUser || (!currentUser.isAdmin && !currentUser.isExpert)) return <div className="p-10 text-center">Không có quyền truy cập</div>;
+  if (!currentUser || (!currentUser.isAdmin && !currentUser.isExpert)) {
+    return <div className="p-10 text-center">Bạn không có quyền truy cập trang này.</div>;
+  }
 
   return (
     <div className="space-y-6 pb-20 p-6 bg-gray-50 min-h-screen animate-fade-in">
@@ -173,11 +199,11 @@ export const BlogAdmin: React.FC = () => {
          </div>
       </div>
 
-      {/* Categories Tab */}
-      {activeTab === 'categories' && currentUser.isAdmin && (
+      {/* Tab Nội dung */}
+      {activeTab === 'categories' ? (
           <div className="space-y-4">
               <div className="flex justify-end">
-                  <button onClick={() => { setEditingCat(null); setCatForm({ name: '', iconEmoji: '📝', order: categories.length + 1, isActive: true }); setShowCatModal(true); }} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold flex gap-2 shadow-lg hover:bg-blue-700 active:scale-95 transition-all">
+                  <button onClick={() => { setEditingCat(null); setCatForm({ name: '', iconEmoji: '📝', order: categories.length + 1, isActive: true }); setShowCatModal(true); }} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold flex gap-2 shadow-lg active:scale-95 transition-all">
                       <Plus size={20} /> Thêm Danh mục
                   </button>
               </div>
@@ -185,7 +211,7 @@ export const BlogAdmin: React.FC = () => {
                   <table className="w-full text-left">
                       <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-400 tracking-widest border-b">
                           <tr>
-                              <th className="px-6 py-4">Tên / Emoji</th>
+                              <th className="px-6 py-4">Danh mục</th>
                               <th className="px-6 py-4 text-center">Thứ tự</th>
                               <th className="px-6 py-4 text-right">Tác vụ</th>
                           </tr>
@@ -193,20 +219,15 @@ export const BlogAdmin: React.FC = () => {
                       <tbody className="divide-y divide-gray-50">
                           {categories.map(cat => (
                               <tr key={cat.id} className="hover:bg-gray-50 transition-colors group">
-                                  <td className="px-6 py-4">
-                                      <div className="flex items-center gap-3">
-                                          <span className="text-2xl">{cat.iconEmoji}</span>
-                                          <div>
-                                              <p className="font-bold text-gray-900">{cat.name}</p>
-                                              <p className="text-[10px] text-gray-400 font-mono">/{cat.slug}</p>
-                                          </div>
-                                      </div>
+                                  <td className="px-6 py-4 flex items-center gap-3">
+                                      <span className="text-2xl">{cat.iconEmoji}</span>
+                                      <span className="font-bold text-gray-900">{cat.name}</span>
                                   </td>
                                   <td className="px-6 py-4 text-center font-bold text-gray-500">{cat.order}</td>
                                   <td className="px-6 py-4 text-right">
                                       <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                           <button onClick={() => { setEditingCat(cat); setCatForm(cat as any); setShowCatModal(true); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg"><Edit2 size={16}/></button>
-                                          <button onClick={() => deleteBlogCategory(cat.id).then(() => loadInitialData(currentUser))} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button>
+                                          <button onClick={() => { if(confirm("Xóa?")) deleteBlogCategory(cat.id).then(() => loadInitialData(currentUser)) }} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button>
                                       </div>
                                   </td>
                               </tr>
@@ -215,30 +236,24 @@ export const BlogAdmin: React.FC = () => {
                   </table>
               </div>
           </div>
-      )}
-
-      {/* Posts Tab */}
-      {activeTab === 'posts' && (
+      ) : (
         <div className="space-y-4">
             <div className="flex flex-col md:flex-row justify-between gap-4">
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                    <input type="text" placeholder="Tìm nhanh trong danh sách đã tải..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-100" />
+                    <input type="text" placeholder="Tìm kiếm bài viết..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-100" />
                 </div>
                 <button onClick={() => { setEditingPost(null); setPostForm({ title: '', slug: '', excerpt: '', content: '', coverImageUrl: '', iconEmoji: '📰', youtubeUrl: '', sourceUrl: '', sourceLabel: '', categoryId: categories[0]?.id || '', status: 'draft' }); setShowPostModal(true); }} className="bg-green-600 text-white px-6 py-2.5 rounded-xl font-bold flex gap-2 shadow-lg hover:bg-green-700 active:scale-95 transition-all"><Plus /> Viết bài mới</button>
             </div>
 
             <div className="grid gap-3">
                 {loading ? (
-                    <div className="text-center py-20 flex flex-col items-center gap-3">
-                        <Loader2 className="animate-spin text-blue-500" size={32} />
-                        <span className="text-xs font-black uppercase text-gray-400 tracking-widest">Đang tải dữ liệu...</span>
-                    </div>
-                ) : visiblePosts.length === 0 ? (
-                    <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed text-gray-400">Không tìm thấy bài viết nào</div>
-                ) : visiblePosts.map(post => (
+                    <div className="text-center py-20"><Loader2 className="animate-spin text-blue-500 inline" size={32} /></div>
+                ) : filteredPosts.length === 0 ? (
+                    <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed text-gray-400 font-medium italic">Không tìm thấy bài viết nào</div>
+                ) : filteredPosts.map(post => (
                     <div key={post.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex justify-between items-center hover:shadow-md transition-all group">
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-4 min-w-0">
                             <div className="w-14 h-14 rounded-xl bg-gray-50 flex items-center justify-center text-2xl overflow-hidden border border-gray-100 shrink-0">
                                 {post.coverImageUrl ? <img src={post.coverImageUrl} className="w-full h-full object-cover" /> : post.iconEmoji}
                             </div>
@@ -250,7 +265,7 @@ export const BlogAdmin: React.FC = () => {
                                 </div>
                             </div>
                         </div>
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 shrink-0">
                             <button onClick={() => { setEditingPost(post); setPostForm(post as any); setShowPostModal(true); }} className="p-2.5 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"><Edit2 size={18}/></button>
                             <button onClick={() => { if(confirm("Xóa bài viết này?")) deleteBlogPost(post.id).then(() => loadInitialData(currentUser)) }} className="p-2.5 text-red-400 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={18}/></button>
                         </div>
@@ -259,33 +274,24 @@ export const BlogAdmin: React.FC = () => {
             </div>
             
             {hasMore && !searchTerm && (
-                <button onClick={handleLoadMore} disabled={loadingMore} className="w-full py-4 bg-white border border-gray-200 rounded-2xl font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-3 text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-all shadow-sm">
+                <button onClick={handleLoadMore} disabled={loadingMore} className="w-full py-4 bg-white border border-gray-200 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-3 text-gray-400 hover:text-blue-500 transition-all shadow-sm">
                     {loadingMore ? <Loader2 className="animate-spin" size={16} /> : <ChevronDown size={16} />} 
-                    Tải thêm kiến thức
+                    Tải thêm kiến thức hệ thống
                 </button>
             )}
         </div>
       )}
 
-      {/* Category Modal */}
+      {/* Modal Chuyên mục */}
       {showCatModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
               <div className="bg-white rounded-[2rem] w-full max-w-md p-8 shadow-2xl animate-pop-in">
                   <h3 className="text-xl font-black mb-6 text-gray-900 tracking-tight">{editingCat ? 'Cập nhật danh mục' : 'Thêm danh mục mới'}</h3>
                   <div className="space-y-4">
-                      <div>
-                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Tên danh mục</label>
-                          <input value={catForm.name} onChange={e => setCatForm({...catForm, name: e.target.value})} placeholder="VD: Sức khỏe, Dinh dưỡng..." className="w-full p-3.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-100 font-bold" />
-                      </div>
+                      <input value={catForm.name} onChange={e => setCatForm({...catForm, name: e.target.value})} placeholder="Tên danh mục..." className="w-full p-3.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-100 font-bold" />
                       <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Icon Emoji</label>
-                            <input value={catForm.iconEmoji} onChange={e => setCatForm({...catForm, iconEmoji: e.target.value})} className="w-full p-3.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-100 text-center text-xl" />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Thứ tự</label>
-                            <input type="number" value={catForm.order} onChange={e => setCatForm({...catForm, order: Number(e.target.value)})} className="w-full p-3.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-100 font-bold" />
-                          </div>
+                          <input value={catForm.iconEmoji} onChange={e => setCatForm({...catForm, iconEmoji: e.target.value})} className="w-full p-3.5 bg-gray-50 border-none rounded-xl text-center text-xl" />
+                          <input type="number" value={catForm.order} onChange={e => setCatForm({...catForm, order: Number(e.target.value)})} className="w-full p-3.5 bg-gray-50 border-none rounded-xl font-bold" />
                       </div>
                   </div>
                   <div className="flex gap-3 mt-8">
@@ -296,31 +302,35 @@ export const BlogAdmin: React.FC = () => {
           </div>
       )}
 
-      {/* Post Modal - React Quill Integrated */}
+      {/* Modal Bài viết */}
       {showPostModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
               <div className="bg-white rounded-[2rem] w-full max-w-5xl max-h-[95vh] overflow-y-auto shadow-2xl animate-pop-in flex flex-col">
                   <div className="p-6 border-b flex justify-between items-center sticky top-0 bg-white z-10">
-                      <h3 className="font-black text-xl tracking-tight">{editingPost ? 'Cập nhật bài viết' : 'Sáng tạo nội dung mới'}</h3>
+                      <h3 className="font-black text-xl tracking-tight">{editingPost ? 'Cập nhật nội dung' : 'Sáng tạo bài viết mới'}</h3>
                       <button onClick={() => setShowPostModal(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X /></button>
                   </div>
                   <div className="p-8 space-y-6">
                       <div className="grid md:grid-cols-3 gap-6">
                           <div className="md:col-span-2 space-y-4">
                               <div>
-                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Tiêu đề bài viết</label>
+                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Tiêu đề</label>
                                   <div className="relative">
-                                    <input value={postForm.title} onChange={handleTitleChange} placeholder="Nhập tiêu đề thu hút..." className="w-full p-4 bg-gray-50 border-none rounded-2xl font-black text-xl focus:ring-2 focus:ring-blue-100 outline-none" />
-                                    <button onClick={handleAiTitle} disabled={aiLoading.title} className="absolute right-2 top-2 p-2 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-1 shadow-lg hover:shadow-purple-200 transition-all active:scale-95 disabled:opacity-50">
+                                    <input value={postForm.title} onChange={handleTitleChange} placeholder="Nhập tiêu đề..." className="w-full p-4 bg-gray-50 border-none rounded-2xl font-black text-xl focus:ring-2 focus:ring-blue-100 outline-none" />
+                                    <button onClick={handleAiTitle} disabled={aiLoading.title} className="absolute right-2 top-2 p-2 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-1 shadow-lg active:scale-95 disabled:opacity-50">
                                         {aiLoading.title ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14}/>} AI
                                     </button>
                                   </div>
+                              </div>
+                              <div className="flex gap-2 items-center">
+                                  <input value={postForm.slug} onChange={e => setPostForm({...postForm, slug: e.target.value})} placeholder="Slug..." className="flex-1 p-2 bg-gray-50 border-none rounded-xl text-xs font-mono text-gray-500" />
+                                  <button onClick={handleRegenerateSlug} className="p-2 hover:bg-gray-100 rounded-lg text-gray-400"><RefreshCw size={14}/></button>
                               </div>
                               <div>
                                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nội dung chi tiết</label>
                                   <div className="flex justify-end mb-2">
                                       <button onClick={handleAiContent} disabled={aiLoading.content} className="px-4 py-1.5 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-indigo-100 transition-all">
-                                          {aiLoading.content ? <Loader2 size={12} className="animate-spin"/> : <Sparkles size={12} />} Viết bài bằng AI Gemini
+                                          {aiLoading.content ? <Loader2 size={12} className="animate-spin"/> : <Sparkles size={12} />} Viết bài bằng Gemini
                                       </button>
                                   </div>
                                   <div className="bg-white rounded-2xl overflow-hidden border border-gray-100">
@@ -337,31 +347,25 @@ export const BlogAdmin: React.FC = () => {
                                   </select>
                               </div>
                               <div>
-                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Ảnh bìa (URL)</label>
-                                  <input value={postForm.coverImageUrl} onChange={e => setPostForm({...postForm, coverImageUrl: e.target.value})} placeholder="Dán link ảnh..." className="w-full p-4 bg-gray-50 border-none rounded-xl text-xs font-mono" />
+                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Ảnh bìa (Link)</label>
+                                  <input value={postForm.coverImageUrl} onChange={e => setPostForm({...postForm, coverImageUrl: e.target.value})} placeholder="https://..." className="w-full p-4 bg-gray-50 border-none rounded-xl text-xs font-mono" />
                               </div>
                               <div>
                                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Mô tả ngắn</label>
-                                  <textarea value={postForm.excerpt} onChange={e => setPostForm({...postForm, excerpt: e.target.value})} rows={4} className="w-full p-4 bg-gray-50 border-none rounded-xl text-sm font-medium leading-relaxed resize-none" placeholder="Tóm tắt nội dung..." />
+                                  <textarea value={postForm.excerpt} onChange={e => setPostForm({...postForm, excerpt: e.target.value})} rows={4} className="w-full p-4 bg-gray-50 border-none rounded-xl text-sm font-medium leading-relaxed resize-none focus:ring-2 focus:ring-blue-100" placeholder="Tóm tắt nội dung..." />
                               </div>
                               <div className="p-4 bg-blue-50 rounded-2xl space-y-3">
-                                  <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Trạng thái xuất bản</label>
-                                  <div className="flex gap-4">
-                                      <label className="flex items-center gap-2 cursor-pointer">
-                                          <input type="radio" name="status" checked={postForm.status === 'draft'} onChange={() => setPostForm({...postForm, status: 'draft'})} className="accent-blue-600" />
-                                          <span className="text-xs font-bold text-gray-600">Lưu nháp</span>
-                                      </label>
-                                      <label className="flex items-center gap-2 cursor-pointer">
-                                          <input type="radio" name="status" checked={postForm.status === 'published'} onChange={() => setPostForm({...postForm, status: 'published'})} className="accent-green-600" />
-                                          <span className="text-xs font-bold text-green-700">Công khai</span>
-                                      </label>
+                                  <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Xuất bản</label>
+                                  <div className="flex gap-4 font-bold text-sm text-gray-600">
+                                      <label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="status" checked={postForm.status === 'draft'} onChange={() => setPostForm({...postForm, status: 'draft'})} /> Nháp</label>
+                                      <label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="status" checked={postForm.status === 'published'} onChange={() => setPostForm({...postForm, status: 'published'})} /> Công khai</label>
                                   </div>
                               </div>
                           </div>
                       </div>
                   </div>
                   <div className="p-6 bg-gray-50 border-t flex justify-end gap-3 sticky bottom-0 z-10">
-                      <button onClick={() => setShowPostModal(false)} className="px-8 py-3 text-gray-400 font-black text-xs uppercase tracking-widest hover:text-gray-600">Hủy bỏ</button>
+                      <button onClick={() => setShowPostModal(false)} className="px-8 py-3 text-gray-400 font-black text-xs uppercase tracking-widest">Hủy bỏ</button>
                       <button onClick={handleSavePost} className="px-10 py-3 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-blue-100 hover:bg-blue-700 active:scale-95 transition-all">Lưu bài viết</button>
                   </div>
               </div>
@@ -372,7 +376,6 @@ export const BlogAdmin: React.FC = () => {
         .ql-toolbar.ql-snow { border: none !important; background: #f9fafb; border-bottom: 1px solid #f1f5f9 !important; padding: 12px !important; }
         .ql-container.ql-snow { border: none !important; font-family: inherit; font-size: 15px; }
         .ql-editor { min-height: 300px; padding: 20px !important; line-height: 1.8; color: #334155; }
-        .ql-editor.ql-blank::before { color: #cbd5e1; font-style: normal; }
       `}</style>
     </div>
   );
