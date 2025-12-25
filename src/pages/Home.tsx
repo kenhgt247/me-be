@@ -278,5 +278,6 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
     </div>
   );
 };
-// Thêm dòng này ở cuối cùng file Home.tsx
+
 export default Home;
+
