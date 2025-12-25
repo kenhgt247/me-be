@@ -37,7 +37,6 @@ export const getSystemStats = async () => {
 };
 
 /* ============================================================
-   /* ============================================================
    USERS MANAGEMENT (Bản sửa lỗi không hiện người dùng thật)
    ============================================================ */
 export const fetchUsersAdminPaginated = async (
@@ -46,16 +45,9 @@ export const fetchUsersAdminPaginated = async (
 ) => {
     if (!db) return { users: [], lastDoc: null, hasMore: false };
     try {
-        // ✅ THAY ĐỔI: Thay vì chỉ orderBy 'joinedAt' (sẽ làm mất người dùng thiếu trường này)
-        // Ta sẽ dùng query cơ bản nhất để đảm bảo HIỆN TẤT CẢ NGƯỜI DÙNG THẬT
-        let q = query(
-            collection(db, 'users'), 
-            limit(pageSize)
-        );
-
-        // Nếu mẹ muốn ưu tiên người mới mà không mất người cũ, dùng logic này:
-        // Lưu ý: Nếu bị lỗi "Index", mẹ chỉ cần bấm vào link trong Console F12 của trình duyệt 1 lần là xong.
-        q = query(collection(db, 'users'), orderBy('joinedAt', 'desc'), limit(pageSize));
+        // Ưu tiên sắp xếp theo joinedAt để người mới lên đầu
+        // Lưu ý: Nếu gặp lỗi Index, nhấn vào link trong Console F12 để tạo Index tự động.
+        let q = query(collection(db, 'users'), orderBy('joinedAt', 'desc'), limit(pageSize));
 
         if (lastVisible) {
             q = query(q, startAfter(lastVisible));
@@ -63,7 +55,7 @@ export const fetchUsersAdminPaginated = async (
 
         const snapshot = await getDocs(q);
         
-        // Nếu trang đầu tiên trống (do lỗi orderBy), ta sẽ tự động lấy query không sắp xếp
+        // CỨU HỘ: Nếu trang đầu tiên trống (do lỗi orderBy hoặc thiếu trường joinedAt)
         if (snapshot.empty && !lastVisible) {
             const fallbackSnap = await getDocs(query(collection(db, 'users'), limit(pageSize)));
             const users = fallbackSnap.docs.map(d => ({ id: d.id, ...d.data() } as User));
@@ -82,7 +74,7 @@ export const fetchUsersAdminPaginated = async (
         };
     } catch (error) {
         console.error("Error fetching users:", error);
-        // ✅ CỨU HỘ: Nếu lỗi sắp xếp, trả về danh sách không sắp xếp để mẹ vẫn thấy người dùng
+        // TRẢ VỀ DỮ LIỆU KHÔNG SẮP XẾP NẾU LỖI (Để luôn hiện được người dùng)
         const fallbackSnap = await getDocs(query(collection(db, 'users'), limit(pageSize)));
         return {
             users: fallbackSnap.docs.map(d => ({ id: d.id, ...d.data() } as User)),
@@ -92,16 +84,48 @@ export const fetchUsersAdminPaginated = async (
     }
 };
 
-// Sửa hàm lấy tất cả user để không bị sót
+// ✅ THÊM HÀM NÀY ĐỂ KHÔNG LỖI BUILD
+export const updateUserInfo = async (userId: string, data: { name?: string; bio?: string; specialty?: string }) => {
+  if (!db) return;
+  try {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, data);
+    return true;
+  } catch (error) {
+    console.error("Error updating user info:", error);
+    throw error;
+  }
+};
+
+export const updateUserRole = async (userId: string, updates: { isExpert?: boolean; isAdmin?: boolean; isBanned?: boolean }) => {
+  if (!db) return;
+  try {
+    const ref = doc(db, 'users', userId);
+    await updateDoc(ref, updates);
+  } catch (error) {
+    console.error("Error updating user role:", error);
+    throw error;
+  }
+};
+
 export const fetchAllUsers = async (): Promise<User[]> => {
   if (!db) return [];
   try {
-    // Lấy hết không cần orderBy để chắc chắn thấy người dùng thật
     const snapshot = await getDocs(collection(db, 'users'));
     return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User));
   } catch (error) {
     console.error("Error fetching users:", error);
     return [];
+  }
+};
+
+export const deleteUser = async (userId: string) => {
+  if (!db) return;
+  try {
+    await deleteDoc(doc(db, 'users', userId));
+  } catch (error) {
+    console.error("Error deleting user:", error);
+    throw error;
   }
 };
 
