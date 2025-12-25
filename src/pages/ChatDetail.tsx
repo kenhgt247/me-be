@@ -1,5 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
-
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -7,7 +6,8 @@ import {
   Image as ImageIcon,
   Smile,
   CheckCheck,
-  X
+  X,
+  Loader2
 } from 'lucide-react';
 
 import { User, Message } from '../types';
@@ -15,12 +15,13 @@ import {
   subscribeMessages,
   sendMessage,
   markChatAsRead,
-  getChatId
+  getChatId,
+  fetchMoreMessages // <--- Hàm mới
 } from '../services/chat';
 import { subscribeTyping, setTyping } from '../services/typing';
 import { subscribeToUser } from '../services/db';
+import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 
-/* ================= STICKERS DATA ================= */
 const STICKER_PACKS = {
   "Cảm xúc": ["😀", "😂", "🥰", "😎", "😭", "😡", "😱", "🥳", "😴", "🤔"],
   "Yêu thương": ["❤️", "🧡", "💛", "💚", "💙", "💜", "💖", "💝", "💋", "💌"],
@@ -40,29 +41,74 @@ export const ChatDetail: React.FC<Props> = ({ currentUser }) => {
   const [text, setText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [showStickers, setShowStickers] = useState(false);
+  
+  // State Phân trang
+  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  const topRef = useRef<HTMLDivElement>(null); // Để theo dõi vị trí cuộn
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const typingTimeout = useRef<any>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const chatId = userId ? getChatId(currentUser.id, userId) : '';
 
-  /* ================= USER INFO ================= */
+  // --- 1. USER INFO ---
   useEffect(() => {
     if (!userId) return;
     return subscribeToUser(userId, u => u && setTargetUser(u));
   }, [userId]);
 
-  /* ================= MESSAGES ================= */
+  // --- 2. MESSAGES REALTIME (20 tin mới nhất) ---
   useEffect(() => {
     if (!userId) return;
-    const unsub = subscribeMessages(currentUser.id, userId, setMessages);
+    const unsub = subscribeMessages(currentUser.id, userId, (newMessages, lastVisible) => {
+        setMessages(newMessages);
+        setLastDoc(lastVisible);
+        // Khi có tin mới (hoặc lần đầu load), cuộn xuống đáy
+        // (Chỉ cuộn nếu đang ở gần đáy hoặc là tin nhắn mình mới gửi)
+        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    });
     markChatAsRead(currentUser.id, userId);
     return unsub;
   }, [currentUser.id, userId]);
 
-  /* ================= TYPING ================= */
+  // --- 3. LOAD MORE MESSAGES (HISTORY) ---
+  const handleScroll = async (e: React.UIEvent<HTMLDivElement>) => {
+      const { scrollTop } = e.currentTarget;
+      if (scrollTop === 0 && !isLoadingMore && hasMore && lastDoc && userId) {
+          setIsLoadingMore(true);
+          const oldHeight = scrollContainerRef.current?.scrollHeight || 0;
+
+          try {
+              const { messages: olderMessages, lastDoc: newLastDoc } = await fetchMoreMessages(currentUser.id, userId, lastDoc);
+              
+              if (olderMessages.length > 0) {
+                  setMessages(prev => [...olderMessages, ...prev]);
+                  setLastDoc(newLastDoc);
+                  
+                  // Giữ vị trí cuộn sau khi load thêm
+                  requestAnimationFrame(() => {
+                      if (scrollContainerRef.current) {
+                          const newHeight = scrollContainerRef.current.scrollHeight;
+                          scrollContainerRef.current.scrollTop = newHeight - oldHeight;
+                      }
+                  });
+              } else {
+                  setHasMore(false);
+              }
+          } catch (e) {
+              console.error(e);
+          } finally {
+              setIsLoadingMore(false);
+          }
+      }
+  };
+
+  // --- 4. TYPING ---
   useEffect(() => {
     if (!chatId || !userId) return;
     return subscribeTyping(chatId, uids =>
@@ -70,39 +116,35 @@ export const ChatDetail: React.FC<Props> = ({ currentUser }) => {
     );
   }, [chatId, userId]);
 
-  /* ================= AUTO SCROLL ================= */
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isTyping, showStickers]);
-
-  /* ================= SEND TEXT ================= */
+  // --- HANDLERS ---
   const handleSend = async () => {
     if (!text.trim() || !userId) return;
     const content = text;
     setText('');
     setShowStickers(false);
+    textareaRef.current?.focus();
 
     try {
       await sendMessage(currentUser, userId, content);
       setTyping(chatId, currentUser.id, false);
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     } catch (e) {
       console.error('Send message error:', e);
-      setText(content);
+      setText(content); // Rollback nếu lỗi
     }
   };
 
-  /* ================= SEND IMAGE ================= */
   const handleSendImage = async (file: File) => {
     if (!file || !userId) return;
     try {
-      await sendMessage(currentUser, userId, file as any, 'image');
+      await sendMessage(currentUser, userId, file, 'image');
       setTyping(chatId, currentUser.id, false);
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     } catch (e) {
       console.error('Send image error:', e);
     }
   };
 
-  /* ================= INPUT ================= */
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -130,7 +172,7 @@ export const ChatDetail: React.FC<Props> = ({ currentUser }) => {
   return (
     <div className="fixed inset-0 flex flex-col bg-[#e5ddd5] dark:bg-dark-bg z-50 transition-colors duration-300">
 
-      {/* ================= HEADER ================= */}
+      {/* HEADER */}
       <div className="bg-white dark:bg-dark-card px-4 py-3 flex items-center gap-3 border-b border-gray-100 dark:border-dark-border shadow-sm z-10 transition-colors">
         <button onClick={() => navigate(-1)} className="p-2 -ml-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-full transition-colors">
           <ArrowLeft className="w-6 h-6 text-gray-600 dark:text-gray-300" />
@@ -157,9 +199,19 @@ export const ChatDetail: React.FC<Props> = ({ currentUser }) => {
         </div>
       </div>
 
-      {/* ================= MESSAGES LIST ================= */}
-      {/* Thay đổi màu nền ở đây để khớp Dark Mode */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#e5ddd5] dark:bg-[#0b141a]" onClick={() => setShowStickers(false)}>
+      {/* MESSAGES LIST */}
+      <div 
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#e5ddd5] dark:bg-[#0b141a]" 
+        onClick={() => setShowStickers(false)}
+        onScroll={handleScroll}
+      >
+        {isLoadingMore && (
+            <div className="flex justify-center py-2">
+                <Loader2 className="animate-spin text-gray-400" size={20} />
+            </div>
+        )}
+
         {messages.map((m, i) => {
           const isMe = m.senderId === currentUser.id;
           const showAvatar = !isMe && (i === 0 || messages[i - 1].senderId !== m.senderId);
@@ -180,7 +232,7 @@ export const ChatDetail: React.FC<Props> = ({ currentUser }) => {
                   : 'bg-white dark:bg-dark-card text-gray-800 dark:text-gray-200 rounded-bl-none border border-transparent dark:border-slate-700'
               }`}>
                 {m.type === 'image' ? (
-                  <img src={m.content} className="rounded-lg max-w-full cursor-pointer hover:opacity-90 transition-opacity" alt="Sent image" />
+                  <img src={m.content} className="rounded-lg max-w-full cursor-pointer hover:opacity-90 transition-opacity" alt="Sent image" loading="lazy" />
                 ) : (
                   <span className="whitespace-pre-wrap leading-relaxed">{m.content}</span>
                 )}
@@ -207,13 +259,13 @@ export const ChatDetail: React.FC<Props> = ({ currentUser }) => {
           </div>
         )}
 
-        <div ref={bottomRef} className="h-2" />
+        <div ref={bottomRef} className="h-1" />
       </div>
 
-      {/* ================= INPUT AREA ================= */}
+      {/* INPUT AREA */}
       <div className="bg-white dark:bg-dark-card border-t border-gray-100 dark:border-dark-border transition-all duration-300">
         
-        {/* Sticker Picker Drawer */}
+        {/* Sticker Picker */}
         {showStickers && (
           <div className="h-48 overflow-y-auto bg-gray-50 dark:bg-slate-900/50 border-b dark:border-dark-border custom-scrollbar p-2 animate-slide-up">
              <div className="flex justify-between items-center px-2 mb-2 sticky top-0 bg-gray-50 dark:bg-slate-900/95 z-10 backdrop-blur-sm">
@@ -265,7 +317,6 @@ export const ChatDetail: React.FC<Props> = ({ currentUser }) => {
             placeholder="Nhập tin nhắn..."
             rows={1}
             style={{ minHeight: '44px', maxHeight: '120px' }}
-            // ✅ Fix màu chữ input cho Dark Mode
             className="flex-1 bg-gray-100 dark:bg-slate-800 text-gray-800 dark:text-white rounded-2xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all custom-scrollbar placeholder-gray-500 dark:placeholder-gray-400"
           />
 

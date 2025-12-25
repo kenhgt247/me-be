@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Document, DocumentCategory, User, AdConfig } from '../types';
-import { fetchDocuments, fetchDocumentCategories } from '../services/documents';
+import { fetchDocumentsPaginated, fetchDocumentCategories } from '../services/documents'; // Dùng hàm mới
 import { getAdConfig, subscribeToAdConfig } from '../services/ads';
 import { subscribeToAuthChanges } from '../services/auth';
 import { 
@@ -9,7 +9,8 @@ import {
 } from 'lucide-react';
 import { ExpertPromoBox } from '../components/ExpertPromoBox';
 import { DocumentGridAd } from '../components/ads/DocumentGridAd';
-import { DocumentCard } from '../components/documents/DocumentCard'; // Import component mới
+import { DocumentCard } from '../components/documents/DocumentCard';
+import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 
 const PAGE_SIZE = 9;
 
@@ -31,16 +32,22 @@ const DocSkeleton = () => (
 export const DocumentList: React.FC = () => {
   const [categories, setCategories] = useState<DocumentCategory[]>([]);
   const [docs, setDocs] = useState<Document[]>([]);
+  
+  // State Phân trang
+  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
   const [activeCat, setActiveCat] = useState('all');
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [adConfig, setAdConfig] = useState<AdConfig | null>(null);
   
   const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Initial Load
   useEffect(() => {
     const unsubAuth = subscribeToAuthChanges(user => setCurrentUser(user));
     const unsubAd = subscribeToAdConfig(setAdConfig);
@@ -48,12 +55,17 @@ export const DocumentList: React.FC = () => {
     const init = async () => {
         setLoading(true);
         try {
-            const [cData, dData] = await Promise.all([
-                fetchDocumentCategories(),
-                fetchDocuments('all', 100)
-            ]);
+            // Lấy danh mục
+            const cData = await fetchDocumentCategories();
             setCategories(cData);
-            setDocs(dData);
+
+            // Lấy trang 1 tài liệu
+            const { docs: initialDocs, lastDoc: initialLastDoc, hasMore: initialHasMore } = await fetchDocumentsPaginated('all', null, PAGE_SIZE);
+            
+            setDocs(initialDocs);
+            setLastDoc(initialLastDoc);
+            setHasMore(initialHasMore);
+
         } catch (error) {
             console.error("Failed to load documents", error);
         } finally {
@@ -64,20 +76,43 @@ export const DocumentList: React.FC = () => {
     return () => { unsubAuth(); unsubAd(); };
   }, []);
 
+  // Handler: Load More
+  const handleLoadMore = async () => {
+    if (isLoadingMore || !hasMore || !lastDoc) return;
+    
+    setIsLoadingMore(true);
+    try {
+        const { docs: newDocs, lastDoc: newLastDoc, hasMore: newHasMore } = await fetchDocumentsPaginated(activeCat, lastDoc, PAGE_SIZE);
+        setDocs(prev => [...prev, ...newDocs]);
+        setLastDoc(newLastDoc);
+        setHasMore(newHasMore);
+    } catch (error) {
+        console.error("Lỗi tải thêm:", error);
+    } finally {
+        setIsLoadingMore(false);
+    }
+  };
+
+  // Handler: Filter Category
   const handleFilter = async (catId: string) => {
+      if (catId === activeCat) return;
+
       setActiveCat(catId);
       setLoading(true);
-      setVisibleCount(PAGE_SIZE);
+      setSearchTerm(''); 
+      setDocs([]); // Clear cũ
+      setLastDoc(null);
+
       try {
-          const data = await fetchDocuments(catId, 100);
-          setDocs(data);
+          const { docs: newDocs, lastDoc: newLastDoc, hasMore: newHasMore } = await fetchDocumentsPaginated(catId, null, PAGE_SIZE);
+          setDocs(newDocs);
+          setLastDoc(newLastDoc);
+          setHasMore(newHasMore);
+      } catch (error) {
+          console.error("Filter error", error);
       } finally {
           setLoading(false);
       }
-  };
-
-  const handleLoadMore = () => {
-    setVisibleCount(prev => prev + PAGE_SIZE);
   };
 
   const scrollCategory = (direction: 'left' | 'right') => {
@@ -89,8 +124,11 @@ export const DocumentList: React.FC = () => {
     }
   };
 
-  const filteredDocs = docs.filter(d => d.title.toLowerCase().includes(searchTerm.toLowerCase()));
-  const visibleDocs = filteredDocs.slice(0, visibleCount);
+  // Tìm kiếm Client-side (Tạm thời)
+  const filteredDocs = searchTerm 
+    ? docs.filter(d => d.title.toLowerCase().includes(searchTerm.toLowerCase()))
+    : docs;
+
   const canShare = currentUser && (currentUser.isAdmin || currentUser.isExpert);
 
   return (
@@ -117,7 +155,7 @@ export const DocumentList: React.FC = () => {
                   <div className="flex flex-col md:flex-row gap-4 items-start md:items-center pb-2">
                       <div className="relative w-full md:w-auto md:flex-1 max-w-md group shrink-0">
                           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-green-600 transition-colors" size={20} />
-                          <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Tìm kiếm tài liệu..." className="w-full pl-12 pr-10 py-3 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-green-500/20 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium text-sm text-textDark dark:text-white placeholder-gray-400 dark:placeholder-gray-500 shadow-inner" />
+                          <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Tìm kiếm tài liệu đã tải..." className="w-full pl-12 pr-10 py-3 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-green-500/20 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium text-sm text-textDark dark:text-white placeholder-gray-400 dark:placeholder-gray-500 shadow-inner" />
                       </div>
 
                       <div className="flex-1 w-full min-w-0 relative group/scroll">
@@ -153,7 +191,7 @@ export const DocumentList: React.FC = () => {
                     )}
 
                     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 animate-slide-up">
-                        {visibleDocs.map((doc, index) => {
+                        {filteredDocs.map((doc, index) => {
                             const freq = adConfig?.frequencies?.document || 6;
                             const shouldShowAd = adConfig?.isEnabled && (index + 1) % freq === 0;
 
@@ -166,10 +204,16 @@ export const DocumentList: React.FC = () => {
                         })}
                     </div>
 
-                    {visibleCount < filteredDocs.length && (
+                    {/* LOAD MORE BUTTON */}
+                    {hasMore && !searchTerm && (
                         <div className="flex justify-center mt-12 pb-8">
-                            <button onClick={handleLoadMore} className="px-8 py-3 rounded-full bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border text-sm font-bold text-gray-900 dark:text-white shadow-sm hover:bg-gray-50 dark:hover:bg-slate-700 active:scale-95 transition-all flex items-center gap-2 group">
-                                Xem thêm tài liệu <ArrowDown size={16} className="group-hover:translate-y-1 transition-transform" />
+                            <button 
+                                onClick={handleLoadMore} 
+                                disabled={isLoadingMore}
+                                className="px-8 py-3 rounded-full bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border text-sm font-bold text-gray-900 dark:text-white shadow-sm hover:bg-gray-50 dark:hover:bg-slate-700 active:scale-95 transition-all flex items-center gap-2 group disabled:opacity-70"
+                            >
+                                {isLoadingMore ? <Loader2 className="animate-spin" size={16} /> : 'Xem thêm tài liệu'}
+                                {!isLoadingMore && <ArrowDown size={16} className="group-hover:translate-y-1 transition-transform" />}
                             </button>
                         </div>
                     )}

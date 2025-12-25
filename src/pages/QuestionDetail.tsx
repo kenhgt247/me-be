@@ -1,28 +1,30 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import {
   ArrowLeft, Heart, MessageCircle, ShieldCheck,
   Sparkles, Loader2, Send, MoreVertical, Trash2, Edit2,
   Share2, Image as ImageIcon, X, Smile,
-  ThumbsUp, CheckCircle2, Eye, Bookmark, Filter, LogIn, AtSign, Paperclip, Flag, ExternalLink, Info,
+  ThumbsUp, CheckCircle2, Eye, Bookmark, Filter, LogIn, AtSign, Paperclip, Flag, Info,
   TrendingUp, ChevronDown
 } from 'lucide-react';
 
 import { Question, Answer, User, getIdFromSlug, AdConfig, toSlug } from '../types';
 import { generateDraftAnswer } from '../services/gemini';
-import { toggleQuestionLikeDb, toggleSaveQuestion, toggleAnswerUseful, sendReport } from '../services/db';
+import { 
+    toggleQuestionLikeDb, toggleSaveQuestion, toggleAnswerUseful, 
+    sendReport, fetchQuestionById, 
+    fetchQuestionsPaginated 
+} from '../services/db';
 import { getAdConfig } from '../services/ads';
 import { ShareModal } from '../components/ShareModal';
 import { loginAnonymously } from '../services/auth';
 import { uploadFile } from '../services/storage';
 import { ExpertPromoBox } from '../components/ExpertPromoBox';
-import { SidebarAd } from '../components/ads/SidebarAd'; // ✅ IMPORT COMPONENT QUẢNG CÁO MỚI
+import { SidebarAd } from '../components/ads/SidebarAd'; 
+import { LazyImage } from '../components/common/LazyImage'; // <--- IMPORT MỚI
 
 // --- INTERFACES ---
-
 interface DetailProps {
-  questions: Question[];
   currentUser: User;
   onAddAnswer: (questionId: string, answer: Answer) => Promise<void>;
   onMarkBestAnswer: (questionId: string, answerId: string) => void;
@@ -30,10 +32,8 @@ interface DetailProps {
   onOpenAuth: () => void;
   onEditQuestion: (id: string, title: string, content: string) => void;
   onDeleteQuestion: (id: string) => void;
-  onHideQuestion: (id: string) => void;
   onEditAnswer: (qId: string, aId: string, content: string) => void;
   onDeleteAnswer: (qId: string, aId: string) => void;
-  onHideAnswer: (qId: string, aId: string) => void;
 }
 
 const STICKER_PACKS = {
@@ -46,136 +46,141 @@ const STICKER_PACKS = {
 // --- SUB-COMPONENTS ---
 
 const ImageViewer: React.FC<{ url: string; onClose: () => void }> = ({ url, onClose }) => {
-  if (!url) return null;
-  return (
-    <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center animate-fade-in" onClick={onClose}>
-      <button onClick={onClose} className="absolute top-4 right-4 text-white p-2 bg-gray-800 rounded-full hover:bg-gray-700 transition-colors">
-        <X size={24} />
-      </button>
-      <img src={url} className="max-w-full max-h-full object-contain p-2" onClick={(e) => e.stopPropagation()} alt="Preview" />
-    </div>
-  );
-};
-
-const FBImageGridDetail: React.FC<{ images?: string[]; onImageClick: (url: string) => void }> = ({ images, onImageClick }) => {
-  if (!images || images.length === 0) return null;
-  const count = images.length;
-
-  const ImageItem = ({ src }: { src: string }) => (
-    <img 
-      src={src} 
-      className="w-full h-full object-cover cursor-pointer active:opacity-90 hover:opacity-95 transition-opacity" 
-      onClick={() => onImageClick(src)} 
-      loading="lazy" 
-      alt="Detail" 
-    />
-  );
-
-  const containerClass = "mt-4 rounded-2xl overflow-hidden border border-gray-100 dark:border-dark-border bg-gray-50 dark:bg-slate-800 shadow-sm";
-
-  if (count === 1) return <div className={containerClass}><img src={images[0]} className="w-full max-h-[500px] object-cover cursor-pointer hover:opacity-95 transition-opacity" onClick={() => onImageClick(images[0])} alt="Single" /></div>;
-  if (count === 2) return <div className={`${containerClass} grid grid-cols-2 gap-1 h-72`}><ImageItem src={images[0]} /><ImageItem src={images[1]} /></div>;
-  
-  return (
-    <div className={`${containerClass} grid grid-cols-2 gap-1 h-72`}>
-      <div className={count === 3 ? "row-span-2" : ""}>
-         <ImageItem src={images[0]} />
+    if (!url) return null;
+    return (
+      <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center animate-fade-in" onClick={onClose}>
+        <button onClick={onClose} className="absolute top-4 right-4 text-white p-2 bg-gray-800 rounded-full hover:bg-gray-700 transition-colors">
+          <X size={24} />
+        </button>
+        <img src={url} className="max-w-full max-h-full object-contain p-2" onClick={(e) => e.stopPropagation()} alt="Preview" />
       </div>
-      <div className="grid grid-rows-2 gap-1 h-full">
-        <ImageItem src={images[1]} />
-        <div className="relative w-full h-full cursor-pointer active:opacity-90" onClick={() => onImageClick(images[2])}>
-          <img src={images[2]} className="w-full h-full object-cover" alt="More" />
-          {count > 3 && (
-            <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white font-bold text-xl backdrop-blur-[2px]">
-              +{count - 3}
+    );
+};
+  
+// --- ĐÃ TỐI ƯU LAZY LOADING CHO IMAGE GRID ---
+const FBImageGridDetail: React.FC<{ images?: string[]; onImageClick: (url: string) => void }> = ({ images, onImageClick }) => {
+    if (!images || images.length === 0) return null;
+    const count = images.length;
+  
+    // Helper render ảnh với LazyImage
+    const ImageItem = ({ src, className = "" }: { src: string, className?: string }) => (
+        <div className={`relative overflow-hidden cursor-pointer active:opacity-90 hover:opacity-95 transition-opacity ${className}`} onClick={() => onImageClick(src)}>
+            <LazyImage 
+                src={src} 
+                alt="Detail" 
+                className="w-full h-full object-cover"
+                placeholderClassName="bg-gray-200 dark:bg-slate-700"
+            />
+        </div>
+    );
+  
+    const containerClass = "mt-4 rounded-2xl overflow-hidden border border-gray-100 dark:border-dark-border bg-gray-50 dark:bg-slate-800 shadow-sm";
+  
+    if (count === 1) return <div className={containerClass}><div className="w-full max-h-[500px]"><ImageItem src={images[0]} /></div></div>;
+    if (count === 2) return <div className={`${containerClass} grid grid-cols-2 gap-1 h-72`}><ImageItem src={images[0]} /><ImageItem src={images[1]} /></div>;
+    
+    return (
+      <div className={`${containerClass} grid grid-cols-2 gap-1 h-72`}>
+        <div className={count === 3 ? "row-span-2" : ""}>
+           <ImageItem src={images[0]} className="h-full" />
+        </div>
+        <div className="grid grid-rows-2 gap-1 h-full">
+          <ImageItem src={images[1]} className="h-full" />
+          <div className="relative w-full h-full cursor-pointer active:opacity-90">
+            <LazyImage src={images[2]} alt="More" className="w-full h-full object-cover" />
+            <div 
+                className="absolute inset-0 bg-black/40 flex items-center justify-center text-white font-bold text-xl backdrop-blur-[2px]"
+                onClick={() => onImageClick(images[2])}
+            >
+                {count > 3 && `+${count - 3}`}
             </div>
-          )}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
 };
 
 const RichTextRenderer: React.FC<{ content: string }> = ({ content }) => {
-  const isBigEmoji = useMemo(() => {
-    return /^(\p{Extended_Pictographic}|\p{Emoji_Presentation}|\s)+$/u.test(content) && [...content].length <= 5;
-  }, [content]);
-
-  if (isBigEmoji) return <div className="text-5xl md:text-6xl py-4 animate-pop-in">{content}</div>;
-
-  const parts = content.split(/(!\[.*?\]\(https?:\/\/[^\s)]+\))/g);
-
-  return (
-    <div className="text-[15px] md:text-[16px] text-gray-800 dark:text-gray-100 leading-relaxed whitespace-pre-wrap break-words">
-      {parts.map((part, i) => {
-        const imgMatch = part.match(/!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/);
-        if (imgMatch) {
+    const isBigEmoji = useMemo(() => {
+      return /^(\p{Extended_Pictographic}|\p{Emoji_Presentation}|\s)+$/u.test(content) && [...content].length <= 5;
+    }, [content]);
+  
+    if (isBigEmoji) return <div className="text-5xl md:text-6xl py-4 animate-pop-in">{content}</div>;
+  
+    const parts = content.split(/(!\[.*?\]\(https?:\/\/[^\s)]+\))/g);
+  
+    return (
+      <div className="text-[15px] md:text-[16px] text-gray-800 dark:text-gray-100 leading-relaxed whitespace-pre-wrap break-words">
+        {parts.map((part, i) => {
+          const imgMatch = part.match(/!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/);
+          if (imgMatch) {
+            return (
+              <div key={i} className="my-4 rounded-xl overflow-hidden shadow-sm border border-gray-100 dark:border-slate-700">
+                  <LazyImage 
+                    src={imgMatch[2]} 
+                    alt={imgMatch[1]} 
+                    className="max-w-full h-auto block cursor-zoom-in" 
+                    onClick={() => window.open(imgMatch[2], '_blank')} 
+                  />
+              </div>
+            );
+          }
+          
           return (
-            <img 
-              key={i} 
-              src={imgMatch[2]} 
-              alt={imgMatch[1]} 
-              className="max-w-full h-auto rounded-xl my-4 border border-gray-100 dark:border-slate-700 shadow-sm block cursor-zoom-in" 
-              onClick={() => window.open(imgMatch[2], '_blank')} 
-            />
+            <span key={i}>
+              {part.split(/((?:https?:\/\/[^\s]+)|(?:@[\w\p{L}]+))/gu).map((sub, j) => {
+                if (sub.match(/^https?:\/\//)) {
+                  return <a key={j} href={sub} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline font-medium break-all">{sub}</a>;
+                }
+                if (sub.startsWith('@')) {
+                  return <span key={j} className="font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-1 rounded cursor-pointer">{sub}</span>;
+                }
+                return sub;
+              })}
+            </span>
           );
-        }
-        
-        return (
-          <span key={i}>
-            {part.split(/((?:https?:\/\/[^\s]+)|(?:@[\w\p{L}]+))/gu).map((sub, j) => {
-              if (sub.match(/^https?:\/\//)) {
-                return <a key={j} href={sub} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline font-medium break-all">{sub}</a>;
-              }
-              if (sub.startsWith('@')) {
-                return <span key={j} className="font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-1 rounded cursor-pointer">{sub}</span>;
-              }
-              return sub;
-            })}
-          </span>
-        );
-      })}
-    </div>
-  );
+        })}
+      </div>
+    );
 };
 
 const ReportModal: React.FC<{ isOpen: boolean; onClose: () => void; onSubmit: (reason: string) => void }> = ({ isOpen, onClose, onSubmit }) => {
-  const [reason, setReason] = useState('');
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
-      <div className="bg-white dark:bg-dark-card rounded-3xl w-full max-w-sm p-6 shadow-2xl animate-pop-in border border-gray-100 dark:border-dark-border">
-        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2"><Flag className="text-red-500" size={20} /> Báo cáo vi phạm</h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Giúp chúng tôi giữ cộng đồng trong sạch.</p>
-        <textarea
-          className="w-full p-3 border border-gray-200 dark:border-slate-700 rounded-xl mb-4 text-sm focus:border-red-500 outline-none bg-gray-50 dark:bg-slate-800 dark:text-white focus:bg-white dark:focus:bg-slate-900 transition-colors resize-none"
-          rows={4}
-          placeholder="Nhập lý do..."
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-        />
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-gray-600 dark:text-gray-300 font-bold hover:bg-gray-100 dark:hover:bg-slate-700 rounded-xl transition-colors">Hủy</button>
-          <button onClick={() => onSubmit(reason)} disabled={!reason.trim()} className="px-4 py-2 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors">Gửi báo cáo</button>
+    const [reason, setReason] = useState('');
+    if (!isOpen) return null;
+    return (
+      <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
+        <div className="bg-white dark:bg-dark-card rounded-3xl w-full max-w-sm p-6 shadow-2xl animate-pop-in border border-gray-100 dark:border-dark-border">
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2"><Flag className="text-red-500" size={20} /> Báo cáo vi phạm</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Giúp chúng tôi giữ cộng đồng trong sạch.</p>
+          <textarea
+            className="w-full p-3 border border-gray-200 dark:border-slate-700 rounded-xl mb-4 text-sm focus:border-red-500 outline-none bg-gray-50 dark:bg-slate-800 dark:text-white focus:bg-white dark:focus:bg-slate-900 transition-colors resize-none"
+            rows={4}
+            placeholder="Nhập lý do..."
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+          <div className="flex justify-end gap-2">
+            <button onClick={onClose} className="px-4 py-2 text-gray-600 dark:text-gray-300 font-bold hover:bg-gray-100 dark:hover:bg-slate-700 rounded-xl transition-colors">Hủy</button>
+            <button onClick={() => onSubmit(reason)} disabled={!reason.trim()} className="px-4 py-2 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors">Gửi báo cáo</button>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
 };
 
 // --- MAIN COMPONENT ---
 
 export default function QuestionDetail({
-  questions, currentUser, onAddAnswer, onMarkBestAnswer, onVerifyAnswer,
+  currentUser, onAddAnswer, onMarkBestAnswer, onVerifyAnswer,
   onOpenAuth, onEditQuestion, onDeleteQuestion, onDeleteAnswer
 }: DetailProps) {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   
-  const questionId = useMemo(() => getIdFromSlug(slug), [slug]);
-  const question = useMemo(() => questions.find(q => q.id === questionId), [questions, questionId]);
-
-  // --- STATE ---
+  // Data State
+  const [question, setQuestion] = useState<Question | null>(null);
+  const [trendingQuestions, setTrendingQuestions] = useState<Question[]>([]);
+  const [loading, setLoading] = useState(true);
   const [adConfig, setAdConfig] = useState<AdConfig | null>(null);
   
   // Interaction State
@@ -217,12 +222,34 @@ export default function QuestionDetail({
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // --- EFFECTS ---
-
+  // --- FETCH DATA ---
   useEffect(() => {
-    getAdConfig().then(setAdConfig).catch(e => console.error("Failed to load ads config", e));
-  }, []);
+      const fetchData = async () => {
+          if (!slug) return;
+          setLoading(true);
+          const qId = getIdFromSlug(slug);
+          
+          try {
+              const qData = await fetchQuestionById(qId);
+              setQuestion(qData);
 
+              const { questions: trendings } = await fetchQuestionsPaginated('Tất cả', 'active', null, 5);
+              setTrendingQuestions(trendings.filter(q => q.id !== qId));
+
+              const ads = await getAdConfig();
+              setAdConfig(ads);
+
+          } catch (e) {
+              console.error("Lỗi tải trang chi tiết:", e);
+          } finally {
+              setLoading(false);
+          }
+      };
+      
+      fetchData();
+  }, [slug]);
+
+  // --- EXISTING EFFECTS ---
   useEffect(() => {
     if (currentUser && question) {
       setIsSaved(currentUser.savedQuestions?.includes(question.id) || false);
@@ -233,7 +260,6 @@ export default function QuestionDetail({
     const handleScroll = () => {
       setShowFloatingInput(window.scrollY > 100);
     };
-
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -262,19 +288,6 @@ export default function QuestionDetail({
   }, [isInputOpen]);
 
   // --- MEMOIZED DATA ---
-
-  const trendingQuestions = useMemo(() => {
-    if (!questions || !question) return [];
-    return questions
-      .filter(q => q.id !== question.id)
-      .sort((a, b) => {
-        const likesA = Array.isArray(a.likes) ? a.likes.length : (typeof a.likes === 'number' ? a.likes : 0);
-        const likesB = Array.isArray(b.likes) ? b.likes.length : (typeof b.likes === 'number' ? b.likes : 0);
-        return ((b.views || 0) + likesB) - ((a.views || 0) + likesA);
-      })
-      .slice(0, 5);
-  }, [questions, question]);
-
   const participants = useMemo(() => {
     if (!question) return [];
     const usersMap = new Map<string, User>();
@@ -323,7 +336,6 @@ export default function QuestionDetail({
   }, [question, currentUser]);
 
   // --- HANDLERS ---
-
   const ensureAuth = useCallback(async (): Promise<User> => {
     if (currentUser.isGuest) {
       try {
@@ -341,6 +353,16 @@ export default function QuestionDetail({
     try {
       const user = await ensureAuth();
       toggleQuestionLikeDb(question, user);
+      
+      setQuestion(prev => {
+          if (!prev) return null;
+          const currentLikes = Array.isArray(prev.likes) ? prev.likes : [];
+          const isLikedNow = currentLikes.includes(user.id);
+          const newLikes = isLikedNow 
+            ? currentLikes.filter(id => id !== user.id) 
+            : [...currentLikes, user.id];
+          return { ...prev, likes: newLikes };
+      });
     } catch (e) { /* ignore */ }
   }, [question, ensureAuth]);
 
@@ -431,6 +453,8 @@ export default function QuestionDetail({
 
       await onAddAnswer(question.id, ans);
       
+      setQuestion(prev => prev ? { ...prev, answers: [...prev.answers, ans] } : null);
+
       setNewAnswer('');
       setAnswerImage(null);
       setIsInputOpen(false);
@@ -482,20 +506,36 @@ export default function QuestionDetail({
     try {
       const user = await ensureAuth();
       await toggleAnswerUseful(question.id, ans.id, user.id);
+      
+      setQuestion(prev => {
+          if (!prev) return null;
+          const newAnswers = prev.answers.map(a => {
+              if (a.id === ans.id) {
+                  const usefulBy = Array.isArray(a.usefulBy) ? a.usefulBy : [];
+                  const isUseful = usefulBy.includes(user.id);
+                  const newUsefulBy = isUseful ? usefulBy.filter(id => id !== user.id) : [...usefulBy, user.id];
+                  return { ...a, usefulBy: newUsefulBy, likes: newUsefulBy.length };
+              }
+              return a;
+          });
+          return { ...prev, answers: newAnswers };
+      });
+
     } catch (e) { /* ignore */ }
   };
 
-  if (!question) {
+  if (loading || !question) {
     return (
-      <div className="p-10 text-center text-gray-500 font-medium mt-10 flex flex-col items-center gap-2">
-        <Loader2 className="animate-spin text-primary" /> Đang tải câu hỏi...
+      <div className="p-10 text-center text-gray-500 font-medium mt-10 flex flex-col items-center gap-2 min-h-screen">
+        <Loader2 className="animate-spin text-primary" /> {loading ? 'Đang tải câu hỏi...' : 'Câu hỏi không tồn tại'}
+        {!loading && <button onClick={() => navigate('/')} className="mt-4 text-blue-500 font-bold">Về trang chủ</button>}
       </div>
     );
   }
 
   const isOwner = currentUser.id === question.author.id;
   const isAdmin = currentUser.isAdmin;
-
+  
   const getTagColor = (cat: string) => {
     if (cat.includes('Mang thai')) return 'bg-pink-50 text-pink-600 border-pink-100 dark:bg-pink-900/30 dark:text-pink-400 dark:border-pink-900';
     if (cat.includes('Dinh dưỡng')) return 'bg-green-50 text-green-600 border-green-100 dark:bg-green-900/30 dark:text-green-400 dark:border-green-900';
@@ -555,7 +595,10 @@ export default function QuestionDetail({
               <div className="flex items-center justify-between mb-4">
                 <RouterLink to={`/profile/${question.author.id}`} className="flex items-center gap-3 group">
                   <div className="relative">
-                    <img src={question.author.avatar} className="w-12 h-12 rounded-full object-cover border-2 border-white dark:border-dark-border shadow-sm group-hover:scale-105 transition-transform" alt="Avatar" />
+                    {/* Dùng LazyImage cho avatar */}
+                    <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white dark:border-dark-border shadow-sm group-hover:scale-105 transition-transform">
+                        <LazyImage src={question.author.avatar} alt="Avatar" className="w-full h-full" />
+                    </div>
                     {question.author.isExpert && <div className="absolute -bottom-0.5 -right-0.5 bg-blue-500 text-white rounded-full p-0.5 border-2 border-white dark:border-dark-card"><ShieldCheck size={12} /></div>}
                   </div>
                   <div>
@@ -608,9 +651,7 @@ export default function QuestionDetail({
 
             {/* 2. MOBILE AD & PROMO */}
             <div className="lg:hidden space-y-6">
-              {/* ✅ QUẢNG CÁO RANDOM MỚI CHO MOBILE */}
               {adConfig?.isEnabled && <SidebarAd variant="minimal" />}
-              
               {!currentUser?.isExpert && <ExpertPromoBox />}
             </div>
 
@@ -645,7 +686,9 @@ export default function QuestionDetail({
                         <div className="flex items-center gap-3">
                           <RouterLink to={`/profile/${ans.author.id}`}>
                             <div className="relative">
-                              <img src={ans.author.avatar} className="w-10 h-10 rounded-full object-cover border border-gray-100 dark:border-slate-600 bg-gray-50 dark:bg-slate-700" alt={ans.author.name} />
+                              <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-100 dark:border-slate-600 bg-gray-50 dark:bg-slate-700">
+                                  <LazyImage src={ans.author.avatar} alt={ans.author.name} className="w-full h-full" />
+                              </div>
                               {ans.author.isExpert && <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white rounded-full p-0.5 border-2 border-white dark:border-dark-card"><ShieldCheck size={10} /></div>}
                             </div>
                           </RouterLink>
@@ -770,7 +813,7 @@ export default function QuestionDetail({
         </div>
       </div>
 
-      {/* --- FOOTER / BOTTOM SHEET INPUT --- */}
+      {/* --- FOOTER / BOTTOM SHEET INPUT (Giữ nguyên) --- */}
       <div 
         className={`fixed left-0 right-0 pointer-events-none flex flex-col justify-end transition-all duration-300 ease-in-out
         ${isInputOpen 
@@ -784,7 +827,6 @@ export default function QuestionDetail({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div className="lg:col-span-8 relative">
               
-              {/* Placeholder Bar */}
               {!isInputOpen && (
                 <div className="pointer-events-auto bg-white dark:bg-dark-card border-t border-gray-100 dark:border-dark-border p-3 pb-safe-bottom shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] md:rounded-t-2xl md:border-x md:border-t lg:mb-0">
                   <button 
@@ -797,7 +839,6 @@ export default function QuestionDetail({
                 </div>
               )}
 
-              {/* Bottom Sheet */}
               {isInputOpen && (
                 <>
                   <div 
@@ -909,7 +950,7 @@ export default function QuestionDetail({
         </div>
       </div>
 
-      <ShareModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} url={window.location.href} title={question.title} />
+      <ShareModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} url={window.location.href} title={question?.title || "Câu hỏi"} />
       <ReportModal isOpen={showReportModal} onClose={() => setShowReportModal(false)} onSubmit={submitReport} />
     </div>
   );

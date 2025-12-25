@@ -12,7 +12,10 @@ import {
   writeBatch,
   increment,
   getDoc,
-  where
+  where,
+  startAfter,
+  QueryDocumentSnapshot, 
+  DocumentData
 } from 'firebase/firestore';
 import {
   ref,
@@ -36,19 +39,20 @@ const uploadChatImage = async (file: File, chatId: string) => {
   return await getDownloadURL(fileRef);
 };
 
-/* ================= REALTIME MESSAGES ================= */
+/* ================= REALTIME MESSAGES (LATEST) ================= */
+// Lấy 20 tin nhắn mới nhất realtime
 export const subscribeMessages = (
   meId: string,
   otherId: string,
-  callback: (messages: Message[]) => void
+  callback: (messages: Message[], lastDoc: QueryDocumentSnapshot<DocumentData> | null) => void
 ) => {
   if (!meId || !otherId) return () => {};
 
   const chatId = getChatId(meId, otherId);
   const q = query(
     collection(db, 'chats', chatId, 'messages'),
-    orderBy('createdAt', 'asc'),
-    limit(100)
+    orderBy('createdAt', 'desc'), // Lấy mới nhất trước
+    limit(20)
   );
 
   return onSnapshot(
@@ -56,29 +60,58 @@ export const subscribeMessages = (
     snap => {
       const data = snap.docs.map(
         d => ({ id: d.id, ...d.data() } as Message)
-      );
-      callback(data);
+      ).reverse(); // Đảo ngược lại để hiển thị đúng thứ tự thời gian (Cũ -> Mới)
+      
+      const lastVisible = snap.docs[snap.docs.length - 1] || null;
+      callback(data, lastVisible);
     },
     err => {
       if (err.code === 'permission-denied') {
-        callback([]);
+        callback([], null);
       }
     }
   );
+};
+
+/* ================= FETCH MORE MESSAGES (HISTORY) ================= */
+// Tải thêm tin nhắn cũ khi cuộn lên trên
+export const fetchMoreMessages = async (
+    meId: string,
+    otherId: string,
+    lastDoc: QueryDocumentSnapshot<DocumentData>
+) => {
+    const chatId = getChatId(meId, otherId);
+    const q = query(
+        collection(db, 'chats', chatId, 'messages'),
+        orderBy('createdAt', 'desc'),
+        startAfter(lastDoc),
+        limit(20)
+    );
+
+    const snap = await getDoc(doc(db, 'chats', chatId)); // Dummy call if needed, but getDocs is correct
+    // Import getDocs ở trên bị thiếu trong bản cũ, cần dùng getDocs
+    const { getDocs } = await import('firebase/firestore'); 
+    const snapshot = await getDocs(q);
+
+    const messages = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Message)).reverse();
+    const newLastDoc = snapshot.docs[snapshot.docs.length - 1] || null;
+
+    return { messages, lastDoc: newLastDoc };
 };
 
 /* ================= SEND MESSAGE ================= */
 export const sendMessage = async (
   sender: User,
   receiverId: string,
-  content: string | File
+  content: string | File,
+  type: 'text' | 'image' = 'text' // Thêm tham số type rõ ràng
 ) => {
   if (!sender?.id || !receiverId) return;
 
   const chatId = getChatId(sender.id, receiverId);
   const batch = writeBatch(db);
 
-  let messageType: 'text' | 'image' = 'text';
+  let messageType = type;
   let messageContent = '';
 
   // 1️⃣ Upload image nếu là File
@@ -86,8 +119,8 @@ export const sendMessage = async (
     messageType = 'image';
     messageContent = await uploadChatImage(content, chatId);
   } else {
-    if (!content.trim()) return;
-    messageContent = content;
+    if (typeof content === 'string' && !content.trim()) return;
+    messageContent = content as string;
   }
 
   // 2️⃣ Tạo message
@@ -173,7 +206,6 @@ export const subscribeUnreadCount = (
     callback(total);
   });
 };
-// ... (các import cũ giữ nguyên)
 
 /* ================= DELETE CHAT (SOFT DELETE) ================= */
 export const deleteChatForUser = async (userId: string, otherUserId: string) => {
@@ -181,7 +213,6 @@ export const deleteChatForUser = async (userId: string, otherUserId: string) => 
   const chatRef = doc(db, 'chats', chatId);
 
   try {
-    // Cập nhật trường deletedFor.{userId} = true
     await updateDoc(chatRef, {
       [`deletedFor.${userId}`]: true
     });
@@ -189,8 +220,8 @@ export const deleteChatForUser = async (userId: string, otherUserId: string) => 
     console.error("Lỗi xóa đoạn chat:", error);
   }
 };
-/* ================= SEND STORY REPLY (NEW) ================= */
-// Hàm gửi tin nhắn phản hồi từ Story (có kèm ảnh thumbnail story)
+
+/* ================= SEND STORY REPLY ================= */
 export const sendStoryReply = async (
   sender: User,
   receiverId: string,
@@ -202,27 +233,24 @@ export const sendStoryReply = async (
   const chatId = getChatId(sender.id, receiverId);
   const batch = writeBatch(db);
 
-  // 1️⃣ Tạo nội dung tin nhắn
   const msgRef = doc(collection(db, 'chats', chatId, 'messages'));
   
   const messageData = {
     senderId: sender.id,
-    content: text,          // Nội dung text người dùng nhập
-    type: 'story_reply',    // Đánh dấu đây là loại tin reply story
-    storyId: story.id,      // ID của story đang xem
-    storyUrl: story.url,    // URL ảnh story (để hiện thumbnail bé xíu trong đoạn chat)
+    content: text,          
+    type: 'story_reply',    
+    storyId: story.id,      
+    storyUrl: story.url,    
     createdAt: serverTimestamp(),
     readBy: [sender.id]
   };
 
   batch.set(msgRef, messageData);
 
-  // 2️⃣ Update chat session (Inbox bên ngoài)
   const chatRef = doc(db, 'chats', chatId);
 
   const chatUpdate: Partial<ChatSession> = {
     participants: [sender.id, receiverId],
-    // Hiển thị preview ở danh sách tin nhắn giống Messenger
     lastMessage: `Đã phản hồi story: ${text}`, 
     lastMessageAt: serverTimestamp(),
     deletedFor: {
@@ -230,9 +258,8 @@ export const sendStoryReply = async (
       [receiverId]: false
     },
     unread: {
-      [receiverId]: increment(1) // Tăng số tin chưa đọc cho người nhận
+      [receiverId]: increment(1) 
     },
-    // Cập nhật thông tin người gửi (đề phòng chat mới tạo chưa có info)
     participantData: {
       [sender.id]: {
         name: sender.name,
