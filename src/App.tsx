@@ -15,11 +15,11 @@ import {
 } from './services/auth';
 import { 
   subscribeToQuestions, addQuestionToDb, updateQuestionInDb, deleteQuestionFromDb, 
-  addAnswerToDb, updateAnswerInDb, deleteAnswerFromDb, submitExpertApplication 
+  addAnswerToDb, updateAnswerInDb, deleteAnswerFromDb, submitExpertApplication,
+  toggleSaveQuestion // <--- Thêm để đồng bộ logic Save
 } from './services/db';
 
 // --- CHIA NHỎ CODE (LAZY LOADING) ---
-// Giúp giảm dung lượng tải ban đầu từ 4.3 MB xuống dưới 1 MB
 const Home = lazy(() => import('./pages/Home').then(m => ({ default: m.Home })));
 const Ask = lazy(() => import('./pages/Ask').then(m => ({ default: m.Ask })));
 const QuestionDetail = lazy(() => import('./pages/QuestionDetail'));
@@ -81,7 +81,10 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // --- AUTH HANDLERS ---
   const handleLogout = async () => { await logoutUser(); setCurrentUser(GUEST_USER); };
+
+  // --- QUESTION HANDLERS ---
   const handleAddQuestion = async (q: Question) => await addQuestionToDb(q);
   const handleEditQuestion = async (id: string, title: string, content: string) => await updateQuestionInDb(id, { title, content });
   const handleDeleteQuestion = async (id: string) => await deleteQuestionFromDb(id);
@@ -89,31 +92,50 @@ export default function App() {
     const q = questions.find(q => q.id === id);
     if (q) await updateQuestionInDb(id, { isHidden: !q.isHidden });
   };
+  
+  // --- CATEGORY HANDLERS ---
   const handleAddCategory = (newCategory: string) => {
     if (!categories.includes(newCategory)) setCategories([...categories, newCategory]);
   };
+
+  // --- ANSWER HANDLERS (ĐÃ CẬP NHẬT ĐỂ SỬA LỖI UI) ---
   const handleAddAnswer = async (qId: string, answer: Answer) => {
     const q = questions.find(i => i.id === qId);
     if (q) await addAnswerToDb(q, answer);
   };
+
   const handleEditAnswer = async (qId: string, aId: string, newContent: string) => await updateAnswerInDb(qId, aId, { content: newContent });
+  
   const handleDeleteAnswer = async (qId: string, aId: string) => await deleteAnswerFromDb(qId, aId);
+
   const handleHideAnswer = async (qId: string, aId: string) => {
     const q = questions.find(q => q.id === qId);
-    const a = q?.answers.find(ans => ans.id === aId);
+    const a = q?.answers?.find(ans => ans.id === aId);
     if (a) await updateAnswerInDb(qId, aId, { isHidden: !a.isHidden });
   };
+
+  // FIX LỖI: Cập nhật isBestAnswer vào từng document thay vì ghi đè mảng
   const handleMarkBestAnswer = async (questionId: string, answerId: string) => {
-    const q = questions.find(item => item.id === questionId);
-    if (!q) return;
-    const updatedAnswers = q.answers.map(a => ({ ...a, isBestAnswer: a.id === answerId ? !a.isBestAnswer : false }));
-    await updateQuestionInDb(questionId, { answers: updatedAnswers });
+    try {
+      const q = questions.find(item => item.id === questionId);
+      if (!q) return;
+      const targetAns = q.answers?.find(a => a.id === answerId);
+      const isCurrentlyBest = targetAns?.isBestAnswer;
+      // Cập nhật Database sub-collection
+      await updateAnswerInDb(questionId, answerId, { isBestAnswer: !isCurrentlyBest });
+    } catch (e) { console.error("Lỗi Best Answer:", e); }
   };
+
+  // FIX LỖI: Cập nhật isExpertVerified vào từng document
   const handleVerifyAnswer = async (questionId: string, answerId: string) => {
-    const q = questions.find(item => item.id === questionId);
-    if (!q) return;
-    const updatedAnswers = q.answers.map(a => a.id === answerId ? { ...a, isExpertVerified: !a.isExpertVerified } : a);
-    await updateQuestionInDb(questionId, { answers: updatedAnswers });
+    try {
+      const q = questions.find(item => item.id === questionId);
+      if (!q) return;
+      const targetAns = q.answers?.find(a => a.id === answerId);
+      const newStatus = !targetAns?.isExpertVerified;
+      // Cập nhật Database sub-collection
+      await updateAnswerInDb(questionId, answerId, { isExpertVerified: newStatus });
+    } catch (e) { console.error("Lỗi Verify:", e); }
   };
 
   const handleExpertRegistration = async (data: any) => {
@@ -142,7 +164,8 @@ export default function App() {
 
       <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-primary" size={40} /></div>}>
         <Routes>
-          <Route path="/admin" element={<AdminLayout currentUser={currentUser!} onLogout={handleLogout} />}>
+          {/* --- ADMIN ROUTES --- */}
+          <Route path="/admin" element={<AdminLayout currentUser={currentUser} onLogout={handleLogout} />}>
             <Route index element={<Dashboard />} />
             <Route path="users" element={<UserManagement />} />
             <Route path="experts" element={<ExpertApprovals />} />
@@ -156,26 +179,31 @@ export default function App() {
             <Route path="seed" element={<SeedData />} />
           </Route>
 
+          {/* --- USER ROUTES --- */}
           <Route element={<UserLayoutWrapper />}>
-            <Route path="/" element={<Home questions={questions} categories={categories} currentUser={currentUser!} />} />
-            <Route path="/ask" element={<Ask onAddQuestion={handleAddQuestion} currentUser={currentUser!} categories={categories} onAddCategory={handleAddCategory} onLogin={loginWithEmail} onRegister={registerWithEmail} onGoogleLogin={loginWithGoogle} />} />
-            <Route path="/notifications" element={<Notifications currentUser={currentUser!} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
-            <Route path="/messages" element={<Messages currentUser={currentUser!} />} />
-            <Route path="/messages/:userId" element={<ChatDetail currentUser={currentUser!} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
+            <Route path="/" element={<Home questions={questions} categories={categories} currentUser={currentUser} />} />
+            <Route path="/ask" element={<Ask onAddQuestion={handleAddQuestion} currentUser={currentUser} categories={categories} onAddCategory={handleAddCategory} onLogin={loginWithEmail} onRegister={registerWithEmail} onGoogleLogin={loginWithGoogle} />} />
+            <Route path="/notifications" element={<Notifications currentUser={currentUser} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
+            <Route path="/messages" element={<Messages currentUser={currentUser} />} />
+            <Route path="/messages/:userId" element={<ChatDetail currentUser={currentUser} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
             <Route path="/ai-chat" element={<AiChat />} />
-            <Route path="/question/:slug" element={<QuestionDetail questions={questions} currentUser={currentUser!} onAddAnswer={handleAddAnswer} onMarkBestAnswer={handleMarkBestAnswer} onVerifyAnswer={handleVerifyAnswer} onOpenAuth={() => setShowGlobalAuthModal(true)} onEditQuestion={handleEditQuestion} onDeleteQuestion={handleDeleteQuestion} onHideQuestion={handleHideQuestion} onEditAnswer={handleEditAnswer} onDeleteAnswer={handleDeleteAnswer} onHideAnswer={handleHideAnswer} />} />
+            <Route path="/question/:slug" element={<QuestionDetail currentUser={currentUser} onMarkBestAnswer={handleMarkBestAnswer} onVerifyAnswer={handleVerifyAnswer} onOpenAuth={() => setShowGlobalAuthModal(true)} onEditQuestion={handleEditQuestion} onDeleteQuestion={handleDeleteQuestion} onEditAnswer={handleEditAnswer} onDeleteAnswer={handleDeleteAnswer} />} />
             <Route path="/games" element={<GameZone />} />
-            <Route path="/profile" element={<Profile user={currentUser!} questions={questions} onLogout={handleLogout} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
-            <Route path="/profile/:userId" element={<Profile user={currentUser!} questions={questions} onLogout={handleLogout} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
-            <Route path="/expert-register" element={<ExpertRegistration currentUser={currentUser!} onSubmitApplication={handleExpertRegistration} />} />
+            <Route path="/profile" element={<Profile user={currentUser} questions={questions} onLogout={handleLogout} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
+            <Route path="/profile/:userId" element={<Profile user={currentUser} questions={questions} onLogout={handleLogout} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
+            <Route path="/expert-register" element={<ExpertRegistration currentUser={currentUser} onSubmitApplication={handleExpertRegistration} />} />
             <Route path="/blog" element={<BlogList />} />
-            <Route path="/blog/:slug" element={<BlogDetail currentUser={currentUser!} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
+            <Route path="/blog/:slug" element={<BlogDetail currentUser={currentUser} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
             <Route path="/documents" element={<DocumentList />} />
-            <Route path="/documents/:slug" element={<DocumentDetail currentUser={currentUser!} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
-            <Route path="/about" element={<About />} /><Route path="/terms" element={<Terms />} />
-            <Route path="/privacy" element={<Privacy />} /><Route path="/contact" element={<Contact />} />
+            <Route path="/documents/:slug" element={<DocumentDetail currentUser={currentUser} onOpenAuth={() => setShowGlobalAuthModal(true)} />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/contact" element={<Contact />} />
             <Route path="/faq" element={<FAQ />} />
           </Route>
+
+          {/* --- FALLBACK --- */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

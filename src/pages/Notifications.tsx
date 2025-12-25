@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
-
-import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Heart, MessageCircle, ShieldCheck, Bell, Check, Loader2, Info } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, Heart, MessageCircle, ShieldCheck, Bell, Loader2 } from 'lucide-react';
 import { subscribeToNotifications, markNotificationAsRead } from '../services/db';
 import { Notification, User } from '../types';
 
@@ -10,13 +9,16 @@ interface NotificationsProps {
   onOpenAuth: () => void;
 }
 
+// Ảnh mặc định để fix lỗi src=""
+const DEFAULT_AVATAR = "https://cdn-icons-png.flaticon.com/512/3177/3177440.png";
+
 export const Notifications: React.FC<NotificationsProps> = ({ currentUser, onOpenAuth }) => {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (currentUser.isGuest) {
+    if (!currentUser || currentUser.isGuest) {
       setLoading(false);
       return;
     }
@@ -46,7 +48,6 @@ export const Notifications: React.FC<NotificationsProps> = ({ currentUser, onOpe
   };
 
   const getIconContainerColor = (type: Notification['type']) => {
-    // Thêm dark:border-slate-800 để icon hòa vào nền tối
     const baseBorder = "border-white dark:border-slate-800"; 
     switch(type) {
         case 'LIKE': return `bg-red-500 ${baseBorder}`;
@@ -59,7 +60,6 @@ export const Notifications: React.FC<NotificationsProps> = ({ currentUser, onOpe
 
   if (currentUser.isGuest) {
     return (
-      // THAY ĐỔI: bg-white -> dark:bg-dark-bg
       <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center animate-fade-in pt-safe-top bg-[#F7F7F5] dark:bg-dark-bg transition-colors">
         <div className="w-24 h-24 bg-primary/10 dark:bg-primary/20 rounded-full flex items-center justify-center mb-6 text-primary animate-bounce-small">
            <Bell size={40} />
@@ -74,9 +74,7 @@ export const Notifications: React.FC<NotificationsProps> = ({ currentUser, onOpe
   }
 
   return (
-    // THAY ĐỔI: bg-[#F7F7F5] -> dark:bg-dark-bg
     <div className="min-h-screen bg-[#F7F7F5] dark:bg-dark-bg pb-24 animate-fade-in transition-colors duration-300">
-      
       {/* Header */}
       <div className="sticky top-0 z-40 bg-white/90 dark:bg-dark-card/90 backdrop-blur-md border-b border-gray-100 dark:border-dark-border px-4 py-3 flex items-center justify-between pt-safe-top shadow-sm transition-colors">
         <div className="flex items-center gap-3">
@@ -111,7 +109,13 @@ export const Notifications: React.FC<NotificationsProps> = ({ currentUser, onOpe
                     `}
                 >
                     <div className="relative shrink-0 mt-0.5">
-                        <img src={notif.sender.avatar} className="w-12 h-12 rounded-full object-cover border border-gray-100 dark:border-slate-700 bg-white dark:bg-slate-800" />
+                        {/* FIX LỖI src="" TẠI ĐÂY */}
+                        <img 
+                          src={notif.sender.avatar || DEFAULT_AVATAR} 
+                          alt={notif.sender.name}
+                          className="w-12 h-12 rounded-full object-cover border border-gray-100 dark:border-slate-700 bg-white dark:bg-slate-800"
+                          onError={(e) => { e.currentTarget.src = DEFAULT_AVATAR }}
+                        />
                         <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center border-2 shadow-sm ${getIconContainerColor(notif.type)}`}>
                             {getIcon(notif.type)}
                         </div>
@@ -137,22 +141,27 @@ export const Notifications: React.FC<NotificationsProps> = ({ currentUser, onOpe
   );
 };
 
-// Helper for human-readable time
 function getRelativeTime(isoString: string) {
-    const date = new Date(isoString);
-    const now = new Date();
-    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    try {
+        const date = new Date(isoString);
+        const now = new Date();
+        const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
-    let interval = seconds / 31536000;
-    if (interval > 1) return Math.floor(interval) + " năm trước";
-    interval = seconds / 2592000;
-    if (interval > 1) return Math.floor(interval) + " tháng trước";
-    interval = seconds / 86400;
-    if (interval > 1) return Math.floor(interval) + " ngày trước";
-    interval = seconds / 3600;
-    if (interval > 1) return Math.floor(interval) + " giờ trước";
-    interval = seconds / 60;
-    if (interval > 1) return Math.floor(interval) + " phút trước";
-    
-    return "Vừa xong";
+        if (isNaN(seconds)) return "Vừa xong";
+
+        let interval = seconds / 31536000;
+        if (interval > 1) return Math.floor(interval) + " năm trước";
+        interval = seconds / 2592000;
+        if (interval > 1) return Math.floor(interval) + " tháng trước";
+        interval = seconds / 86400;
+        if (interval > 1) return Math.floor(interval) + " ngày trước";
+        interval = seconds / 3600;
+        if (interval > 1) return Math.floor(interval) + " giờ trước";
+        interval = seconds / 60;
+        if (interval > 1) return Math.floor(interval) + " phút trước";
+        
+        return "Vừa xong";
+    } catch {
+        return "Vừa xong";
+    }
 }

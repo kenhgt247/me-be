@@ -1,8 +1,8 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Heart, MessageCircle, ShieldCheck, Eye } from 'lucide-react';
+import { Heart, MessageCircle, ShieldCheck, Eye, Bookmark } from 'lucide-react';
 import { Question, User, toSlug } from '../types';
-import { LazyImage } from './common/LazyImage'; // Import component tối ưu ảnh
+import { LazyImage } from './common/LazyImage';
 
 interface QuestionCardProps {
   q: Question;
@@ -12,28 +12,38 @@ interface QuestionCardProps {
 const DEFAULT_AVATAR = "https://cdn-icons-png.flaticon.com/512/3177/3177440.png";
 
 export const QuestionCard = memo(({ q, currentUser }: QuestionCardProps) => {
-  // Tính toán lượt like
-  const likesCount = Array.isArray(q.likes) ? q.likes.length : (typeof q.likes === 'number' ? q.likes : 0);
-  const isLiked = currentUser && Array.isArray(q.likes) && q.likes.includes(currentUser.id);
+  // 1. Logic Like: Hỗ trợ cả mảng và số để không bị lỗi dữ liệu cũ
+  const likesCount = useMemo(() => {
+    return Array.isArray(q.likes) ? q.likes.length : (typeof q.likes === 'number' ? q.likes : 0);
+  }, [q.likes]);
+
+  const isLiked = useMemo(() => {
+    return currentUser && Array.isArray(q.likes) && q.likes.includes(currentUser.id);
+  }, [q.likes, currentUser]);
+
+  // 2. Logic Save: Đồng bộ màu nút Bookmark với mảng savedQuestions của user
+  const isSaved = useMemo(() => {
+    if (!currentUser || !currentUser.savedQuestions) return false;
+    return currentUser.savedQuestions.includes(q.id);
+  }, [currentUser?.savedQuestions, q.id]);
+
+  // 3. Logic Đếm bình luận: Ưu tiên dùng answerCount để hiệu năng tốt nhất
+  const displayAnswerCount = q.answerCount !== undefined ? q.answerCount : (q.answers?.length || 0);
 
   // Hàm render ảnh thông minh (Facebook style mini)
   const renderImages = (images?: string[]) => {
     if (!images || images.length === 0) return null;
     const count = images.length;
-
-    // Class chung cho container
     const containerClass = "mt-3 rounded-xl overflow-hidden border border-gray-100 dark:border-slate-700 bg-gray-50 dark:bg-slate-800";
 
-    // 1 Ảnh
     if (count === 1) {
         return (
             <div className={`${containerClass} aspect-video`}>
-                <LazyImage src={images[0]} alt="Question Image" className="w-full h-full" />
+                <LazyImage src={images[0]} alt="Question" className="w-full h-full" />
             </div>
         );
     }
 
-    // 2 Ảnh (Chia đôi)
     if (count === 2) {
         return (
             <div className={`${containerClass} grid grid-cols-2 gap-1 aspect-[2/1]`}>
@@ -43,14 +53,11 @@ export const QuestionCard = memo(({ q, currentUser }: QuestionCardProps) => {
         );
     }
 
-    // 3 Ảnh trở lên (Hiển thị 3 ảnh, ảnh cuối có overlay số dư)
     return (
         <div className={`${containerClass} grid grid-cols-3 gap-1 aspect-[3/1]`}>
             {images.slice(0, 3).map((img, idx) => (
                 <div key={idx} className="relative w-full h-full">
                     <LazyImage src={img} alt={`Img ${idx}`} className="w-full h-full" />
-                    
-                    {/* Overlay nếu còn ảnh thừa */}
                     {idx === 2 && count > 3 && (
                         <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white font-bold text-lg backdrop-blur-[2px]">
                             +{count - 3}
@@ -69,7 +76,6 @@ export const QuestionCard = memo(({ q, currentUser }: QuestionCardProps) => {
         {/* --- HEADER: AVATAR & INFO --- */}
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-3">
-            {/* Avatar dùng LazyImage */}
             <div className="w-9 h-9 rounded-full overflow-hidden border border-gray-100 dark:border-slate-700 shrink-0">
                 <LazyImage 
                     src={q.author.avatar || DEFAULT_AVATAR} 
@@ -90,9 +96,13 @@ export const QuestionCard = memo(({ q, currentUser }: QuestionCardProps) => {
             </div>
           </div>
 
-          <span className="bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-300 text-[10px] font-bold px-2 py-1 rounded-lg">
-            {q.category}
-          </span>
+          <div className="flex items-center gap-2">
+            {/* Hiển thị Icon Bookmark nếu bài đã được lưu */}
+            {isSaved && <Bookmark size={14} className="text-orange-500 fill-current" />}
+            <span className="bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-300 text-[10px] font-bold px-2 py-1 rounded-lg">
+              {q.category}
+            </span>
+          </div>
         </div>
 
         {/* --- CONTENT --- */}
@@ -109,21 +119,26 @@ export const QuestionCard = memo(({ q, currentUser }: QuestionCardProps) => {
         {/* --- FOOTER ACTIONS --- */}
         <div className="flex items-center justify-between pt-3 border-t border-gray-50 dark:border-slate-800/50 mt-3">
           <div className="flex items-center gap-5 text-xs font-bold text-gray-400 dark:text-gray-500">
-            <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1.5 hover:text-blue-500 transition-colors">
                 <Eye size={16} /> {q.views || 0}
             </span>
-            <span className={`flex items-center gap-1.5 ${isLiked ? "text-red-500" : ""}`}>
+            <span className={`flex items-center gap-1.5 transition-colors ${isLiked ? "text-red-500" : ""}`}>
                 <Heart size={16} className={isLiked ? "fill-current" : ""} /> {likesCount}
             </span>
-            <span className="flex items-center gap-1.5">
-                <MessageCircle size={16} /> {q.answers.length}
+            <span className="flex items-center gap-1.5 hover:text-blue-500 transition-colors">
+                <MessageCircle size={16} /> {displayAnswerCount}
             </span>
           </div>
           
-          {q.answers.length === 0 && (
+          {displayAnswerCount === 0 ? (
             <span className="text-[10px] font-bold text-orange-500 bg-orange-50 dark:bg-orange-900/20 px-2 py-1 rounded-full">
-                Chưa trả lời
+                Chưa có thảo luận
             </span>
+          ) : (
+            <div className="flex -space-x-2">
+               {/* UI trang trí nếu có nhiều người trả lời */}
+               <div className="w-5 h-5 rounded-full border-2 border-white dark:border-dark-card bg-blue-100 flex items-center justify-center text-[8px] text-blue-600">+</div>
+            </div>
           )}
         </div>
       </div>
