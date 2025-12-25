@@ -64,7 +64,6 @@ export const fetchQuestionsAdminPaginated = async (
   const snapshot = await getDocs(q);
   let questions = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Question));
 
-  // Search local (Firebase không hỗ trợ search text partial hiệu quả mà không có service ngoài)
   if (filters?.searchTerm) {
     const term = filters.searchTerm.toLowerCase();
     questions = questions.filter(q => q.title.toLowerCase().includes(term));
@@ -95,9 +94,33 @@ export const fetchUsersAdminPaginated = async (
     };
 };
 
+export const fetchAllUsers = async (): Promise<User[]> => {
+  if (!db) return [];
+  try {
+    const q = query(collection(db, 'users'), orderBy('joinedAt', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User));
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    return [];
+  }
+};
+
 export const updateUserRole = async (userId: string, updates: { isExpert?: boolean; isAdmin?: boolean; isBanned?: boolean }) => {
   const ref = doc(db, 'users', userId);
   await updateDoc(ref, updates);
+};
+
+export const updateUserInfo = async (userId: string, data: { name?: string; bio?: string; specialty?: string }) => {
+  if (!db) return;
+  try {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, data);
+    return true;
+  } catch (error) {
+    console.error("Lỗi khi update user info:", error);
+    throw error;
+  }
 };
 
 export const fetchExpertApplications = async (): Promise<ExpertApplication[]> => {
@@ -144,6 +167,36 @@ export const fetchReports = async (): Promise<Report[]> => {
   return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Report));
 };
 
+export const resolveReport = async (reportId: string, action: 'resolved' | 'dismissed') => {
+  if (!db) return;
+  const ref = doc(db, 'reports', reportId);
+  await updateDoc(ref, { 
+    status: action,
+    resolvedAt: new Date().toISOString()
+  });
+};
+
+export const deleteReportedContent = async (report: Report) => {
+  if (!db) return;
+  try {
+    const batch = writeBatch(db);
+    const reportRef = doc(db, 'reports', report.id);
+    batch.update(reportRef, { status: 'resolved', resolvedAt: new Date().toISOString() });
+
+    if (report.targetType === 'question') {
+      batch.delete(doc(db, 'questions', report.targetId));
+    } else if (report.targetType === 'answer') {
+      batch.delete(doc(db, 'answers', report.targetId));
+    }
+
+    await batch.commit();
+    return true;
+  } catch (e) {
+    console.error("Error deleting reported content", e);
+    throw e;
+  }
+};
+
 export const fetchCategories = async (): Promise<Category[]> => {
   const snapshot = await getDocs(collection(db, 'categories'));
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
@@ -177,7 +230,6 @@ export const syncCategoriesFromCode = async () => {
   return count;
 };
 
-// HELPER FETCH ALL (Dùng cho đếm cũ hoặc tập dữ liệu nhỏ)
 export const fetchAllBlogs = async () => {
   const snapshot = await getDocs(collection(db, 'blogPosts'));
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -186,29 +238,4 @@ export const fetchAllBlogs = async () => {
 export const fetchAllDocuments = async () => {
   const snapshot = await getDocs(collection(db, 'documents'));
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-};
-// --- PHỤC HỒI HÀM CHO USER MANAGEMENT ---
-
-export const fetchAllUsers = async (): Promise<User[]> => {
-  if (!db) return [];
-  try {
-    const q = query(collection(db, 'users'), orderBy('joinedAt', 'desc'));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User));
-  } catch (error) {
-    console.error("Error fetching users:", error);
-    return [];
-  }
-};
-
-export const updateUserInfo = async (userId: string, data: { name?: string; bio?: string; specialty?: string }) => {
-  if (!db) return;
-  try {
-    const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, data);
-    return true;
-  } catch (error) {
-    console.error("Lỗi khi update user info:", error);
-    throw error;
-  }
 };
