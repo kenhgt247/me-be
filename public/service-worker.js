@@ -1,17 +1,6 @@
 const CACHE_NAME = 'asking-v1';
-const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/images/rabbit.png'
-];
 
-self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
-  );
-  self.skipWaiting();
-});
+self.addEventListener('install', (e) => self.skipWaiting());
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
@@ -23,28 +12,35 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // QUAN TRỌNG: Chỉ xử lý các yêu cầu GET. Bỏ qua POST, PUT, DELETE...
+  if (event.request.method !== 'GET') return;
+
+  // Bỏ qua các yêu cầu từ Chrome Extension hoặc Chrome-extension://
+  if (!(event.request.url.indexOf('http') === 0)) return;
+
   event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        // Nếu lấy được file từ mạng, lưu ngay một bản sao vào cache
-        if (response.status === 200) {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone);
-          });
-        }
-        return response;
-      })
-      .catch(() => {
-        // Nếu mất mạng, lục trong kho cache xem có không
-        return caches.match(event.request).then((cachedResponse) => {
-          if (cachedResponse) return cachedResponse;
-          
-          // Nếu là trang web (navigate), trả về index.html thần thánh
+    caches.match(event.request).then((cachedResponse) => {
+      // Nếu đã có trong kho (cache), trả về luôn cho nhanh
+      if (cachedResponse) return cachedResponse;
+
+      // Nếu chưa có, đi lấy từ mạng (Network)
+      return fetch(event.request)
+        .then((response) => {
+          // Chỉ lưu vào kho nếu tải thành công (status 200)
+          if (response && response.status === 200 && response.type === 'basic') {
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return response;
+        })
+        .catch(() => {
+          // Nếu mất mạng hoàn toàn và là trang chính, trả về index.html
           if (event.request.mode === 'navigate') {
             return caches.match('/index.html');
           }
         });
-      })
+    })
   );
 });
