@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-// @ts-ignore
+
 import { useNavigate } from 'react-router-dom';
 import { 
   Sparkles, X, Image as ImageIcon, Loader2, ChevronDown, Check, 

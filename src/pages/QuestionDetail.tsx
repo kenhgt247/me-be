@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-// @ts-ignore
+
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import {
   ArrowLeft, Heart, MessageCircle, ShieldCheck,

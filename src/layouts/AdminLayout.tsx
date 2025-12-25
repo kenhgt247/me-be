@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-// @ts-ignore
+
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   User, LayoutDashboard, Users, FileQuestion, GraduationCap, 

@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { Report, toSlug } from '../../types';
 import { fetchReports, resolveReport, deleteReportedContent } from '../../services/admin';
 import { Flag, CheckCircle, XCircle, Trash2, ExternalLink, Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
-// @ts-ignore
 import { Link } from 'react-router-dom';
 
 export const ReportManagement: React.FC = () => {

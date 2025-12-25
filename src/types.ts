@@ -517,8 +517,28 @@ export const toSlug = (title: string, id?: string) => {
   return id ? `${slug}-${id}` : slug;
 };
 
+// ... (Các phần code ở trên giữ nguyên, chỉ thay đoạn cuối này thôi)
+
 export const getIdFromSlug = (slug: string | undefined): string => {
   if (!slug) return '';
   const lastHyphenIndex = slug.lastIndexOf('-');
   return lastHyphenIndex !== -1 ? slug.substring(lastHyphenIndex + 1) : slug;
-};
+}; // <--- Đảm bảo có dấu đóng ngoặc và chấm phẩy này
+
+// =============================================================================
+//  ADVERTISING CONFIG (CẤU HÌNH QUẢNG CÁO)
+// =============================================================================
+
+export interface AdConfig {
+  isEnabled: boolean;
+  provider: 'adsense' | 'native' | 'custom';
+  frequencies: {
+    home: number;
+    blog: number;
+    details: number;
+    document: number;
+  };
+  googleAdSenseId?: string;
+  nativeAdImage?: string;
+  nativeAdLink?: string;
+}

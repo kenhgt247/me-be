@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { Send, Bot, User, Sparkles, ArrowLeft, Loader2, Sparkles as SparklesIcon } from 'lucide-react';
-// @ts-ignore
+
 import { useNavigate } from 'react-router-dom';
 
 export const AiChat: React.FC = () => {
