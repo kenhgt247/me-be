@@ -22,16 +22,29 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-// Chỉ cache các tài nguyên tĩnh, không cache API để đảm bảo tốc độ và dữ liệu mới nhất
-self.addEventListener('fetch', (e) => {
-  if (e.request.mode === 'navigate') {
-    e.respondWith(fetch(e.request).catch(() => caches.match('/index.html')));
-    return;
-  }
-  
-  e.respondWith(
-    caches.match(e.request).then((response) => {
-      return response || fetch(e.request);
-    })
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    fetch(event.request)
+      .then((response) => {
+        // Nếu lấy được file từ mạng, lưu ngay một bản sao vào cache
+        if (response.status === 200) {
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseClone);
+          });
+        }
+        return response;
+      })
+      .catch(() => {
+        // Nếu mất mạng, lục trong kho cache xem có không
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) return cachedResponse;
+          
+          // Nếu là trang web (navigate), trả về index.html thần thánh
+          if (event.request.mode === 'navigate') {
+            return caches.match('/index.html');
+          }
+        });
+      })
   );
 });
