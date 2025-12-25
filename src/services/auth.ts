@@ -1,5 +1,6 @@
 import * as firebaseAuth from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+// ✅ THÊM updateDoc VÀO IMPORT
+import { doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore'; 
 import { auth, googleProvider, db } from '../firebaseConfig';
 import { User } from '../types';
 
@@ -7,9 +8,7 @@ import { User } from '../types';
 const mapUser = (fbUser: firebaseAuth.User, dbUser?: any): User => {
   return {
     id: fbUser.uid,
-    // Ưu tiên lấy tên từ DB -> Auth -> Giá trị mặc định
     name: dbUser?.name || fbUser.displayName || (fbUser.isAnonymous ? 'Khách ẩn danh' : 'Người dùng'),
-    // Ưu tiên lấy avatar từ DB -> Auth -> Ảnh mặc định
     avatar: dbUser?.avatar || fbUser.photoURL || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
     isExpert: dbUser?.isExpert || false,
     expertStatus: dbUser?.expertStatus || 'none',
@@ -19,11 +18,11 @@ const mapUser = (fbUser: firebaseAuth.User, dbUser?: any): User => {
     joinedAt: dbUser?.joinedAt || new Date().toISOString(),
     specialty: dbUser?.specialty,
     workplace: dbUser?.workplace,
-    username: dbUser?.username || null, // Thêm trường username
-    coverUrl: dbUser?.coverUrl || null, // Thêm trường coverUrl
+    username: dbUser?.username || null,
+    coverUrl: dbUser?.coverUrl || null,
     followers: dbUser?.followers || [],
     following: dbUser?.following || [],
-    isGuest: false // Once logged in (even anonymously), they are no longer a "UI Guest"
+    isGuest: false 
   };
 };
 
@@ -34,18 +33,17 @@ export const loginAnonymously = async (): Promise<User> => {
     const result = await firebaseAuth.signInAnonymously(auth);
     const fbUser = result.user;
     
-    // Create a minimal user record in Firestore for the anonymous user
     const userDocRef = doc(db, 'users', fbUser.uid);
     const userDoc = await getDoc(userDocRef);
 
     if (!userDoc.exists()) {
        const newUser = {
-          name: 'Khách ẩn danh',
-          avatar: 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
-          createdAt: new Date().toISOString(),
-          isExpert: false,
-          points: 0,
-          isAnonymous: true
+         name: 'Khách ẩn danh',
+         avatar: 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
+         createdAt: new Date().toISOString(),
+         isExpert: false,
+         points: 0,
+         isAnonymous: true
        };
        await setDoc(userDocRef, newUser);
        return mapUser(fbUser, newUser);
@@ -53,7 +51,7 @@ export const loginAnonymously = async (): Promise<User> => {
 
     return mapUser(fbUser, userDoc.data());
   } catch (error: any) {
-    console.warn("Anonymous login failed, likely disabled in console:", error.code);
+    console.warn("Anonymous login failed:", error.code);
     if (error.code === 'auth/admin-restricted-operation' || error.code === 'auth/operation-not-allowed') {
         throw new Error("ANONYMOUS_DISABLED");
     }
@@ -67,21 +65,39 @@ export const loginWithGoogle = async (): Promise<User> => {
   const result = await firebaseAuth.signInWithPopup(auth, googleProvider);
   const fbUser = result.user;
   
-  // Check if user exists in Firestore
   const userDocRef = doc(db, 'users', fbUser.uid);
   const userDoc = await getDoc(userDocRef);
+
+  // --- 1. XỬ LÝ ẢNH GOOGLE HD (Đưa lên trên để dùng chung) ---
+  let avatarUrl = fbUser.photoURL;
+  if (avatarUrl && avatarUrl.includes('=s96-c')) {
+      avatarUrl = avatarUrl.replace('=s96-c', '=s400-c');
+  }
   
   if (userDoc.exists()) {
-    return mapUser(fbUser, userDoc.data());
-  } else {
-    // --- FIX: Lấy ảnh HD từ Google và xử lý tạo mới ---
-    let avatarUrl = fbUser.photoURL;
-    // Google photoURL thường có dạng s96-c (96px), thay bằng s400-c để nét hơn
-    if (avatarUrl && avatarUrl.includes('=s96-c')) {
-        avatarUrl = avatarUrl.replace('=s96-c', '=s400-c');
+    // --- 2. CỐT LÕI VẤN ĐỀ: Cập nhật nếu avatar cũ khác avatar mới ---
+    const currentData = userDoc.data();
+    
+    // Nếu có ảnh Google MỚI và nó KHÁC ảnh trong DB (thỏ con)
+    if (avatarUrl && currentData.avatar !== avatarUrl) {
+        // Cập nhật vào Firestore ngay lập tức
+        await updateDoc(userDocRef, { 
+            avatar: avatarUrl,
+            // Cập nhật luôn tên nếu người dùng đổi tên Google (tùy chọn)
+            name: fbUser.displayName || currentData.name 
+        });
+        
+        // Trả về dữ liệu mới nhất để UI hiển thị ngay
+        return mapUser(fbUser, { 
+            ...currentData, 
+            avatar: avatarUrl,
+            name: fbUser.displayName || currentData.name
+        });
     }
-
-    // Create new user in Firestore
+    
+    return mapUser(fbUser, currentData);
+  } else {
+    // --- 3. Tạo user mới tinh (Logic cũ của bạn) ---
     const newUser = {
       name: fbUser.displayName || 'Người dùng mới',
       email: fbUser.email,
@@ -89,7 +105,7 @@ export const loginWithGoogle = async (): Promise<User> => {
       createdAt: new Date().toISOString(),
       isExpert: false,
       expertStatus: 'none',
-      points: 10 // Welcome points
+      points: 10
     };
     await setDoc(userDocRef, newUser);
     return mapUser(fbUser, newUser);
@@ -102,10 +118,8 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
   const result = await firebaseAuth.createUserWithEmailAndPassword(auth, email, pass);
   const fbUser = result.user;
   
-  // Update Display Name in Auth
   await firebaseAuth.updateProfile(fbUser, { displayName: name });
   
-  // Create Firestore Document
   const newUser = {
     name: name,
     email: email,
@@ -139,20 +153,16 @@ export const logoutUser = async () => {
   await firebaseAuth.signOut(auth);
 };
 
-// IMPROVED: Use onSnapshot for real-time user data updates from Firestore
 export const subscribeToAuthChanges = (callback: (user: User | null) => void) => {
   if (!auth) return () => {};
   
   return firebaseAuth.onAuthStateChanged(auth, (fbUser) => {
     if (fbUser) {
-      // Set up a real-time listener for the user document
       const userDocRef = doc(db, 'users', fbUser.uid);
       const unsubFirestore = onSnapshot(userDocRef, (docSnap) => {
         if (docSnap.exists()) {
             callback(mapUser(fbUser, docSnap.data()));
         } else {
-            // Fallback if doc doesn't exist yet (e.g. right after creation)
-            // Fix: Vẫn map fbUser để có thông tin cơ bản
             callback(mapUser(fbUser));
         }
       }, (error) => {

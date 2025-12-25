@@ -69,7 +69,7 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ currentUser,
       onSuccess(newStory);
       onClose();
     } catch (err) {
-      console.error("Lỗi đăng tin:", err);
+      console.error("Lỗi đăng tin:Bạn cần đăng nhập", err);
       setError("Có lỗi xảy ra khi tải ảnh lên. Vui lòng thử lại.");
     } finally {
       setIsUploading(false);
