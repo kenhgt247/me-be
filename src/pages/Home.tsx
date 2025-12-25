@@ -13,7 +13,7 @@ import { fetchDocuments } from '../services/documents';
 import { fetchStories, createStory, markStoryViewed, toggleStoryLike } from '../services/stories';
 import { sendStoryReply } from '../services/chat';
 
-// Import Component Mới (Bạn đã tạo ở các bước trước)
+// Import Component Mới
 import { QuestionCard } from '../components/QuestionCard';
 import { FeedAd } from '../components/ads/FeedAd';
 import { AdBanner } from '../components/AdBanner'; 
@@ -365,16 +365,125 @@ export const Home: React.FC<HomeProps> = ({ questions, categories, currentUser }
           )}
 
           {/* BLOG CARDS (Horizontal Scroll) */}
-          {blogPosts.length > 0 && (<div className="space-y-3 pt-2 px-4 md:px-0"><div className="flex justify-between items-center px-1"><div className="flex items-center gap-2"><BookOpen size={18} className="text-blue-600 dark:text-blue-400" /><h3 className="font-bold text-textDark dark:text-dark-text text-sm uppercase tracking-wide">Kiến thức Chuyên gia</h3></div><Link to="/blog" className="text-xs font-bold text-blue-500 hover:underline">Xem tất cả</Link></div><div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 pr-4 snap-x -mx-4 px-4 md:mx-0 md:px-0">{blogPosts.slice(0, 5).map(post => (<Link to={`/blog/${post.slug}`} key={post.id} className="snap-start flex-shrink-0 w-64 bg-white dark:bg-dark-card rounded-2xl p-3 border border-gray-100 dark:border-dark-border shadow-sm flex flex-col"><div className="aspect-[2/1] rounded-xl bg-gray-100 mb-3 overflow-hidden relative shrink-0"><img src={post.coverImageUrl} className="w-full h-full object-cover" /></div><h4 className="font-bold text-sm text-textDark dark:text-dark-text line-clamp-2 mb-1 flex-1">{post.title}</h4><div className="flex items-center gap-1 mt-auto pt-2"><span className="text-[10px] text-gray-400">{post.authorName}</span></div></Link>))}</div></div>)}
+          {blogPosts.length > 0 && (
+            <div className="space-y-3 pt-2 px-4 md:px-0">
+              <div className="flex justify-between items-center px-1">
+                {/* Nút Kiến thức Chuyên gia - Mới */}
+                <Link 
+                  to="/blog" 
+                  className="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-all duration-300"
+                >
+                  <div className="p-1 bg-blue-100 dark:bg-blue-800 rounded-full group-hover:scale-110 transition-transform">
+                      <BookOpen size={16} className="text-blue-600 dark:text-blue-300" />
+                  </div>
+                  <h3 className="font-bold text-blue-700 dark:text-blue-300 text-sm uppercase tracking-wide">
+                    Kiến thức Chuyên gia
+                  </h3>
+                </Link>
+                <Link to="/blog" className="text-xs font-bold text-gray-400 hover:text-blue-500 hover:underline transition-colors">Xem tất cả</Link>
+              </div>
+              <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 pr-4 snap-x -mx-4 px-4 md:mx-0 md:px-0">
+                {blogPosts.slice(0, 5).map(post => (
+                  <Link to={`/blog/${post.slug}`} key={post.id} className="snap-start flex-shrink-0 w-64 bg-white dark:bg-dark-card rounded-2xl p-3 border border-gray-100 dark:border-dark-border shadow-sm flex flex-col hover:shadow-md transition-shadow">
+                    <div className="aspect-[2/1] rounded-xl bg-gray-100 mb-3 overflow-hidden relative shrink-0"><img src={post.coverImageUrl} className="w-full h-full object-cover" /></div>
+                    <h4 className="font-bold text-sm text-textDark dark:text-dark-text line-clamp-2 mb-1 flex-1">{post.title}</h4>
+                    <div className="flex items-center gap-1 mt-auto pt-2"><span className="text-[10px] text-gray-400">{post.authorName}</span></div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* DOCUMENT CARDS (List) */}
-          {documents.length > 0 && (<div className="space-y-3 pt-2 px-4 md:px-0"><div className="flex justify-between items-center px-1"><div className="flex items-center gap-2"><FileText size={18} className="text-green-600 dark:text-green-400" /><h3 className="font-bold text-textDark dark:text-dark-text text-sm uppercase tracking-wide">Tài liệu chia sẻ</h3></div><Link to="/documents" className="text-xs font-bold text-green-500 hover:underline">Xem tất cả</Link></div><div className="space-y-3">{documents.slice(0, 3).map(renderDocCard)}</div></div>)}
+          {documents.length > 0 && (
+            <div className="space-y-3 pt-2 px-4 md:px-0">
+              <div className="flex justify-between items-center px-1">
+                {/* Nút Tài liệu chia sẻ - Mới */}
+                <Link 
+                  to="/documents" 
+                  className="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/40 transition-all duration-300"
+                >
+                  <div className="p-1 bg-green-100 dark:bg-green-800 rounded-full group-hover:scale-110 transition-transform">
+                       <FileText size={16} className="text-green-600 dark:text-green-300" />
+                  </div>
+                  <h3 className="font-bold text-green-700 dark:text-green-300 text-sm uppercase tracking-wide">
+                    Tài liệu chia sẻ
+                  </h3>
+                </Link>
+                <Link to="/documents" className="text-xs font-bold text-gray-400 hover:text-green-500 hover:underline transition-colors">Xem tất cả</Link>
+              </div>
+              <div className="space-y-3">{documents.slice(0, 3).map(renderDocCard)}</div>
+            </div>
+          )}
 
-          {/* FILTERS */}
-          <div className="pl-4 md:px-0 mt-6"><div className="flex items-center gap-1 mb-2"><Sparkles size={14} className="text-accent" fill="currentColor" /><span className="text-xs font-bold text-textGray dark:text-dark-muted uppercase tracking-wider">Chủ đề</span></div><div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 pr-4 snap-x"><button onClick={() => setActiveCategory('Tất cả')} className={`snap-start flex-shrink-0 px-5 py-2.5 rounded-2xl text-sm font-bold whitespace-nowrap transition-all ${activeCategory === 'Tất cả' ? 'bg-black dark:bg-primary text-white' : 'bg-white dark:bg-dark-card border'}`}>Tất cả</button>{categories.map(cat => (<button key={cat} onClick={() => setActiveCategory(cat)} className={`snap-start flex-shrink-0 px-5 py-2.5 rounded-2xl text-sm font-bold whitespace-nowrap transition-all ${activeCategory === cat ? 'bg-primary text-white' : 'bg-white dark:bg-dark-card border'}`}>{cat}</button>))}</div></div>
+          {/* FILTERS & FEED HEADER */}
+          <div className="pl-4 md:px-0 mt-6">
+            {/* Tiêu đề "Chủ đề" - Phong cách Gradient tím hồng */}
+            <div className="flex items-center gap-2 mb-3 px-1">
+               <div className="p-1.5 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-sm shadow-purple-200 dark:shadow-none">
+                  <Sparkles size={14} fill="currentColor" />
+               </div>
+               <span className="text-sm font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-pink-600 dark:from-purple-400 dark:to-pink-400 uppercase tracking-wide">
+                  Chủ đề nổi bật
+               </span>
+            </div>
 
-          {/* MAIN FEED: QUESTIONS & ADS */}
-          <div className="px-4 md:px-0 flex items-center justify-between mt-2"><h3 className="font-bold text-lg text-textDark dark:text-dark-text">Cộng đồng hỏi đáp</h3><div className="flex bg-white dark:bg-dark-card p-1 rounded-xl border border-gray-100 dark:border-dark-border shadow-sm"><button onClick={() => setViewFilter('newest')} className={`p-1.5 rounded-lg transition-all ${viewFilter === 'newest' ? 'bg-gray-100 dark:bg-slate-700 text-textDark dark:text-white' : 'text-gray-400'}`}><Clock size={16} /></button><button onClick={() => setViewFilter('active')} className={`p-1.5 rounded-lg transition-all ${viewFilter === 'active' ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-500' : 'text-gray-400'}`}><Flame size={16} /></button><button onClick={() => setViewFilter('unanswered')} className={`p-1.5 rounded-lg transition-all ${viewFilter === 'unanswered' ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-500' : 'text-gray-400'}`}><MessageSquareOff size={16} /></button></div></div>
+            {/* Danh sách nút lọc - Dạng viên thuốc */}
+            <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 pr-4 snap-x">
+              <button 
+                onClick={() => setActiveCategory('Tất cả')} 
+                className={`snap-start flex-shrink-0 px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all border ${activeCategory === 'Tất cả' ? 'bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900 shadow-md' : 'bg-white text-gray-500 border-gray-100 dark:bg-dark-card dark:border-dark-border dark:text-gray-400 hover:border-purple-200 hover:text-purple-500'}`}
+              >
+                Tất cả
+              </button>
+              {categories.map(cat => (
+                <button 
+                  key={cat} 
+                  onClick={() => setActiveCategory(cat)} 
+                  className={`snap-start flex-shrink-0 px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all border ${activeCategory === cat ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white border-transparent shadow-md shadow-purple-200 dark:shadow-none' : 'bg-white text-gray-500 border-gray-100 dark:bg-dark-card dark:border-dark-border dark:text-gray-400 hover:border-purple-200 hover:text-purple-500'}`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Tiêu đề Feed & Nút Sắp xếp */}
+          <div className="px-4 md:px-0 flex items-center justify-between mt-6 mb-4">
+            <h3 className="font-bold text-lg text-textDark dark:text-dark-text flex items-center gap-2">
+              Cộng đồng hỏi đáp
+              <span className="text-xs font-normal px-2 py-0.5 bg-gray-100 dark:bg-slate-800 rounded-full text-gray-500">Mới nhất</span>
+            </h3>
+
+            <div className="flex bg-white dark:bg-dark-card p-1 rounded-full border border-gray-100 dark:border-dark-border shadow-sm gap-1">
+              {/* Nút Mới nhất (Clock) */}
+              <button 
+                onClick={() => setViewFilter('newest')} 
+                title="Mới nhất"
+                className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${viewFilter === 'newest' ? 'bg-gray-900 text-white shadow-sm dark:bg-white dark:text-black' : 'text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800'}`}
+              >
+                <Clock size={18} />
+              </button>
+
+              {/* Nút Sôi nổi (Flame) - Gradient Cam */}
+              <button 
+                onClick={() => setViewFilter('active')} 
+                title="Sôi nổi nhất"
+                className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${viewFilter === 'active' ? 'bg-gradient-to-tr from-orange-500 to-red-500 text-white shadow-sm shadow-orange-200 dark:shadow-none' : 'text-gray-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20'}`}
+              >
+                <Flame size={18} fill={viewFilter === 'active' ? "currentColor" : "none"} />
+              </button>
+
+              {/* Nút Chưa trả lời (Message) - Gradient Xanh */}
+              <button 
+                onClick={() => setViewFilter('unanswered')} 
+                title="Chưa có trả lời"
+                className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${viewFilter === 'unanswered' ? 'bg-gradient-to-tr from-blue-500 to-cyan-500 text-white shadow-sm shadow-blue-200 dark:shadow-none' : 'text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20'}`}
+              >
+                <MessageSquareOff size={18} />
+              </button>
+            </div>
+          </div>
           
           <div className="px-4 md:px-0 space-y-4 pb-10">
               {paginatedList.map((q, index) => {
