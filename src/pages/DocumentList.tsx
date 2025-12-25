@@ -5,16 +5,14 @@ import { fetchDocumentsPaginated, fetchDocumentCategories } from '../services/do
 import { getAdConfig, subscribeToAdConfig } from '../services/ads';
 import { subscribeToAuthChanges } from '../services/auth';
 import { 
-  FileText, UploadCloud, ArrowDown, ChevronRight, ChevronLeft, AlertCircle, Search, Loader2
+  FileText, UploadCloud, ArrowDown, ChevronRight, ChevronLeft, AlertCircle, Search
 } from 'lucide-react';
 import { ExpertPromoBox } from '../components/ExpertPromoBox';
 import { DocumentGridAd } from '../components/ads/DocumentGridAd';
-import { DocumentCard } from '../components/documents/DocumentCard';
-import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
+import { DocumentCard } from '../components/documents/DocumentCard'; // Import component mới
 
 const PAGE_SIZE = 9;
 
-// --- SKELETON LOADER ---
 const DocSkeleton = () => (
   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
     {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -48,7 +46,6 @@ export const DocumentList: React.FC = () => {
   const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Initial Load
   useEffect(() => {
     const unsubAuth = subscribeToAuthChanges(user => setCurrentUser(user));
     const unsubAd = subscribeToAdConfig(setAdConfig);
@@ -77,24 +74,6 @@ export const DocumentList: React.FC = () => {
     return () => { unsubAuth(); unsubAd(); };
   }, []);
 
-  // Handler: Load More (LOGIC MỚI - GIỮ CÁI NÀY)
-  const handleLoadMore = async () => {
-    if (isLoadingMore || !hasMore || !lastDoc) return;
-    
-    setIsLoadingMore(true);
-    try {
-        const { docs: newDocs, lastDoc: newLastDoc, hasMore: newHasMore } = await fetchDocumentsPaginated(activeCat, lastDoc, PAGE_SIZE);
-        setDocs(prev => [...prev, ...newDocs]);
-        setLastDoc(newLastDoc);
-        setHasMore(newHasMore);
-    } catch (error) {
-        console.error("Lỗi tải thêm:", error);
-    } finally {
-        setIsLoadingMore(false);
-    }
-  };
-
-  // Handler: Filter Category (LOGIC MỚI - GIỮ CÁI NÀY)
   const handleFilter = async (catId: string) => {
       if (catId === activeCat) return;
 
@@ -125,11 +104,8 @@ export const DocumentList: React.FC = () => {
     }
   };
 
-  // Tìm kiếm Client-side (Tạm thời trên tập đã tải)
-  const filteredDocs = searchTerm 
-    ? docs.filter(d => d.title.toLowerCase().includes(searchTerm.toLowerCase()))
-    : docs;
-
+  const filteredDocs = docs.filter(d => d.title.toLowerCase().includes(searchTerm.toLowerCase()));
+  const visibleDocs = filteredDocs.slice(0, visibleCount);
   const canShare = currentUser && (currentUser.isAdmin || currentUser.isExpert);
 
   return (
@@ -156,7 +132,7 @@ export const DocumentList: React.FC = () => {
                   <div className="flex flex-col md:flex-row gap-4 items-start md:items-center pb-2">
                       <div className="relative w-full md:w-auto md:flex-1 max-w-md group shrink-0">
                           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-green-600 transition-colors" size={20} />
-                          <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Tìm kiếm tài liệu đã tải..." className="w-full pl-12 pr-10 py-3 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-green-500/20 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium text-sm text-textDark dark:text-white placeholder-gray-400 dark:placeholder-gray-500 shadow-inner" />
+                          <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Tìm kiếm tài liệu..." className="w-full pl-12 pr-10 py-3 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-green-500/20 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium text-sm text-textDark dark:text-white placeholder-gray-400 dark:placeholder-gray-500 shadow-inner" />
                       </div>
 
                       <div className="flex-1 w-full min-w-0 relative group/scroll">
@@ -192,7 +168,7 @@ export const DocumentList: React.FC = () => {
                     )}
 
                     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 animate-slide-up">
-                        {filteredDocs.map((doc, index) => {
+                        {visibleDocs.map((doc, index) => {
                             const freq = adConfig?.frequencies?.document || 6;
                             const shouldShowAd = adConfig?.isEnabled && (index + 1) % freq === 0;
 
@@ -205,16 +181,10 @@ export const DocumentList: React.FC = () => {
                         })}
                     </div>
 
-                    {/* LOAD MORE BUTTON (LOGIC MỚI) */}
-                    {hasMore && !searchTerm && (
+                    {visibleCount < filteredDocs.length && (
                         <div className="flex justify-center mt-12 pb-8">
-                            <button 
-                                onClick={handleLoadMore} 
-                                disabled={isLoadingMore}
-                                className="px-8 py-3 rounded-full bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border text-sm font-bold text-gray-900 dark:text-white shadow-sm hover:bg-gray-50 dark:hover:bg-slate-700 active:scale-95 transition-all flex items-center gap-2 group disabled:opacity-70"
-                            >
-                                {isLoadingMore ? <Loader2 className="animate-spin" size={16} /> : 'Xem thêm tài liệu'}
-                                {!isLoadingMore && <ArrowDown size={16} className="group-hover:translate-y-1 transition-transform" />}
+                            <button onClick={handleLoadMore} className="px-8 py-3 rounded-full bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border text-sm font-bold text-gray-900 dark:text-white shadow-sm hover:bg-gray-50 dark:hover:bg-slate-700 active:scale-95 transition-all flex items-center gap-2 group">
+                                Xem thêm tài liệu <ArrowDown size={16} className="group-hover:translate-y-1 transition-transform" />
                             </button>
                         </div>
                     )}
