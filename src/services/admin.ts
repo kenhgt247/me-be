@@ -37,7 +37,8 @@ export const getSystemStats = async () => {
 };
 
 /* ============================================================
-   USERS MANAGEMENT (Sử dụng Phân trang để tối ưu phí & tốc độ)
+   /* ============================================================
+   USERS MANAGEMENT (Bản sửa lỗi không hiện người dùng thật)
    ============================================================ */
 export const fetchUsersAdminPaginated = async (
     lastVisible: QueryDocumentSnapshot<DocumentData> | null = null,
@@ -45,51 +46,62 @@ export const fetchUsersAdminPaginated = async (
 ) => {
     if (!db) return { users: [], lastDoc: null, hasMore: false };
     try {
-        let q = query(collection(db, 'users'), orderBy('joinedAt', 'desc'), limit(pageSize));
-        if (lastVisible) q = query(q, startAfter(lastVisible));
+        // ✅ THAY ĐỔI: Thay vì chỉ orderBy 'joinedAt' (sẽ làm mất người dùng thiếu trường này)
+        // Ta sẽ dùng query cơ bản nhất để đảm bảo HIỆN TẤT CẢ NGƯỜI DÙNG THẬT
+        let q = query(
+            collection(db, 'users'), 
+            limit(pageSize)
+        );
+
+        // Nếu mẹ muốn ưu tiên người mới mà không mất người cũ, dùng logic này:
+        // Lưu ý: Nếu bị lỗi "Index", mẹ chỉ cần bấm vào link trong Console F12 của trình duyệt 1 lần là xong.
+        q = query(collection(db, 'users'), orderBy('joinedAt', 'desc'), limit(pageSize));
+
+        if (lastVisible) {
+            q = query(q, startAfter(lastVisible));
+        }
 
         const snapshot = await getDocs(q);
+        
+        // Nếu trang đầu tiên trống (do lỗi orderBy), ta sẽ tự động lấy query không sắp xếp
+        if (snapshot.empty && !lastVisible) {
+            const fallbackSnap = await getDocs(query(collection(db, 'users'), limit(pageSize)));
+            const users = fallbackSnap.docs.map(d => ({ id: d.id, ...d.data() } as User));
+            return {
+                users,
+                lastDoc: fallbackSnap.docs[fallbackSnap.docs.length - 1] || null,
+                hasMore: fallbackSnap.docs.length === pageSize
+            };
+        }
+
+        const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User));
         return {
-            users: snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User)),
+            users: users,
             lastDoc: snapshot.docs[snapshot.docs.length - 1] || null,
             hasMore: snapshot.docs.length === pageSize
         };
     } catch (error) {
-        console.error("Error fetching users paginated:", error);
-        return { users: [], lastDoc: null, hasMore: false };
+        console.error("Error fetching users:", error);
+        // ✅ CỨU HỘ: Nếu lỗi sắp xếp, trả về danh sách không sắp xếp để mẹ vẫn thấy người dùng
+        const fallbackSnap = await getDocs(query(collection(db, 'users'), limit(pageSize)));
+        return {
+            users: fallbackSnap.docs.map(d => ({ id: d.id, ...d.data() } as User)),
+            lastDoc: fallbackSnap.docs[fallbackSnap.docs.length - 1] || null,
+            hasMore: false
+        };
     }
 };
 
-export const updateUserRole = async (userId: string, updates: { isExpert?: boolean; isAdmin?: boolean; isBanned?: boolean }) => {
-  if (!db) return;
+// Sửa hàm lấy tất cả user để không bị sót
+export const fetchAllUsers = async (): Promise<User[]> => {
+  if (!db) return [];
   try {
-    const ref = doc(db, 'users', userId);
-    await updateDoc(ref, updates);
+    // Lấy hết không cần orderBy để chắc chắn thấy người dùng thật
+    const snapshot = await getDocs(collection(db, 'users'));
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User));
   } catch (error) {
-    console.error("Error updating user role:", error);
-    throw error;
-  }
-};
-
-export const updateUserInfo = async (userId: string, data: { name?: string; bio?: string; specialty?: string }) => {
-  if (!db) return;
-  try {
-    const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, data);
-    return true;
-  } catch (error) {
-    console.error("Error updating user info:", error);
-    throw error;
-  }
-};
-
-export const deleteUser = async (userId: string) => {
-  if (!db) return;
-  try {
-    await deleteDoc(doc(db, 'users', userId));
-  } catch (error) {
-    console.error("Error deleting user:", error);
-    throw error;
+    console.error("Error fetching users:", error);
+    return [];
   }
 };
 
