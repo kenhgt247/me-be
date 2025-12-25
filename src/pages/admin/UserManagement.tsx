@@ -1,9 +1,8 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { 
   Shield, ShieldOff, Ban, CheckCircle, Search, Filter, 
-  MoreVertical, ShieldCheck, Edit, X, Save, Loader2, ChevronDown 
+  MoreVertical, ShieldCheck, Edit, X, Save, Loader2, ChevronDown, RefreshCw 
 } from 'lucide-react';
-// Gọi fetchUsersAdminPaginated thay vì fetchAllUsers để chống lag
 import { 
   fetchUsersAdminPaginated, 
   updateUserRole, 
@@ -19,74 +18,45 @@ export const UserManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'expert' | 'admin' | 'banned'>('all');
   
-  // State phân trang (Pagination)
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [hasMore, setHasMore] = useState(true);
-
-  // State Quản lý việc sửa
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
   const [editForm, setEditForm] = useState({ name: '', bio: '', specialty: '' });
   const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    loadInitialUsers();
-  }, []);
-
+  // ✅ HÀM TẢI LẠI TOÀN BỘ (Dùng khi muốn thấy người đăng ký mới nhất)
   const loadInitialUsers = async () => {
     setLoading(true);
+    setUsers([]); // Xóa danh sách cũ để đảm bảo không bị lẫn dữ liệu ảo
     try {
-      // Tải 100 users đầu tiên để bộ lọc local hoạt động diện rộng hơn
-      const { users: data, lastDoc: nextDoc, hasMore: more } = await fetchUsersAdminPaginated(null, 100);
+      const { users: data, lastDoc: nextDoc, hasMore: more } = await fetchUsersAdminPaginated(null, 30);
       setUsers(data);
       setLastDoc(nextDoc);
       setHasMore(more);
     } catch (error) {
-      console.error("Lỗi tải users:", error);
+      console.error(error);
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    loadInitialUsers();
+  }, []);
+
   const handleLoadMore = async () => {
     if (!lastDoc || loadingMore) return;
     setLoadingMore(true);
     try {
-      const { users: newData, lastDoc: nextDoc, hasMore: more } = await fetchUsersAdminPaginated(lastDoc, 50);
+      const { users: newData, lastDoc: nextDoc, hasMore: more } = await fetchUsersAdminPaginated(lastDoc, 30);
       setUsers(prev => [...prev, ...newData]);
       setLastDoc(nextDoc);
       setHasMore(more);
     } catch (error) {
-      console.error("Lỗi tải thêm:", error);
+      console.error(error);
     } finally {
       setLoadingMore(false);
     }
-  };
-
-  const handleToggleAdmin = async (user: UserType) => {
-    const nextStatus = !user.isAdmin;
-    if (!confirm(`Bạn có chắc muốn ${nextStatus ? 'cấp' : 'gỡ'} quyền Admin cho ${user.name}?`)) return;
-    try {
-      await updateUserRole(user.id, { isAdmin: nextStatus });
-      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, isAdmin: nextStatus } : u));
-    } catch (e) { alert("Lỗi cập nhật!"); }
-  };
-
-  const handleToggleBan = async (user: UserType) => {
-    const nextStatus = !user.isBanned;
-    if (!confirm(`Bạn có chắc muốn ${nextStatus ? 'khóa' : 'mở khóa'} tài khoản ${user.name}?`)) return;
-    try {
-      await updateUserRole(user.id, { isBanned: nextStatus });
-      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, isBanned: nextStatus } : u));
-    } catch (e) { alert("Lỗi cập nhật!"); }
-  };
-
-  const handleEditClick = (user: UserType) => {
-    setEditingUser(user);
-    setEditForm({
-      name: user.name || '',
-      bio: user.bio || '',
-      specialty: user.specialty || ''
-    });
   };
 
   const handleSaveEdit = async () => {
@@ -96,57 +66,61 @@ export const UserManagement: React.FC = () => {
         await updateUserInfo(editingUser.id, editForm);
         setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, ...editForm } : u));
         setEditingUser(null);
-    } catch (error) {
-        alert("Có lỗi xảy ra khi lưu!");
-    } finally {
-        setIsSaving(false);
-    }
+    } catch (error) { alert("Lỗi!"); }
+    finally { setIsSaving(false); }
   };
 
-  // ✅ LOGIC BỘ LỌC CHÍNH XÁC: TÌM ĐƯỢC ADMIN VÀ SEARCH KHÔNG LỖI
-  const filteredUsers = useMemo(() => {
-    return users.filter(u => {
-      // 1. Chuẩn hóa chuỗi tìm kiếm
-      const searchLower = searchTerm.toLowerCase().trim();
-      const nameSafe = (u.name || "").toLowerCase();
-      const emailSafe = (u.email || "").toLowerCase();
-      const matchesSearch = searchLower === "" || nameSafe.includes(searchLower) || emailSafe.includes(searchLower);
-      
-      if (!matchesSearch) return false;
+  const handleToggleAdmin = async (user: UserType) => {
+    if (!confirm(`Cấp/Gỡ quyền Admin cho ${user.name}?`)) return;
+    await updateUserRole(user.id, { isAdmin: !user.isAdmin });
+    setUsers(prev => prev.map(u => u.id === user.id ? { ...u, isAdmin: !u.isAdmin } : u));
+  };
 
-      // 2. Bộ lọc vai trò
+  // ✅ LOGIC TÌM KIẾM CHUẨN: Ưu tiên quét dữ liệu thật
+  const filteredUsers = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
+    return users.filter(u => {
+      const matchesSearch = term === "" || 
+                           (u.name || "").toLowerCase().includes(term) || 
+                           (u.email || "").toLowerCase().includes(term);
+      if (!matchesSearch) return false;
       if (filter === 'expert') return u.isExpert === true;
-      if (filter === 'admin') return u.isAdmin === true; // Tìm chính xác Admin
+      if (filter === 'admin') return u.isAdmin === true;
       if (filter === 'banned') return u.isBanned === true;
-      
-      return true; // Tab 'Tất cả'
+      return true;
     });
   }, [users, searchTerm, filter]);
 
   return (
-    <div className="space-y-6 relative pb-20 animate-fade-in">
+    <div className="space-y-6 pb-20 animate-fade-in">
        {/* Actions Bar */}
        <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white p-4 rounded-2xl border border-gray-100 shadow-sm sticky top-0 z-20">
-          <div className="relative w-full md:w-96 group">
-             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors" size={20} />
-             <input 
-               type="text" 
-               placeholder="Tìm theo tên hoặc email thành viên..." 
-               value={searchTerm}
-               onChange={e => setSearchTerm(e.target.value)}
-               className="w-full pl-12 pr-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-sm font-medium"
-             />
+          <div className="flex items-center gap-3 w-full md:w-auto">
+             <button 
+                onClick={loadInitialUsers} 
+                className="p-2.5 bg-gray-50 text-gray-500 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all"
+                title="Làm mới danh sách (Load người dùng mới nhất)"
+             >
+                <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
+             </button>
+             <div className="relative flex-1 md:w-80 group">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500" size={20} />
+                <input 
+                  type="text" 
+                  placeholder="Tìm tên hoặc email người dùng thật..." 
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className="w-full pl-12 pr-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none font-medium text-sm"
+                />
+             </div>
           </div>
-          <div className="flex gap-1.5 w-full md:w-auto overflow-x-auto no-scrollbar p-1 bg-gray-50 rounded-xl">
+          
+          <div className="flex gap-1.5 p-1 bg-gray-50 rounded-xl">
              {(['all', 'expert', 'admin', 'banned'] as const).map(f => (
                <button 
                  key={f}
                  onClick={() => setFilter(f)}
-                 className={`px-5 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
-                    filter === f 
-                    ? 'bg-white text-blue-600 shadow-sm' 
-                    : 'text-gray-500 hover:text-gray-700'
-                 }`}
+                 className={`px-5 py-2 rounded-lg text-xs font-black uppercase transition-all ${filter === f ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400'}`}
                >
                  {f === 'all' ? 'Tất cả' : f === 'expert' ? 'Chuyên gia' : f === 'admin' ? 'Quản trị' : 'Bị khóa'}
                </button>
@@ -154,65 +128,50 @@ export const UserManagement: React.FC = () => {
           </div>
        </div>
 
-       {/* Table Section */}
+       {/* Table */}
        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto text-sm">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-gray-50/50 border-b border-gray-100 text-[10px] uppercase text-gray-400 font-black tracking-[0.1em]">
+                <tr className="bg-gray-50/50 border-b border-gray-100 text-[10px] uppercase text-gray-400 font-black tracking-widest">
                    <th className="px-6 py-4">Thành viên</th>
-                   <th className="px-6 py-4">Vai trò hệ thống</th>
+                   <th className="px-6 py-4">Vai trò</th>
                    <th className="px-6 py-4 text-center">Trạng thái</th>
-                   <th className="px-6 py-4">Ngày gia nhập</th>
                    <th className="px-6 py-4 text-right">Tác vụ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                 {loading ? (
-                   <tr><td colSpan={5} className="text-center py-20"><Loader2 className="animate-spin inline text-blue-500 mb-2" /><p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Đang kết nối Database...</p></td></tr>
-                 ) : filteredUsers.length === 0 ? (
-                   <tr><td colSpan={5} className="text-center py-20 text-gray-400 font-medium italic">Không tìm thấy thành viên trong danh sách hiện tại. <br/> <span className="text-[10px] not-italic">Gợi ý: Mẹ hãy bấm "Tải thêm" ở dưới cùng.</span></td></tr>
-                 ) : (
+                {loading ? (
+                   <tr><td colSpan={4} className="text-center py-20 text-gray-400 font-bold uppercase tracking-widest animate-pulse">Đang quét Database...</td></tr>
+                ) : filteredUsers.length === 0 ? (
+                   <tr><td colSpan={4} className="text-center py-20 text-gray-400 italic">Không tìm thấy người dùng này. Mẹ hãy bấm "Tải thêm" hoặc nút "Làm mới" nhé.</td></tr>
+                ) : (
                     filteredUsers.map(user => (
                        <tr key={user.id} className="hover:bg-blue-50/30 transition-colors group">
                           <td className="px-6 py-4">
                              <div className="flex items-center gap-4">
-                                <div className="relative">
-                                    <img src={user.avatar || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png'} className="w-10 h-10 rounded-full bg-gray-100 object-cover border-2 border-white shadow-sm" />
-                                    {user.isAdmin && <div className="absolute -top-1 -right-1 bg-purple-500 text-white rounded-full p-0.5 border border-white"><ShieldCheck size={10} /></div>}
-                                </div>
+                                <img src={user.avatar || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png'} className="w-10 h-10 rounded-full bg-gray-100 object-cover border-2 border-white shadow-sm" alt="" />
                                 <div className="min-w-0">
-                                   <p className="font-bold text-gray-900 text-sm truncate">{user.name}</p>
-                                   <p className="text-[11px] text-gray-400 font-medium truncate">{user.email || 'Hệ thống Google'}</p>
+                                   <p className="font-bold text-gray-900 truncate">{user.name}</p>
+                                   <p className="text-[11px] text-gray-400 truncate">{user.email || 'Email ẩn'}</p>
                                 </div>
                              </div>
                           </td>
                           <td className="px-6 py-4">
-                             <div className="flex gap-1.5 flex-wrap">
-                                {user.isAdmin && <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-purple-50 text-purple-600 border border-purple-100">Admin</span>}
-                                {user.isExpert && <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-blue-50 text-blue-600 border border-blue-100">Expert</span>}
-                                {!user.isAdmin && !user.isExpert && <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-gray-50 text-gray-400">User</span>}
+                             <div className="flex gap-1 flex-wrap">
+                                {user.isAdmin && <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-purple-100 text-purple-600">Admin</span>}
+                                {user.isExpert && <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-blue-100 text-blue-600">Expert</span>}
+                                {!user.isAdmin && !user.isExpert && <span className="text-[9px] font-bold text-gray-300 uppercase tracking-tighter">Member</span>}
                              </div>
                           </td>
                           <td className="px-6 py-4 text-center">
-                             {user.isBanned ? (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-red-50 text-red-600 border border-red-100">
-                                   <Ban size={10} /> Banned
-                                </span>
-                             ) : (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-green-50 text-green-600 border border-green-100">
-                                   <CheckCircle size={10} /> Active
-                                </span>
-                             )}
-                          </td>
-                          <td className="px-6 py-4 text-[13px] text-gray-500 font-medium">
-                             {user.joinedAt ? new Date(user.joinedAt).toLocaleDateString('vi-VN') : '--'}
+                             {user.isBanned ? <span className="text-red-500 font-black text-[10px] uppercase bg-red-50 px-2 py-1 rounded-full">Banned</span> : <span className="text-green-600 font-black text-[10px] uppercase bg-green-50 px-2 py-1 rounded-full">Active</span>}
                           </td>
                           <td className="px-6 py-4 text-right">
                              <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => handleEditClick(user)} className="p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-all" title="Chỉnh sửa"><Edit size={16} /></button>
-                                <button onClick={() => handleToggleAdmin(user)} className={`p-2 rounded-lg transition-all ${user.isAdmin ? 'text-purple-600 bg-purple-50' : 'text-gray-300 hover:text-purple-600 hover:bg-purple-50'}`} title="Quyền Admin">{user.isAdmin ? <ShieldCheck size={16} /> : <Shield size={16} />}</button>
-                                <button onClick={() => handleToggleBan(user)} className={`p-2 rounded-lg transition-all ${user.isBanned ? 'text-red-600 bg-red-50' : 'text-gray-300 hover:text-red-600 hover:bg-red-50'}`} title="Khóa/Mở">{user.isBanned ? <CheckCircle size={16} /> : <Ban size={16} />}</button>
+                                <button onClick={() => { setEditingUser(user); setEditForm({ name: user.name || '', bio: user.bio || '', specialty: user.specialty || '' }); }} className="p-2 text-gray-400 hover:text-blue-600 transition-all"><Edit size={16} /></button>
+                                <button onClick={() => handleToggleAdmin(user)} className={`p-2 transition-all ${user.isAdmin ? 'text-purple-600' : 'text-gray-300 hover:text-purple-600'}`} title="Admin Toggle"><ShieldCheck size={16} /></button>
+                                <button onClick={() => { if(confirm("Khóa người này?")) updateUserRole(user.id, { isBanned: !user.isBanned }).then(loadInitialUsers) }} className={`p-2 transition-all ${user.isBanned ? 'text-red-600' : 'text-gray-300 hover:text-red-600'}`} title="Ban Toggle"><Ban size={16} /></button>
                              </div>
                           </td>
                        </tr>
@@ -222,70 +181,32 @@ export const UserManagement: React.FC = () => {
             </table>
           </div>
 
-          {/* Pagination Footer */}
-          {hasMore && !searchTerm && (
-            <div className="p-6 bg-gray-50/50 border-t border-gray-100 text-center">
-              <button 
-                onClick={handleLoadMore} 
-                disabled={loadingMore}
-                className="px-8 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-black uppercase tracking-widest text-gray-500 shadow-sm hover:bg-gray-50 hover:text-blue-600 transition-all disabled:opacity-50 flex items-center gap-3 mx-auto"
-              >
+          {hasMore && (
+            <div className="p-6 bg-gray-50/50 border-t text-center">
+              <button onClick={handleLoadMore} disabled={loadingMore} className="px-8 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-black uppercase text-gray-500 shadow-sm hover:bg-gray-50 flex items-center gap-3 mx-auto transition-all disabled:opacity-50">
                 {loadingMore ? <Loader2 className="animate-spin" size={14} /> : <ChevronDown size={14} />}
-                Tải thêm 50 thành viên nữa
+                Tải thêm danh sách (Tìm người dùng cũ hơn)
               </button>
             </div>
           )}
        </div>
 
-       {/* Modal Cập nhật thành viên */}
+       {/* Modal Chỉnh sửa rút gọn */}
        {editingUser && (
          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-fade-in">
             <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden animate-pop-in">
                <div className="px-8 py-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                  <h3 className="font-black text-xl text-gray-900 tracking-tight">Cập nhật hồ sơ</h3>
-                  <button onClick={() => setEditingUser(null)} className="p-2 hover:bg-gray-200 rounded-full transition-colors"><X size={20} className="text-gray-500" /></button>
+                  <h3 className="font-black text-xl text-gray-900 tracking-tight">Sửa thông tin thật</h3>
+                  <button onClick={() => setEditingUser(null)}><X size={20} /></button>
                </div>
-               <div className="p-8 space-y-5">
-                  <div className="flex flex-col gap-1.5">
-                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Tên hiển thị</label>
-                     <input 
-                        type="text" 
-                        value={editForm.name}
-                        onChange={e => setEditForm({...editForm, name: e.target.value})}
-                        className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none font-bold text-gray-800"
-                     />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Tiểu sử</label>
-                     <textarea 
-                        rows={3}
-                        value={editForm.bio}
-                        onChange={e => setEditForm({...editForm, bio: e.target.value})}
-                        className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none resize-none font-medium text-sm leading-relaxed"
-                        placeholder="Mẹ hãy viết vài dòng giới thiệu..."
-                     />
-                  </div>
-                  {editingUser.isExpert && (
-                     <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest ml-1">Chức danh Chuyên gia</label>
-                        <input 
-                           type="text" 
-                           value={editForm.specialty}
-                           onChange={e => setEditForm({...editForm, specialty: e.target.value})}
-                           placeholder="VD: Bác sĩ, Tư vấn viên..."
-                           className="w-full px-4 py-3 bg-blue-50/50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none font-bold text-blue-600"
-                        />
-                     </div>
-                  )}
+               <div className="p-8 space-y-4">
+                  <input type="text" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 font-bold outline-none" placeholder="Tên thành viên" />
+                  <textarea rows={3} value={editForm.bio} onChange={e => setEditForm({...editForm, bio: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none resize-none text-sm font-medium" placeholder="Tiểu sử" />
                </div>
-               <div className="px-8 py-6 bg-gray-50/80 flex justify-end gap-3 border-t border-gray-100">
-                  <button onClick={() => setEditingUser(null)} className="px-6 py-2.5 font-black text-xs uppercase tracking-widest text-gray-400 hover:text-gray-600 transition-colors">Hủy</button>
-                  <button 
-                     onClick={handleSaveEdit}
-                     disabled={isSaving}
-                     className="px-8 py-2.5 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-blue-700 shadow-xl shadow-blue-100 disabled:opacity-50 active:scale-95 transition-all"
-                  >
-                     {isSaving ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />} Lưu lại ngay
+               <div className="px-8 py-6 bg-gray-50/80 flex justify-end gap-3 border-t">
+                  <button onClick={() => setEditingUser(null)} className="px-6 py-2.5 font-black text-xs text-gray-400 uppercase">Hủy</button>
+                  <button onClick={handleSaveEdit} disabled={isSaving} className="px-8 py-2.5 bg-blue-600 text-white rounded-xl font-black text-xs uppercase flex items-center gap-2 shadow-xl shadow-blue-100 disabled:opacity-50">
+                     {isSaving ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />} Cập nhật ngay
                   </button>
                </div>
             </div>
