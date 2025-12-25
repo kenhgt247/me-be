@@ -4,10 +4,10 @@ import {
   DocumentData, getCountFromServer 
 } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
-import { User, Question, ExpertApplication, Report, Category, toSlug, CATEGORIES, BlogPost, Document } from '../types';
+import { User, Question, ExpertApplication, Report, Category, toSlug, CATEGORIES } from '../types';
 
 /* ============================================================
-   SYSTEM STATS (Dành cho Dashboard)
+   SYSTEM STATS (Tối ưu cho Dashboard)
    ============================================================ */
 export const getSystemStats = async () => {
   if (!db) return { totalUsers: 0, totalQuestions: 0, totalBlogs: 0, totalDocuments: 0 };
@@ -44,6 +44,7 @@ export const fetchUsersAdminPaginated = async (
     pageSize: number = 20
 ) => {
     if (!db) return { users: [], lastDoc: null, hasMore: false };
+    // Sắp xếp theo joinedAt giảm dần để người mới lên đầu
     let q = query(collection(db, 'users'), orderBy('joinedAt', 'desc'), limit(pageSize));
     if (lastVisible) q = query(q, startAfter(lastVisible));
 
@@ -58,10 +59,9 @@ export const fetchUsersAdminPaginated = async (
 export const fetchAllUsers = async (): Promise<User[]> => {
   if (!db) return [];
   try {
-    const q = query(collection(db, 'users'));
+    const q = query(collection(db, 'users'), orderBy('joinedAt', 'desc'));
     const snapshot = await getDocs(q);
-    const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User));
-    return users.sort((a, b) => new Date(b.joinedAt || '').getTime() - new Date(a.joinedAt || '').getTime());
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User));
   } catch (error) {
     console.error("Error fetching users:", error);
     return [];
@@ -81,7 +81,7 @@ export const updateUserInfo = async (userId: string, data: { name?: string; bio?
     await updateDoc(userRef, data);
     return true;
   } catch (error) {
-    console.error("Lỗi khi update user info:", error);
+    console.error("Error updating user info:", error);
     throw error;
   }
 };
@@ -110,22 +110,28 @@ export const processExpertApplication = async (appId: string, userId: string, st
   if (!db) return;
   const batch = writeBatch(db);
   const appRef = doc(db, 'expert_applications', appId);
-  batch.update(appRef, { status, rejectionReason: reason || null, reviewedAt: new Date().toISOString() });
+  
+  batch.update(appRef, { 
+    status, 
+    rejectionReason: reason || null, 
+    reviewedAt: new Date().toISOString() 
+  });
 
+  const userRef = doc(db, 'users', userId);
   if (status === 'approved') {
-    const userRef = doc(db, 'users', userId);
-    const updates: any = { isExpert: true, expertStatus: 'approved' };
-    if (specialty) updates.specialty = specialty;
-    batch.update(userRef, updates);
-  } else if (status === 'rejected') {
-    const userRef = doc(db, 'users', userId);
+    batch.update(userRef, { 
+      isExpert: true, 
+      expertStatus: 'approved',
+      specialty: specialty || '' 
+    });
+  } else {
     batch.update(userRef, { expertStatus: 'rejected' });
   }
   await batch.commit();
 };
 
 /* ============================================================
-   QUESTIONS MANAGEMENT (Phân trang)
+   QUESTIONS MANAGEMENT (Phân trang & Bulk)
    ============================================================ */
 export const fetchQuestionsAdminPaginated = async (
   lastVisible: QueryDocumentSnapshot<DocumentData> | null = null,
@@ -204,21 +210,31 @@ export const fetchReports = async (): Promise<Report[]> => {
 export const resolveReport = async (reportId: string, action: 'resolved' | 'dismissed') => {
   if (!db) return;
   const ref = doc(db, 'reports', reportId);
-  await updateDoc(ref, { status: action, resolvedAt: new Date().toISOString() });
+  await updateDoc(ref, { 
+    status: action, 
+    resolvedAt: new Date().toISOString() 
+  });
 };
 
 export const deleteReportedContent = async (report: Report) => {
   if (!db) return;
   try {
-    await resolveReport(report.id, 'resolved');
+    const batch = writeBatch(db);
+    
+    // 1. Cập nhật trạng thái báo cáo
+    const reportRef = doc(db, 'reports', report.id);
+    batch.update(reportRef, { status: 'resolved', resolvedAt: new Date().toISOString() });
+
+    // 2. Xóa nội dung mục tiêu
     if (report.targetType === 'question') {
-      await deleteDoc(doc(db, 'questions', report.targetId));
+      batch.delete(doc(db, 'questions', report.targetId));
     } else if (report.targetType === 'answer') {
       batch.delete(doc(db, 'answers', report.targetId));
     }
+
     await batch.commit();
   } catch (e) {
-    console.error(e);
+    console.error("Error deleting reported content:", e);
   }
 };
 
@@ -233,12 +249,20 @@ export const fetchCategories = async (): Promise<Category[]> => {
 
 export const addCategory = async (name: string, style?: { icon: string, color: string, bg: string }) => {
   if (!db) return;
-  await addDoc(collection(db, 'categories'), { name, slug: toSlug(name), ...style });
+  await addDoc(collection(db, 'categories'), { 
+    name, 
+    slug: toSlug(name), 
+    ...style 
+  });
 };
 
 export const updateCategory = async (id: string, name: string, style?: { icon: string, color: string, bg: string }) => {
   if (!db) return;
-  await updateDoc(doc(db, 'categories', id), { name, slug: toSlug(name), ...style });
+  await updateDoc(doc(db, 'categories', id), { 
+    name, 
+    slug: toSlug(name), 
+    ...style 
+  });
 };
 
 export const deleteCategory = async (id: string) => {
@@ -255,7 +279,13 @@ export const syncCategoriesFromCode = async () => {
   CATEGORIES.forEach(catName => {
     if (!existingNames.includes(catName)) {
       const docRef = doc(collection(db, 'categories'));
-      batch.set(docRef, { name: catName, slug: toSlug(catName), icon: 'Tag', color: 'text-gray-600', bg: 'bg-gray-100' });
+      batch.set(docRef, { 
+        name: catName, 
+        slug: toSlug(catName), 
+        icon: 'Tag', 
+        color: 'text-gray-600', 
+        bg: 'bg-gray-100' 
+      });
       count++;
     }
   });
