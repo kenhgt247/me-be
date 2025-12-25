@@ -3,11 +3,15 @@ import { BlogPost, BlogCategory } from '../../types';
 import { toSlug } from '../../types'; 
 import { 
   fetchBlogCategories, createBlogCategory, updateBlogCategory, deleteBlogCategory,
-  createBlogPost, updateBlogPost, deleteBlogPost, fetchPostsPaginated, fetchPublishedPosts
+  createBlogPost, updateBlogPost, deleteBlogPost, fetchPostsPaginated
 } from '../../services/blog';
 import { generateBlogPost, generateBlogTitle } from '../../services/gemini';
 import { subscribeToAuthChanges } from '../../services/auth';
-import { Plus, Trash2, Edit2, X, Image as ImageIcon, Video, Link as LinkIcon, BookOpen, Layers, Sparkles, Loader2, RefreshCw, FileText, CheckCircle, AlertCircle, Eye, ChevronDown } from 'lucide-react';
+import { 
+  Plus, Trash2, Edit2, X, Image as ImageIcon, Video, Link as LinkIcon, 
+  BookOpen, Layers, Sparkles, Loader2, RefreshCw, FileText, CheckCircle, 
+  AlertCircle, Eye, ChevronDown 
+} from 'lucide-react';
 import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 
 // --- IMPORT REACT QUILL ---
@@ -20,6 +24,7 @@ export const BlogAdmin: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'posts' | 'categories'>('posts');
   
+  // Data State
   const [categories, setCategories] = useState<BlogCategory[]>([]);
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,13 +34,15 @@ export const BlogAdmin: React.FC = () => {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
+  // Modals & Search
   const [showCatModal, setShowCatModal] = useState(false);
   const [showPostModal, setShowPostModal] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const [aiLoading, setAiLoading] = useState({ title: false, content: false });
 
+  // Form States
   const [editingCat, setEditingCat] = useState<BlogCategory | null>(null);
   const [catForm, setCatForm] = useState({ name: '', iconEmoji: '📝', order: 1, isActive: true });
-
   const [editingPost, setEditingPost] = useState<BlogPost | null>(null);
   const [postForm, setPostForm] = useState({
     title: '', slug: '', excerpt: '', content: '', coverImageUrl: '',
@@ -43,6 +50,7 @@ export const BlogAdmin: React.FC = () => {
     categoryId: '', status: 'draft' as 'draft' | 'published'
   });
 
+  // Editor Config
   const quillModules = useMemo(() => ({
     toolbar: [
       [{ 'header': [1, 2, 3, false] }],
@@ -61,21 +69,23 @@ export const BlogAdmin: React.FC = () => {
       if (user) loadInitialData(user);
     });
     return () => unsub();
-  }, []);
+  }, [activeTab]); // Load lại khi đổi tab
 
   const loadInitialData = async (user: any) => {
     setLoading(true);
     try {
-        const authorFilter = user.isAdmin ? 'all' : user.id;
         const cats = await fetchBlogCategories();
         setCategories(cats);
 
-        const { posts: initialPosts, lastDoc: nextDoc, hasMore: more } = await fetchPostsPaginated(authorFilter, null, PAGE_SIZE);
-        setPosts(initialPosts);
-        setLastDoc(nextDoc);
-        setHasMore(more);
+        if (activeTab === 'posts') {
+            const authorFilter = user.isAdmin ? 'all' : user.id;
+            const { posts: initialPosts, lastDoc: nextDoc, hasMore: more } = await fetchPostsPaginated(authorFilter, null, PAGE_SIZE);
+            setPosts(initialPosts);
+            setLastDoc(nextDoc);
+            setHasMore(more);
+        }
     } catch (error) {
-        console.error(error);
+        console.error("Lỗi tải dữ liệu:", error);
     } finally {
         setLoading(false);
     }
@@ -84,14 +94,23 @@ export const BlogAdmin: React.FC = () => {
   const handleLoadMore = async () => {
     if (!lastDoc || loadingMore) return;
     setLoadingMore(true);
-    const authorFilter = currentUser.isAdmin ? 'all' : currentUser.id;
-    const { posts: newPosts, lastDoc: nextDoc, hasMore: more } = await fetchPostsPaginated(authorFilter, lastDoc, PAGE_SIZE);
-    setPosts(prev => [...prev, ...newPosts]);
-    setLastDoc(nextDoc);
-    setHasMore(more);
-    setLoadingMore(false);
+    try {
+        const authorFilter = currentUser.isAdmin ? 'all' : currentUser.id;
+        const { posts: newPosts, lastDoc: nextDoc, hasMore: more } = await fetchPostsPaginated(authorFilter, lastDoc, PAGE_SIZE);
+        setPosts(prev => [...prev, ...newPosts]);
+        setLastDoc(nextDoc);
+        setHasMore(more);
+    } finally {
+        setLoadingMore(false);
+    }
   };
 
+  // ✅ Khôi phục biến lọc tìm kiếm để không bị lỗi ReferenceError
+  const visiblePosts = useMemo(() => {
+    return posts.filter(p => p.title.toLowerCase().includes(searchTerm.toLowerCase()));
+  }, [posts, searchTerm]);
+
+  // Handlers
   const handleSaveCat = async () => {
     if (!catForm.name) return;
     const slug = toSlug(catForm.name);
@@ -106,21 +125,11 @@ export const BlogAdmin: React.FC = () => {
     const slug = postForm.slug || toSlug(postForm.title);
     const postData = { ...postForm, slug, authorId: currentUser.id, authorName: currentUser.name, authorAvatar: currentUser.avatar };
     
-    editingPost ? await updateBlogPost(editingPost.id, postData) : await createBlogPost(postData);
+    if (editingPost) await updateBlogPost(editingPost.id, postData);
+    else await createBlogPost(postData);
+    
     setShowPostModal(false);
     loadInitialData(currentUser);
-  };
-
-  const handleDeletePost = async (id: string) => {
-    if (confirm("Xóa bài viết này?")) {
-        await deleteBlogPost(id);
-        loadInitialData(currentUser);
-    }
-  };
-
-  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newTitle = e.target.value;
-    setPostForm(prev => ({ ...prev, title: newTitle, slug: !editingPost ? toSlug(newTitle) : prev.slug }));
   };
 
   const handleAiTitle = async () => {
@@ -133,7 +142,7 @@ export const BlogAdmin: React.FC = () => {
   };
 
   const handleAiContent = async () => {
-      if (!postForm.title) return alert("Cần tiêu đề");
+      if (!postForm.title) return alert("Vui lòng nhập tiêu đề trước!");
       setAiLoading(p => ({ ...p, content: true }));
       const content = await generateBlogPost(postForm.title);
       if (content) setPostForm(p => ({ ...p, content }));
@@ -143,77 +152,228 @@ export const BlogAdmin: React.FC = () => {
   if (!currentUser || (!currentUser.isAdmin && !currentUser.isExpert)) return <div className="p-10 text-center">Không có quyền truy cập</div>;
 
   return (
-    <div className="space-y-6 pb-20 p-6 bg-gray-50 min-h-screen">
-      <div className="bg-white p-6 rounded-2xl shadow-sm border flex justify-between items-center">
+    <div className="space-y-6 pb-20 p-6 bg-gray-50 min-h-screen animate-fade-in">
+      {/* Header Section */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border flex flex-col md:flex-row justify-between items-center gap-4">
          <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><BookOpen className="text-blue-600" /> Quản trị Blog</h1>
-            <p className="text-gray-500 text-sm">{currentUser.isAdmin ? 'Toàn quyền hệ thống' : 'Quản lý bài viết của bạn'}</p>
+            <h1 className="text-2xl font-black text-gray-900 flex items-center gap-2 tracking-tight">
+                <BookOpen className="text-blue-600" /> Quản trị Blog
+            </h1>
+            <p className="text-gray-500 text-sm font-medium">{currentUser.isAdmin ? 'Toàn quyền hệ thống' : 'Quản lý kiến thức của bạn'}</p>
          </div>
-         <div className="flex gap-2">
-            {currentUser.isAdmin && <button onClick={() => setActiveTab('categories')} className={`px-4 py-2 rounded-lg font-bold text-sm ${activeTab === 'categories' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}>Danh mục</button>}
-            <button onClick={() => setActiveTab('posts')} className={`px-4 py-2 rounded-lg font-bold text-sm ${activeTab === 'posts' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}>Bài viết</button>
+         <div className="flex gap-2 p-1 bg-gray-100 rounded-xl">
+            {currentUser.isAdmin && (
+                <button onClick={() => setActiveTab('categories')} className={`px-5 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'categories' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>
+                    Danh mục
+                </button>
+            )}
+            <button onClick={() => setActiveTab('posts')} className={`px-5 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'posts' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>
+                Bài viết
+            </button>
          </div>
       </div>
 
+      {/* Categories Tab */}
+      {activeTab === 'categories' && currentUser.isAdmin && (
+          <div className="space-y-4">
+              <div className="flex justify-end">
+                  <button onClick={() => { setEditingCat(null); setCatForm({ name: '', iconEmoji: '📝', order: categories.length + 1, isActive: true }); setShowCatModal(true); }} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold flex gap-2 shadow-lg hover:bg-blue-700 active:scale-95 transition-all">
+                      <Plus size={20} /> Thêm Danh mục
+                  </button>
+              </div>
+              <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+                  <table className="w-full text-left">
+                      <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-400 tracking-widest border-b">
+                          <tr>
+                              <th className="px-6 py-4">Tên / Emoji</th>
+                              <th className="px-6 py-4 text-center">Thứ tự</th>
+                              <th className="px-6 py-4 text-right">Tác vụ</th>
+                          </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                          {categories.map(cat => (
+                              <tr key={cat.id} className="hover:bg-gray-50 transition-colors group">
+                                  <td className="px-6 py-4">
+                                      <div className="flex items-center gap-3">
+                                          <span className="text-2xl">{cat.iconEmoji}</span>
+                                          <div>
+                                              <p className="font-bold text-gray-900">{cat.name}</p>
+                                              <p className="text-[10px] text-gray-400 font-mono">/{cat.slug}</p>
+                                          </div>
+                                      </div>
+                                  </td>
+                                  <td className="px-6 py-4 text-center font-bold text-gray-500">{cat.order}</td>
+                                  <td className="px-6 py-4 text-right">
+                                      <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <button onClick={() => { setEditingCat(cat); setCatForm(cat as any); setShowCatModal(true); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg"><Edit2 size={16}/></button>
+                                          <button onClick={() => deleteBlogCategory(cat.id).then(() => loadInitialData(currentUser))} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button>
+                                      </div>
+                                  </td>
+                              </tr>
+                          ))}
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+      )}
+
+      {/* Posts Tab */}
       {activeTab === 'posts' && (
         <div className="space-y-4">
-            <div className="flex justify-end">
-                <button onClick={() => { setEditingPost(null); setPostForm({ title: '', slug: '', excerpt: '', content: '', coverImageUrl: '', iconEmoji: '📰', youtubeUrl: '', sourceUrl: '', sourceLabel: '', categoryId: categories[0]?.id || '', status: 'draft' }); setShowPostModal(true); }} className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold flex gap-2 shadow-lg"><Plus /> Viết bài mới</button>
+            <div className="flex flex-col md:flex-row justify-between gap-4">
+                <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                    <input type="text" placeholder="Tìm nhanh trong danh sách đã tải..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-100" />
+                </div>
+                <button onClick={() => { setEditingPost(null); setPostForm({ title: '', slug: '', excerpt: '', content: '', coverImageUrl: '', iconEmoji: '📰', youtubeUrl: '', sourceUrl: '', sourceLabel: '', categoryId: categories[0]?.id || '', status: 'draft' }); setShowPostModal(true); }} className="bg-green-600 text-white px-6 py-2.5 rounded-xl font-bold flex gap-2 shadow-lg hover:bg-green-700 active:scale-95 transition-all"><Plus /> Viết bài mới</button>
             </div>
 
-            <div className="grid gap-4">
-                {loading ? <div className="text-center py-20"><Loader2 className="animate-spin inline" /></div> : posts.map(post => (
-                    <div key={post.id} className="bg-white p-4 rounded-xl border flex justify-between items-center">
+            <div className="grid gap-3">
+                {loading ? (
+                    <div className="text-center py-20 flex flex-col items-center gap-3">
+                        <Loader2 className="animate-spin text-blue-500" size={32} />
+                        <span className="text-xs font-black uppercase text-gray-400 tracking-widest">Đang tải dữ liệu...</span>
+                    </div>
+                ) : visiblePosts.length === 0 ? (
+                    <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed text-gray-400">Không tìm thấy bài viết nào</div>
+                ) : visiblePosts.map(post => (
+                    <div key={post.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex justify-between items-center hover:shadow-md transition-all group">
                         <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded bg-gray-100 flex items-center justify-center text-2xl overflow-hidden">
+                            <div className="w-14 h-14 rounded-xl bg-gray-50 flex items-center justify-center text-2xl overflow-hidden border border-gray-100 shrink-0">
                                 {post.coverImageUrl ? <img src={post.coverImageUrl} className="w-full h-full object-cover" /> : post.iconEmoji}
                             </div>
-                            <div>
-                                <h3 className="font-bold text-gray-800">{post.title}</h3>
-                                <p className="text-xs text-gray-400">{post.status} • {new Date(post.createdAt).toLocaleDateString()}</p>
+                            <div className="min-w-0">
+                                <h3 className="font-bold text-gray-900 line-clamp-1 group-hover:text-blue-600 transition-colors">{post.title}</h3>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${post.status === 'published' ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-500'}`}>{post.status}</span>
+                                    <span className="text-[10px] text-gray-400 font-medium">{new Date(post.createdAt).toLocaleDateString('vi-VN')}</span>
+                                </div>
                             </div>
                         </div>
-                        <div className="flex gap-2">
-                            <button onClick={() => { setEditingPost(post); setPostForm(post as any); setShowPostModal(true); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded"><Edit2 size={18}/></button>
-                            <button onClick={() => handleDeletePost(post.id)} className="p-2 text-red-500 hover:bg-red-50 rounded"><Trash2 size={18}/></button>
+                        <div className="flex gap-1">
+                            <button onClick={() => { setEditingPost(post); setPostForm(post as any); setShowPostModal(true); }} className="p-2.5 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"><Edit2 size={18}/></button>
+                            <button onClick={() => { if(confirm("Xóa bài viết này?")) deleteBlogPost(post.id).then(() => loadInitialData(currentUser)) }} className="p-2.5 text-red-400 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={18}/></button>
                         </div>
                     </div>
                 ))}
             </div>
             
-            {hasMore && (
-                <button onClick={handleLoadMore} disabled={loadingMore} className="w-full py-3 bg-white border rounded-xl font-bold flex items-center justify-center gap-2 text-gray-500">
-                    {loadingMore ? <Loader2 className="animate-spin" /> : <ChevronDown />} Xem thêm bài viết
+            {hasMore && !searchTerm && (
+                <button onClick={handleLoadMore} disabled={loadingMore} className="w-full py-4 bg-white border border-gray-200 rounded-2xl font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-3 text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-all shadow-sm">
+                    {loadingMore ? <Loader2 className="animate-spin" size={16} /> : <ChevronDown size={16} />} 
+                    Tải thêm kiến thức
                 </button>
             )}
         </div>
       )}
 
-      {/* MODALS giữ nguyên cấu trúc input của bạn */}
-      {showPostModal && (
-          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6">
-                  <div className="flex justify-between mb-6">
-                      <h3 className="font-bold text-xl">{editingPost ? 'Sửa bài viết' : 'Viết bài mới'}</h3>
-                      <button onClick={() => setShowPostModal(false)}><X /></button>
-                  </div>
+      {/* Category Modal */}
+      {showCatModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+              <div className="bg-white rounded-[2rem] w-full max-w-md p-8 shadow-2xl animate-pop-in">
+                  <h3 className="text-xl font-black mb-6 text-gray-900 tracking-tight">{editingCat ? 'Cập nhật danh mục' : 'Thêm danh mục mới'}</h3>
                   <div className="space-y-4">
-                      <input value={postForm.title} onChange={handleTitleChange} placeholder="Tiêu đề bài viết" className="w-full p-3 border rounded-xl font-bold text-lg" />
-                      <div className="flex gap-2">
-                          <button onClick={handleAiTitle} className="bg-purple-100 text-purple-700 px-3 py-1 rounded text-xs font-bold flex items-center gap-1"><Sparkles size={14}/> AI Tiêu đề</button>
-                          <button onClick={handleAiContent} className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded text-xs font-bold flex items-center gap-1"><Sparkles size={14}/> AI Nội dung</button>
+                      <div>
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Tên danh mục</label>
+                          <input value={catForm.name} onChange={e => setCatForm({...catForm, name: e.target.value})} placeholder="VD: Sức khỏe, Dinh dưỡng..." className="w-full p-3.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-100 font-bold" />
                       </div>
-                      <ReactQuill theme="snow" value={postForm.content} onChange={v => setPostForm({...postForm, content: v})} modules={quillModules} formats={quillFormats} className="h-64 mb-12" />
-                      <div className="pt-8 flex justify-end gap-2">
-                          <button onClick={() => setShowPostModal(false)} className="px-6 py-2">Hủy</button>
-                          <button onClick={handleSavePost} className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold shadow-lg">Lưu bài viết</button>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Icon Emoji</label>
+                            <input value={catForm.iconEmoji} onChange={e => setCatForm({...catForm, iconEmoji: e.target.value})} className="w-full p-3.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-100 text-center text-xl" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Thứ tự</label>
+                            <input type="number" value={catForm.order} onChange={e => setCatForm({...catForm, order: Number(e.target.value)})} className="w-full p-3.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-100 font-bold" />
+                          </div>
                       </div>
+                  </div>
+                  <div className="flex gap-3 mt-8">
+                      <button onClick={() => setShowCatModal(false)} className="flex-1 py-3 text-gray-400 font-bold text-xs uppercase tracking-widest">Hủy</button>
+                      <button onClick={handleSaveCat} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-blue-100 active:scale-95 transition-all">Lưu thay đổi</button>
                   </div>
               </div>
           </div>
       )}
 
-      <style>{`.ql-editor { min-height: 200px; }`}</style>
+      {/* Post Modal - React Quill Integrated */}
+      {showPostModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+              <div className="bg-white rounded-[2rem] w-full max-w-5xl max-h-[95vh] overflow-y-auto shadow-2xl animate-pop-in flex flex-col">
+                  <div className="p-6 border-b flex justify-between items-center sticky top-0 bg-white z-10">
+                      <h3 className="font-black text-xl tracking-tight">{editingPost ? 'Cập nhật bài viết' : 'Sáng tạo nội dung mới'}</h3>
+                      <button onClick={() => setShowPostModal(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X /></button>
+                  </div>
+                  <div className="p-8 space-y-6">
+                      <div className="grid md:grid-cols-3 gap-6">
+                          <div className="md:col-span-2 space-y-4">
+                              <div>
+                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Tiêu đề bài viết</label>
+                                  <div className="relative">
+                                    <input value={postForm.title} onChange={handleTitleChange} placeholder="Nhập tiêu đề thu hút..." className="w-full p-4 bg-gray-50 border-none rounded-2xl font-black text-xl focus:ring-2 focus:ring-blue-100 outline-none" />
+                                    <button onClick={handleAiTitle} disabled={aiLoading.title} className="absolute right-2 top-2 p-2 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-1 shadow-lg hover:shadow-purple-200 transition-all active:scale-95 disabled:opacity-50">
+                                        {aiLoading.title ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14}/>} AI
+                                    </button>
+                                  </div>
+                              </div>
+                              <div>
+                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nội dung chi tiết</label>
+                                  <div className="flex justify-end mb-2">
+                                      <button onClick={handleAiContent} disabled={aiLoading.content} className="px-4 py-1.5 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-indigo-100 transition-all">
+                                          {aiLoading.content ? <Loader2 size={12} className="animate-spin"/> : <Sparkles size={12} />} Viết bài bằng AI Gemini
+                                      </button>
+                                  </div>
+                                  <div className="bg-white rounded-2xl overflow-hidden border border-gray-100">
+                                    <ReactQuill theme="snow" value={postForm.content} onChange={v => setPostForm({...postForm, content: v})} modules={quillModules} formats={quillFormats} className="h-96 mb-12" />
+                                  </div>
+                              </div>
+                          </div>
+
+                          <div className="space-y-5">
+                              <div>
+                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Danh mục</label>
+                                  <select value={postForm.categoryId} onChange={e => setPostForm({...postForm, categoryId: e.target.value})} className="w-full p-4 bg-gray-50 border-none rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-100">
+                                      {categories.map(c => <option key={c.id} value={c.id}>{c.iconEmoji} {c.name}</option>)}
+                                  </select>
+                              </div>
+                              <div>
+                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Ảnh bìa (URL)</label>
+                                  <input value={postForm.coverImageUrl} onChange={e => setPostForm({...postForm, coverImageUrl: e.target.value})} placeholder="Dán link ảnh..." className="w-full p-4 bg-gray-50 border-none rounded-xl text-xs font-mono" />
+                              </div>
+                              <div>
+                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Mô tả ngắn</label>
+                                  <textarea value={postForm.excerpt} onChange={e => setPostForm({...postForm, excerpt: e.target.value})} rows={4} className="w-full p-4 bg-gray-50 border-none rounded-xl text-sm font-medium leading-relaxed resize-none" placeholder="Tóm tắt nội dung..." />
+                              </div>
+                              <div className="p-4 bg-blue-50 rounded-2xl space-y-3">
+                                  <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Trạng thái xuất bản</label>
+                                  <div className="flex gap-4">
+                                      <label className="flex items-center gap-2 cursor-pointer">
+                                          <input type="radio" name="status" checked={postForm.status === 'draft'} onChange={() => setPostForm({...postForm, status: 'draft'})} className="accent-blue-600" />
+                                          <span className="text-xs font-bold text-gray-600">Lưu nháp</span>
+                                      </label>
+                                      <label className="flex items-center gap-2 cursor-pointer">
+                                          <input type="radio" name="status" checked={postForm.status === 'published'} onChange={() => setPostForm({...postForm, status: 'published'})} className="accent-green-600" />
+                                          <span className="text-xs font-bold text-green-700">Công khai</span>
+                                      </label>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+                  <div className="p-6 bg-gray-50 border-t flex justify-end gap-3 sticky bottom-0 z-10">
+                      <button onClick={() => setShowPostModal(false)} className="px-8 py-3 text-gray-400 font-black text-xs uppercase tracking-widest hover:text-gray-600">Hủy bỏ</button>
+                      <button onClick={handleSavePost} className="px-10 py-3 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-blue-100 hover:bg-blue-700 active:scale-95 transition-all">Lưu bài viết</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      <style>{`
+        .ql-toolbar.ql-snow { border: none !important; background: #f9fafb; border-bottom: 1px solid #f1f5f9 !important; padding: 12px !important; }
+        .ql-container.ql-snow { border: none !important; font-family: inherit; font-size: 15px; }
+        .ql-editor { min-height: 300px; padding: 20px !important; line-height: 1.8; color: #334155; }
+        .ql-editor.ql-blank::before { color: #cbd5e1; font-style: normal; }
+      `}</style>
     </div>
   );
 };
