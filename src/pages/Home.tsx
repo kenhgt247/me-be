@@ -30,12 +30,13 @@ export interface HomeProps {
   currentUser: User | null;
 }
 
+// ✅ ĐÃ SỬA: Xóa 'questions' khỏi Props để tránh trùng lặp với State bên dưới
 export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
   // State Filter
   const [activeCategory, setActiveCategory] = useState<string>('Tất cả');
   const [viewFilter, setViewFilter] = useState<'newest' | 'active' | 'unanswered'>('newest');
   
-  // State Data (LOGIC MỚI - GIỮ CÁI NÀY)
+  // State Data (LOGIC MỚI - Quản lý danh sách câu hỏi tại đây để hỗ trợ phân trang)
   const [questions, setQuestions] = useState<Question[]>([]);
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [hasMore, setHasMore] = useState(true);
@@ -67,15 +68,14 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
       return () => unsub();
   }, []);
 
-  // --- 2. LOAD CÂU HỎI (CHUẨN SERVER-SIDE - GIỮ CÁI NÀY) ---
+  // --- 2. LOAD CÂU HỎI (CHUẨN SERVER-SIDE) ---
   useEffect(() => {
       const loadInitialQuestions = async () => {
           setIsInitialLoading(true);
-          setQuestions([]); // Reset list
+          setQuestions([]); // Reset list để hiện skeleton
           setLastDoc(null);
 
           try {
-              // Gọi API lấy dữ liệu mới theo Category và Filter
               const { questions: newQs, lastDoc: newLastDoc, hasMore: newHasMore } = 
                   await fetchQuestionsPaginated(activeCategory, viewFilter, null, PAGE_SIZE);
               
@@ -92,7 +92,7 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
       loadInitialQuestions();
   }, [activeCategory, viewFilter]);
 
-  // --- 3. LOAD MORE (LOGIC MỚI - GIỮ CÁI NÀY) ---
+  // --- 3. LOAD MORE (Hỗ trợ cuộn vô tận/tải thêm) ---
   const handleLoadMore = async () => {
       if (isLoadingMore || !hasMore || !lastDoc) return;
       setIsLoadingMore(true);
@@ -176,10 +176,8 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
     return { questions: matchedQuestions, blogs: matchedBlogs, docs: matchedDocs, users: Array.from(usersMap.values()) };
   }, [debouncedQuery, questions, blogPosts, documents]);
 
-  // --- DANH SÁCH HIỂN THỊ (LOGIC MỚI) ---
   const displayList = debouncedQuery ? searchResults.questions : questions;
 
-  // Render Helpers
   const renderUserCard = (user: User) => (
     <Link to={`/profile/${user.username || user.id}`} key={user.id} className="flex-shrink-0 bg-white dark:bg-dark-card p-3 pr-5 rounded-2xl border border-gray-100 dark:border-dark-border shadow-sm flex items-center gap-3 min-w-[160px] active:scale-95 transition-transform hover:border-blue-200">
         <div className="relative"><img src={user.avatar || DEFAULT_AVATAR} className="w-10 h-10 rounded-full object-cover border border-gray-100" decoding="async" />{user.isExpert && <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white rounded-full p-0.5 border border-white"><ShieldCheck size={10} /></div>}</div>
@@ -198,7 +196,6 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
       {activeStory && <StoryViewer story={activeStory} currentUser={currentUser} onClose={() => setActiveStory(null)} />}
       {showCreateStory && currentUser && <CreateStoryModal currentUser={currentUser} onClose={() => setShowCreateStory(false)} onSuccess={handleStoryCreated} />}
 
-      {/* 1. HEADER SEARCH */}
       <div className="px-4 md:px-0 sticky top-[68px] md:top-20 z-30 py-2 md:pt-0 -mx-4 md:mx-0 bg-[#F7F7F5]/95 dark:bg-dark-bg/95 backdrop-blur-sm">
         <div className="relative group shadow-sm rounded-2xl mx-4 md:mx-0">
             <div className={`relative flex items-center bg-white dark:bg-dark-card rounded-2xl border ${inputValue ? 'border-primary' : 'border-gray-200 dark:border-slate-700'} overflow-hidden`}>
@@ -210,7 +207,6 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
       </div>
 
       {debouncedQuery ? (
-        // --- SEARCH RESULTS VIEW ---
         <div className="animate-slide-up space-y-4">
             <SearchTabs activeTab={searchTab} onChange={setSearchTab} counts={{ questions: searchResults.questions.length, blogs: searchResults.blogs.length, docs: searchResults.docs.length, users: searchResults.users.length }} />
             <div className="px-4 md:px-0 space-y-4 pb-20">
@@ -221,10 +217,7 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
             </div>
         </div>
       ) : (
-        // --- NORMAL FEED VIEW ---
         <div className="space-y-4">
-          
-          {/* STORIES */}
           <div className="px-4 md:px-0">
               <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 snap-x">
                 <div className="snap-start shrink-0 relative group cursor-pointer w-[85px] h-[130px] md:w-[100px] md:h-[150px]" onClick={handleOpenCreateStory}>
@@ -254,12 +247,10 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
               </div>
           </div>
 
-          {/* EXPERT PROMO */}
           {!currentUser?.isExpert && (
              <div className="px-4 md:px-0 mt-4"><ExpertPromoBox /></div>
           )}
 
-          {/* BLOG CARDS */}
           {blogPosts.length > 0 && (
             <div className="space-y-3 pt-2 px-4 md:px-0">
               <div className="flex justify-between items-center px-1">
@@ -281,7 +272,6 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
             </div>
           )}
 
-          {/* DOCUMENT CARDS */}
           {documents.length > 0 && (
             <div className="space-y-3 pt-2 px-4 md:px-0">
               <div className="flex justify-between items-center px-1">
@@ -295,7 +285,6 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
             </div>
           )}
 
-          {/* FILTERS & FEED HEADER */}
           <div className="pl-4 md:px-0 mt-6">
             <div className="flex items-center gap-2 mb-3 px-1">
                <div className="p-1.5 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-sm shadow-purple-200 dark:shadow-none"><Sparkles size={14} fill="currentColor" /></div>
@@ -312,7 +301,6 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
           <div className="px-4 md:px-0 flex items-center justify-between mt-6 mb-4">
             <h3 className="font-bold text-lg text-textDark dark:text-dark-text flex items-center gap-2">
               Cộng đồng hỏi đáp
-              {/* --- GIỮ CÁI NÀY: HIỂN THỊ BADGE ĐẸP --- */}
               {renderFilterBadge()}
             </h3>
             <div className="flex bg-white dark:bg-dark-card p-1 rounded-full border border-gray-100 dark:border-dark-border shadow-sm gap-1">
@@ -322,10 +310,8 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
             </div>
           </div>
           
-          {/* FEED QUESTIONS (SỬ DỤNG DISPLAY LIST CHUẨN) */}
           <div className="px-4 md:px-0 space-y-4 pb-10">
               {isInitialLoading ? (
-                  // Loading Skeleton
                   <div className="space-y-4">
                       {[1,2,3].map(i => <div key={i} className="h-40 bg-white dark:bg-dark-card rounded-2xl animate-pulse" />)}
                   </div>
@@ -333,7 +319,6 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
                   <div className="text-center py-10 text-gray-500">Chưa có câu hỏi nào.</div>
               ) : (
                   <>
-                      {/* Hiển thị danh sách câu hỏi */}
                       {displayList.map((q, index) => {
                           const frequency = adConfig?.frequencies?.home || 5;
                           const shouldShowAd = adConfig?.isEnabled && (index + 1) % frequency === 0;
@@ -345,7 +330,6 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
                           );
                       })}
 
-                      {/* NÚT TẢI THÊM */}
                       {hasMore && !debouncedQuery && (
                           <div className="flex justify-center pt-2">
                               <button 
