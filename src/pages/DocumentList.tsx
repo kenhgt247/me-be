@@ -5,7 +5,7 @@ import { fetchDocumentsPaginated, fetchDocumentCategories } from '../services/do
 import { getAdConfig, subscribeToAdConfig } from '../services/ads';
 import { subscribeToAuthChanges } from '../services/auth';
 import { 
-  FileText, UploadCloud, ArrowDown, ChevronRight, ChevronLeft, AlertCircle, Search
+  FileText, UploadCloud, ArrowDown, ChevronRight, ChevronLeft, AlertCircle, Search, Loader2
 } from 'lucide-react';
 import { ExpertPromoBox } from '../components/ExpertPromoBox';
 import { DocumentGridAd } from '../components/ads/DocumentGridAd';
@@ -14,6 +14,7 @@ import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 
 const PAGE_SIZE = 9;
 
+// --- SKELETON LOADER ---
 const DocSkeleton = () => (
   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
     {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -33,7 +34,7 @@ export const DocumentList: React.FC = () => {
   const [categories, setCategories] = useState<DocumentCategory[]>([]);
   const [docs, setDocs] = useState<Document[]>([]);
   
-  // State Phân trang
+  // State Phân trang (LOGIC MỚI - GIỮ CÁI NÀY)
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -59,7 +60,7 @@ export const DocumentList: React.FC = () => {
             const cData = await fetchDocumentCategories();
             setCategories(cData);
 
-            // Lấy trang 1 tài liệu
+            // Lấy trang 1 tài liệu (Phân trang - LOGIC MỚI)
             const { docs: initialDocs, lastDoc: initialLastDoc, hasMore: initialHasMore } = await fetchDocumentsPaginated('all', null, PAGE_SIZE);
             
             setDocs(initialDocs);
@@ -76,7 +77,7 @@ export const DocumentList: React.FC = () => {
     return () => { unsubAuth(); unsubAd(); };
   }, []);
 
-  // Handler: Load More
+  // Handler: Load More (LOGIC MỚI - GIỮ CÁI NÀY)
   const handleLoadMore = async () => {
     if (isLoadingMore || !hasMore || !lastDoc) return;
     
@@ -93,7 +94,7 @@ export const DocumentList: React.FC = () => {
     }
   };
 
-  // Handler: Filter Category
+  // Handler: Filter Category (LOGIC MỚI - GIỮ CÁI NÀY)
   const handleFilter = async (catId: string) => {
       if (catId === activeCat) return;
 
@@ -124,7 +125,7 @@ export const DocumentList: React.FC = () => {
     }
   };
 
-  // Tìm kiếm Client-side (Tạm thời)
+  // Tìm kiếm Client-side (Tạm thời trên tập đã tải)
   const filteredDocs = searchTerm 
     ? docs.filter(d => d.title.toLowerCase().includes(searchTerm.toLowerCase()))
     : docs;
@@ -204,7 +205,7 @@ export const DocumentList: React.FC = () => {
                         })}
                     </div>
 
-                    {/* LOAD MORE BUTTON */}
+                    {/* LOAD MORE BUTTON (LOGIC MỚI) */}
                     {hasMore && !searchTerm && (
                         <div className="flex justify-center mt-12 pb-8">
                             <button 

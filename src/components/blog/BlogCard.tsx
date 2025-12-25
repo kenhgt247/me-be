@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Clock } from 'lucide-react';
 import { BlogPost } from '../../types';
-import { LazyImage } from '../common/LazyImage'; // <--- IMPORT COMPONENT MỚI
+import { LazyImage } from '../common/LazyImage'; // Đã import LazyImage
 
 interface BlogCardProps {
   post: BlogPost;
@@ -15,13 +15,13 @@ export const BlogCard: React.FC<BlogCardProps> = ({ post, categoryName }) => {
       to={`/blog/${post.slug}`} 
       className="group bg-white dark:bg-dark-card rounded-[1.5rem] overflow-hidden border border-gray-100 dark:border-dark-border shadow-sm dark:shadow-none hover:shadow-xl transition-all hover:-translate-y-1 flex flex-col h-full"
     >
-      {/* --- PHẦN ẢNH BÌA --- */}
+      {/* --- PHẦN ẢNH BÌA (Đã tối ưu LazyLoad) --- */}
       <div className="aspect-video bg-gray-100 dark:bg-slate-700 relative overflow-hidden shrink-0">
         {post.coverImageUrl ? (
           <LazyImage 
             src={post.coverImageUrl} 
             alt={post.title}
-            // Giữ nguyên class hover hiệu ứng zoom
+            // Class hover hiệu ứng zoom
             className="w-full h-full group-hover:scale-105 transition-transform duration-700"
             // Ảnh fallback nếu link ảnh bìa bị lỗi
             fallbackSrc="https://placehold.co/600x400/e2e8f0/64748b?text=No+Image" 

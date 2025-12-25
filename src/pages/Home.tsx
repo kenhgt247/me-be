@@ -35,7 +35,7 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
   const [activeCategory, setActiveCategory] = useState<string>('Tất cả');
   const [viewFilter, setViewFilter] = useState<'newest' | 'active' | 'unanswered'>('newest');
   
-  // State Data
+  // State Data (LOGIC MỚI - GIỮ CÁI NÀY)
   const [questions, setQuestions] = useState<Question[]>([]);
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [hasMore, setHasMore] = useState(true);
@@ -67,11 +67,11 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
       return () => unsub();
   }, []);
 
-  // --- 2. LOAD CÂU HỎI (CHUẨN SERVER-SIDE) ---
+  // --- 2. LOAD CÂU HỎI (CHUẨN SERVER-SIDE - GIỮ CÁI NÀY) ---
   useEffect(() => {
       const loadInitialQuestions = async () => {
           setIsInitialLoading(true);
-          setQuestions([]); // Xóa cũ để hiện loading
+          setQuestions([]); // Reset list
           setLastDoc(null);
 
           try {
@@ -90,9 +90,9 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
       };
 
       loadInitialQuestions();
-  }, [activeCategory, viewFilter]); // Chạy lại khi bộ lọc thay đổi
+  }, [activeCategory, viewFilter]);
 
-  // --- 3. LOAD MORE ---
+  // --- 3. LOAD MORE (LOGIC MỚI - GIỮ CÁI NÀY) ---
   const handleLoadMore = async () => {
       if (isLoadingMore || !hasMore || !lastDoc) return;
       setIsLoadingMore(true);
@@ -176,8 +176,7 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
     return { questions: matchedQuestions, blogs: matchedBlogs, docs: matchedDocs, users: Array.from(usersMap.values()) };
   }, [debouncedQuery, questions, blogPosts, documents]);
 
-  // --- QUAN TRỌNG: DANH SÁCH HIỂN THỊ (SỬ DỤNG TRỰC TIẾP DỮ LIỆU TỪ SERVER) ---
-  // Không dùng sort/filter ở đây nữa vì server đã làm rồi
+  // --- DANH SÁCH HIỂN THỊ (LOGIC MỚI) ---
   const displayList = debouncedQuery ? searchResults.questions : questions;
 
   // Render Helpers
@@ -313,7 +312,7 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
           <div className="px-4 md:px-0 flex items-center justify-between mt-6 mb-4">
             <h3 className="font-bold text-lg text-textDark dark:text-dark-text flex items-center gap-2">
               Cộng đồng hỏi đáp
-              {/* --- ĐÃ SỬA LỖI HIỂN THỊ TẠI ĐÂY --- */}
+              {/* --- GIỮ CÁI NÀY: HIỂN THỊ BADGE ĐẸP --- */}
               {renderFilterBadge()}
             </h3>
             <div className="flex bg-white dark:bg-dark-card p-1 rounded-full border border-gray-100 dark:border-dark-border shadow-sm gap-1">
@@ -323,7 +322,7 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
             </div>
           </div>
           
-          {/* FEED QUESTIONS (SỬ DỤNG DISPLAY LIST ĐÃ PHÂN TRANG) */}
+          {/* FEED QUESTIONS (SỬ DỤNG DISPLAY LIST CHUẨN) */}
           <div className="px-4 md:px-0 space-y-4 pb-10">
               {isInitialLoading ? (
                   // Loading Skeleton
@@ -346,7 +345,7 @@ export const Home: React.FC<HomeProps> = ({ categories, currentUser }) => {
                           );
                       })}
 
-                      {/* NÚT TẢI THÊM (Chỉ hiện khi không search và còn dữ liệu) */}
+                      {/* NÚT TẢI THÊM */}
                       {hasMore && !debouncedQuery && (
                           <div className="flex justify-center pt-2">
                               <button 

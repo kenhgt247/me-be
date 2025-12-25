@@ -15,7 +15,7 @@ import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 
 const PAGE_SIZE = 9;
 
-// --- SKELETON LOADER (GIỮ NGUYÊN UI CŨ) ---
+// --- SKELETON LOADER ---
 const BlogSkeleton = () => (
   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
     {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -38,9 +38,9 @@ const BlogSkeleton = () => (
 export const BlogList: React.FC = () => {
   const [categories, setCategories] = useState<BlogCategory[]>([]);
   const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [trendingPosts, setTrendingPosts] = useState<BlogPost[]>([]); // State riêng cho Trending
+  const [trendingPosts, setTrendingPosts] = useState<BlogPost[]>([]);
   
-  // State Phân trang (LOGIC MỚI)
+  // State Phân trang (LOGIC MỚI - GIỮ CÁI NÀY)
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -65,12 +65,11 @@ export const BlogList: React.FC = () => {
         const catsData = await fetchBlogCategories();
         setCategories(catsData);
 
-        // Lấy Trending riêng (5 bài view cao nhất - Logic Server side nếu có, hoặc lấy 100 bài rồi sort)
-        // Ở đây dùng fetchPublishedPosts để lấy top bài, sau đó sort client-side cho Trending section
-        const trendingData = await fetchPublishedPosts('all', 10); 
+        // Lấy Trending (Logic cũ OK, nhưng tách ra cho gọn)
+        const trendingData = await fetchPublishedPosts('all', 10);
         setTrendingPosts(trendingData.sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, 5));
 
-        // Lấy bài viết Grid (Phân trang)
+        // Lấy bài viết Grid (Phân trang - LOGIC MỚI)
         const { posts: initialPosts, lastDoc: initialLastDoc, hasMore: initialHasMore } = await fetchPostsPaginated('all', null, PAGE_SIZE);
         
         setPosts(initialPosts);
@@ -87,7 +86,7 @@ export const BlogList: React.FC = () => {
     return () => { unsubAuth(); unsubAd(); };
   }, []);
 
-  // Load More Handler (LOGIC MỚI)
+  // Load More Handler (LOGIC MỚI - GIỮ CÁI NÀY)
   const handleLoadMore = async () => {
     if (isLoadingMore || !hasMore || !lastDoc) return;
     
@@ -104,9 +103,9 @@ export const BlogList: React.FC = () => {
     }
   };
 
-  // Filter Handler (LOGIC MỚI)
+  // Filter Handler (LOGIC MỚI - GIỮ CÁI NÀY)
   const handleFilter = async (catId: string) => {
-    if (catId === activeCat) return; 
+    if (catId === activeCat) return;
 
     setActiveCat(catId);
     setLoading(true);
@@ -137,20 +136,17 @@ export const BlogList: React.FC = () => {
 
   const isExpertOrAdmin = currentUser && (currentUser.isExpert || currentUser.isAdmin);
 
-  // Search Logic (Client-side tạm thời trên tập đã tải)
   const visiblePosts = searchTerm 
     ? posts.filter(post => post.title.toLowerCase().includes(searchTerm.toLowerCase()))
     : posts;
 
-  // Logic Hero Post (UI CŨ)
-  // Hero post là bài đầu tiên trong danh sách nếu ko search & đang ở tab 'all'
   const showHero = !searchTerm && visiblePosts.length > 0 && activeCat === 'all';
   const heroPost = showHero ? visiblePosts[0] : null;
   const gridPosts = showHero ? visiblePosts.slice(1) : visiblePosts;
 
   return (
     <div className="min-h-screen bg-[#F7F7F5] dark:bg-dark-bg pb-24 animate-fade-in pt-safe-top transition-colors duration-300">
-      {/* HEADER (GIỮ NGUYÊN UI CŨ) */}
+      {/* HEADER */}
       <div className="sticky top-0 z-30 pointer-events-none"> 
          <div className="bg-white dark:bg-dark-card border-b border-gray-100 dark:border-dark-border shadow-sm dark:shadow-none rounded-b-[2rem] pointer-events-auto transition-all duration-300 relative overflow-hidden">
              <div className="h-1 w-full bg-gradient-to-r from-primary via-blue-400 to-purple-500 absolute top-0 left-0"></div>
@@ -198,37 +194,15 @@ export const BlogList: React.FC = () => {
              <div className="flex flex-col items-center justify-center py-24 text-center">
                  <div className="w-20 h-20 bg-gray-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4 text-gray-300 dark:text-gray-600"><AlertCircle size={40} /></div>
                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Không tìm thấy bài viết</h3>
-                 <p className="text-gray-500 dark:text-gray-400 text-sm mt-1 max-w-xs mx-auto">{searchTerm ? `Chúng tôi không tìm thấy kết quả nào cho "${searchTerm}".` : 'Chưa có bài viết nào trong chủ đề này.'}</p>
+                 <p className="text-gray-500 dark:text-gray-400 text-sm mt-1 max-w-xs mx-auto">{searchTerm ? `Không tìm thấy kết quả nào cho "${searchTerm}".` : 'Chưa có bài viết nào trong chủ đề này.'}</p>
                  {searchTerm && <button onClick={() => setSearchTerm('')} className="mt-4 text-primary font-bold text-sm hover:underline">Xóa bộ lọc tìm kiếm</button>}
              </div>
          ) : (
              <>
-                 {/* HERO POST (GIỮ NGUYÊN UI CŨ) */}
+                 {/* HERO POST */}
                  {heroPost && (
                     <div className="mb-10 animate-slide-up">
-                        <Link to={`/blog/${heroPost.slug}`} className="group block relative rounded-[2rem] overflow-hidden shadow-lg hover:shadow-2xl transition-all">
-                             <div className="aspect-[2/1] md:aspect-[21/9] bg-gray-200 dark:bg-slate-700 w-full relative">
-                                 {heroPost.coverImageUrl ? (
-                                    <img src={heroPost.coverImageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" alt={heroPost.title} />
-                                 ) : (
-                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-r from-blue-500 to-purple-600 text-white text-6xl">{heroPost.iconEmoji}</div>
-                                 )}
-                                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
-                                 <div className="absolute bottom-0 left-0 p-6 md:p-10 w-full md:w-3/4">
-                                     <span className="inline-flex items-center gap-1 bg-primary text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider mb-3 shadow-md border border-white/20">
-                                        <Sparkles size={10} /> Mới nhất
-                                     </span>
-                                     <h2 className="text-2xl md:text-4xl font-black text-white leading-tight mb-3 drop-shadow-sm group-hover:text-blue-100 transition-colors">{heroPost.title}</h2>
-                                     <p className="text-gray-200 text-sm md:text-base line-clamp-2 mb-4 font-medium hidden md:block opacity-90">{heroPost.excerpt}</p>
-                                     <div className="flex items-center gap-3 text-white/90 text-xs font-bold">
-                                         <img src={heroPost.authorAvatar || "https://cdn-icons-png.flaticon.com/512/3177/3177440.png"} className="w-8 h-8 rounded-full border-2 border-white/30" alt="avatar" />
-                                         <span>{heroPost.authorName}</span>
-                                         <span className="opacity-50">•</span>
-                                         <span>{new Date(heroPost.createdAt).toLocaleDateString('vi-VN')}</span>
-                                     </div>
-                                 </div>
-                             </div>
-                        </Link>
+                        <BlogCard post={heroPost} categoryName={categories.find(c => c.id === heroPost.categoryId)?.name} />
                     </div>
                  )}
 
@@ -239,8 +213,8 @@ export const BlogList: React.FC = () => {
                     </div>
                  )}
 
-                 {/* TRENDING SECTION (GIỮ NGUYÊN UI CŨ) */}
-                 {!searchTerm && activeCat === 'all' && trendingPosts.length > 0 && (
+                 {/* TRENDING SECTION */}
+                 {trendingPosts.length > 0 && (
                      <div className="mb-12 animate-slide-up" style={{ animationDelay: '0.05s' }}>
                         <div className="flex items-center gap-2 mb-4">
                              <div className="p-1.5 bg-orange-100 dark:bg-orange-900/30 rounded-lg text-orange-600 dark:text-orange-400"><Flame size={20} fill="currentColor" /></div>
@@ -248,29 +222,15 @@ export const BlogList: React.FC = () => {
                         </div>
                         <div className="flex gap-4 overflow-x-auto no-scrollbar pb-4 snap-x -mx-4 px-4 md:mx-0 md:px-0">
                              {trendingPosts.map((post, index) => (
-                                 <Link to={`/blog/${post.slug}`} key={post.id} className="snap-start flex-shrink-0 w-72 bg-white dark:bg-dark-card rounded-[1.5rem] p-3 border border-gray-100 dark:border-dark-border shadow-sm dark:shadow-none hover:shadow-md transition-all active:scale-95 group relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 bg-gray-900/10 dark:bg-white/5 text-gray-900 dark:text-white font-black text-[4rem] leading-none -mt-2 -mr-2 opacity-10 select-none pointer-events-none group-hover:scale-110 transition-transform">{index + 1}</div>
-                                    <div className="flex gap-3">
-                                        <div className="w-20 h-20 rounded-xl bg-gray-100 dark:bg-slate-700 shrink-0 overflow-hidden relative">
-                                            {post.coverImageUrl ? (
-                                                <img src={post.coverImageUrl} className="w-full h-full object-cover" loading="lazy" />
-                                            ) : (
-                                                <div className="w-full h-full flex items-center justify-center text-2xl bg-blue-50 dark:bg-slate-800">{post.iconEmoji}</div>
-                                            )}
-                                            <div className="absolute top-1 left-1 bg-black/50 backdrop-blur-sm text-white text-[10px] font-bold px-1.5 rounded-md">#{index + 1}</div>
-                                        </div>
-                                        <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                            <div className="text-[10px] font-bold text-orange-500 dark:text-orange-400 uppercase tracking-wide mb-1 flex items-center gap-1"><Eye size={10} /> {post.views || 0} lượt xem</div>
-                                            <h4 className="font-bold text-sm text-gray-800 dark:text-white line-clamp-2 leading-snug group-hover:text-primary transition-colors">{post.title}</h4>
-                                        </div>
-                                    </div>
-                                 </Link>
+                                 <div key={post.id} className="snap-start flex-shrink-0 w-72">
+                                     <BlogCard post={post} categoryName={categories.find(c => c.id === post.categoryId)?.name} />
+                                 </div>
                              ))}
                         </div>
                      </div>
                  )}
 
-                 {/* MAIN GRID POSTS (SỬ DỤNG BLOG CARD & LOGIC QUẢNG CÁO MỚI) */}
+                 {/* MAIN GRID POSTS */}
                  <div className="flex items-center gap-2 mb-4">
                      <h3 className="font-bold text-xl text-gray-900 dark:text-white">Bài viết mới</h3>
                  </div>
@@ -290,7 +250,7 @@ export const BlogList: React.FC = () => {
                      })}
                  </div>
 
-                 {/* LOAD MORE BUTTON (LOGIC MỚI) */}
+                 {/* LOAD MORE BUTTON */}
                  {hasMore && !searchTerm && (
                     <div className="flex justify-center mt-12 pb-8">
                         <button 
