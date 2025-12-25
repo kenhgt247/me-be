@@ -14,3 +14,17 @@ root.render(
     <App />
   </React.StrictMode>
 );
+
+// --- ĐOẠN MÃ THÊM VÀO ĐỂ FIX LỖI PWA ---
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    // Đảm bảo file service-worker.js nằm trong thư mục public/
+    navigator.serviceWorker.register('/service-worker.js')
+      .then((reg) => {
+        console.log('✅ Asking.vn: Service Worker đã đăng ký thành công!', reg.scope);
+      })
+      .catch((err) => {
+        console.error('❌ Asking.vn: Đăng ký Service Worker thất bại:', err);
+      });
+  });
+}
