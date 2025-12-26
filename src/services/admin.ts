@@ -152,13 +152,14 @@ export const deleteUser = async (userId: string) => {
     throw error;
   }
 };
+
 export const searchUsersForAdmin = async (keyword: string, maxResults: number = 12): Promise<User[]> => {
   if (!db) return [];
   const k = (keyword || '').trim().toLowerCase();
   if (!k) return [];
 
   try {
-    // ✅ Cách đơn giản & chắc chạy: lấy 200 user gần nhất (có thể tăng nếu bạn muốn)
+    // ✅ Cách đơn giản & chắc chạy: lấy 200 user gần nhất
     const snap = await getDocs(query(collection(db, "users"), limit(200)));
     const users = snap.docs.map((d) => ({ id: d.id, ...d.data() } as User));
 
@@ -182,6 +183,8 @@ export const searchUsersForAdmin = async (keyword: string, maxResults: number = 
     return [];
   }
 };
+
+// ✅ HÀM QUAN TRỌNG ĐÃ SỬA: Thêm Header Content-Type
 export const createUserByAdmin = async (payload: {
   email: string;
   password: string;
@@ -196,7 +199,7 @@ export const createUserByAdmin = async (payload: {
   const res = await fetch("/api/admin/create-user", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
+      "Content-Type": "application/json", // ⚠️ QUAN TRỌNG: Backend cần dòng này để đọc body
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
@@ -228,8 +231,6 @@ export const fetchExpertApplications = async (): Promise<ExpertApplication[]> =>
 
 /**
  * Duyệt / Từ chối hồ sơ ứng tuyển
- * - Update expert_applications
- * - Update users: isExpert/expertStatus/specialty + các trường audit
  */
 export const processExpertApplication = async (
   appId: string,
@@ -280,16 +281,8 @@ export const processExpertApplication = async (
 };
 
 /* ============================================================
-   EXPERT MANAGEMENT (Admin CRUD chuyên gia)
-   - Xoá hồ sơ ứng tuyển
-   - Danh sách chuyên gia
-   - Sửa thông tin chuyên gia
-   - Thêm chuyên gia thủ công
-   - Gỡ quyền chuyên gia
-   - Đồng bộ/chỉnh specialty từ hồ sơ
+   EXPERT MANAGEMENT
    ============================================================ */
-
-// Xoá hồ sơ ứng tuyển (admin)
 export const deleteExpertApplication = async (appId: string) => {
   if (!db) return;
   try {
@@ -300,7 +293,6 @@ export const deleteExpertApplication = async (appId: string) => {
   }
 };
 
-// Lấy danh sách chuyên gia: where(isExpert == true) + sort client để tránh yêu cầu index
 export const fetchExperts = async (): Promise<User[]> => {
   if (!db) return [];
   try {
@@ -310,7 +302,6 @@ export const fetchExperts = async (): Promise<User[]> => {
 
     const users = snap.docs.map((d) => ({ id: d.id, ...d.data() } as User));
 
-    // sort mới nhất lên đầu nếu có joinedAt/expertApprovedAt
     users.sort((a: any, b: any) => {
       const ta =
         (a.expertApprovedAt && new Date(a.expertApprovedAt).getTime()) ||
@@ -331,22 +322,16 @@ export const fetchExperts = async (): Promise<User[]> => {
 };
 
 export type ExpertAdminUpdate = {
-  // fields phổ biến
   name?: string;
   bio?: string;
   specialty?: string;
   avatar?: string;
-
-  // optional fields (nếu User schema bạn có)
   phone?: string;
   workplace?: string;
-
-  // quyền / trạng thái
   isExpert?: boolean;
   expertStatus?: "approved" | "pending" | "rejected";
 };
 
-// Admin sửa thông tin 1 chuyên gia (hoặc user bất kỳ)
 export const updateExpertByAdmin = async (userId: string, updates: ExpertAdminUpdate) => {
   if (!db) return;
   try {
@@ -360,7 +345,6 @@ export const updateExpertByAdmin = async (userId: string, updates: ExpertAdminUp
   }
 };
 
-// Admin thêm chuyên gia thủ công (không cần hồ sơ)
 export const addExpertManually = async (payload: {
   userId: string;
   specialty: string;
@@ -377,7 +361,6 @@ export const addExpertManually = async (payload: {
     const now = new Date().toISOString();
     const userRef = doc(db, "users", userId);
 
-    // check tồn tại
     const snap = await getDoc(userRef);
     if (!snap.exists()) throw new Error("USER_NOT_FOUND");
 
@@ -397,10 +380,9 @@ export const addExpertManually = async (payload: {
   }
 };
 
-// Admin gỡ quyền chuyên gia (kể cả đã approved)
 export const revokeExpertByAdmin = async (payload: {
   userId: string;
-  appId?: string; // nếu muốn đồng bộ expert_applications
+  appId?: string;
   reason?: string;
 }) => {
   if (!db) return;
@@ -435,7 +417,6 @@ export const revokeExpertByAdmin = async (payload: {
   }
 };
 
-// Admin chỉnh specialty từ hồ sơ (update cả application + user)
 export const updateExpertSpecialtyFromApp = async (payload: {
   appId: string;
   userId: string;
@@ -466,7 +447,7 @@ export const updateExpertSpecialtyFromApp = async (payload: {
 };
 
 /* ============================================================
-   QUESTIONS MANAGEMENT (Phân trang & Bulk)
+   QUESTIONS MANAGEMENT
    ============================================================ */
 export const fetchQuestionsAdminPaginated = async (
   lastVisible: QueryDocumentSnapshot<DocumentData> | null = null,
