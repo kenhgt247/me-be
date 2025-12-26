@@ -1,3 +1,4 @@
+import { getAuth } from 'firebase/auth';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import {
@@ -10,20 +11,19 @@ import {
 
 import { Question, Answer, User, getIdFromSlug, AdConfig, toSlug } from '../types';
 import { generateDraftAnswer } from '../services/gemini';
-import { 
-    toggleQuestionLikeDb, toggleSaveQuestion, toggleAnswerUseful, 
-    sendReport, fetchQuestionById, 
-    fetchQuestionsPaginated,
-    fetchAnswersPaginated,
-    addAnswerToDb,
-    updateAnswerInDb
+import {
+  toggleQuestionLikeDb, toggleSaveQuestion, toggleAnswerUseful,
+  sendReport, fetchQuestionById,
+  fetchQuestionsPaginated,
+  fetchAnswersPaginated,
+  addAnswerToDb,
 } from '../services/db';
 import { getAdConfig } from '../services/ads';
 import { ShareModal } from '../components/ShareModal';
 import { loginAnonymously } from '../services/auth';
 import { uploadFile } from '../services/storage';
 import { ExpertPromoBox } from '../components/ExpertPromoBox';
-import { SidebarAd } from '../components/ads/SidebarAd'; 
+import { SidebarAd } from '../components/ads/SidebarAd';
 import { LazyImage } from '../components/common/LazyImage';
 import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 
@@ -48,103 +48,205 @@ const STICKER_PACKS = {
 
 // --- SUB-COMPONENTS ---
 const ImageViewer: React.FC<{ url: string; onClose: () => void }> = ({ url, onClose }) => {
-    if (!url) return null;
-    return (
-      <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center animate-fade-in" onClick={onClose}>
-        <button onClick={onClose} className="absolute top-4 right-4 text-white p-2 bg-gray-800 rounded-full hover:bg-gray-700 transition-colors">
-          <X size={24} />
-        </button>
-        <img src={url} className="max-w-full max-h-full object-contain p-2" onClick={(e) => e.stopPropagation()} alt="Preview" />
-      </div>
-    );
+  if (!url) return null;
+  return (
+    <div
+      className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center animate-fade-in"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 text-white p-2 bg-gray-800 rounded-full hover:bg-gray-700 transition-colors"
+      >
+        <X size={24} />
+      </button>
+      <img
+        src={url}
+        className="max-w-full max-h-full object-contain p-2"
+        onClick={(e) => e.stopPropagation()}
+        alt="Preview"
+      />
+    </div>
+  );
 };
 
 const FBImageGridDetail: React.FC<{ images?: string[]; onImageClick: (url: string) => void }> = ({ images, onImageClick }) => {
-    if (!images || images.length === 0) return null;
-    const count = images.length;
-    const ImageItem = ({ src, className = "" }: { src: string, className?: string }) => (
-        <div className={`relative overflow-hidden cursor-pointer active:opacity-90 hover:opacity-95 transition-opacity ${className}`} onClick={() => onImageClick(src)}>
-            <LazyImage src={src} alt="Detail" className="w-full h-full object-cover" placeholderClassName="bg-gray-200 dark:bg-slate-700" />
-        </div>
-    );
-    const containerClass = "mt-4 rounded-2xl overflow-hidden border border-gray-100 dark:border-dark-border bg-gray-50 dark:bg-slate-800 shadow-sm";
-    if (count === 1) return <div className={containerClass}><div className="w-full max-h-[500px]"><ImageItem src={images[0]} /></div></div>;
-    if (count === 2) return <div className={`${containerClass} grid grid-cols-2 gap-1 h-72`}><ImageItem src={images[0]} /><ImageItem src={images[1]} /></div>;
+  if (!images || images.length === 0) return null;
+  const count = images.length;
+
+  const ImageItem = ({ src, className = "" }: { src: string; className?: string }) => (
+    <div
+      className={`relative overflow-hidden cursor-pointer active:opacity-90 hover:opacity-95 transition-opacity ${className}`}
+      onClick={() => onImageClick(src)}
+    >
+      <LazyImage
+        src={src}
+        alt="Detail"
+        className="w-full h-full object-cover"
+        placeholderClassName="bg-gray-200 dark:bg-slate-700"
+      />
+    </div>
+  );
+
+  const containerClass =
+    "mt-4 rounded-2xl overflow-hidden border border-gray-100 dark:border-dark-border bg-gray-50 dark:bg-slate-800 shadow-sm";
+
+  if (count === 1) {
     return (
-      <div className={`${containerClass} grid grid-cols-2 gap-1 h-72`}>
-        <div className={count === 3 ? "row-span-2" : ""}>
-           <ImageItem src={images[0]} className="h-full" />
-        </div>
-        <div className="grid grid-rows-2 gap-1 h-full">
-          <ImageItem src={images[1]} className="h-full" />
-          <div className="relative w-full h-full cursor-pointer active:opacity-90">
-            <LazyImage src={images[2]} alt="More" className="w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white font-bold text-xl backdrop-blur-[2px]" onClick={() => onImageClick(images[2])}>
-                {count > 3 && `+${count - 3}`}
-            </div>
-          </div>
+      <div className={containerClass}>
+        <div className="w-full max-h-[500px]">
+          <ImageItem src={images[0]} />
         </div>
       </div>
     );
+  }
+
+  if (count === 2) {
+    return (
+      <div className={`${containerClass} grid grid-cols-2 gap-1 h-72`}>
+        <ImageItem src={images[0]} />
+        <ImageItem src={images[1]} />
+      </div>
+    );
+  }
+
+  return (
+    <div className={`${containerClass} grid grid-cols-2 gap-1 h-72`}>
+      <div className={count === 3 ? "row-span-2" : ""}>
+        <ImageItem src={images[0]} className="h-full" />
+      </div>
+      <div className="grid grid-rows-2 gap-1 h-full">
+        <ImageItem src={images[1]} className="h-full" />
+        <div className="relative w-full h-full cursor-pointer active:opacity-90">
+          <LazyImage src={images[2]} alt="More" className="w-full h-full object-cover" />
+          <div
+            className="absolute inset-0 bg-black/40 flex items-center justify-center text-white font-bold text-xl backdrop-blur-[2px]"
+            onClick={() => onImageClick(images[2])}
+          >
+            {count > 3 && `+${count - 3}`}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const RichTextRenderer: React.FC<{ content: string }> = ({ content }) => {
-    const isBigEmoji = useMemo(() => {
-      return /^(\p{Extended_Pictographic}|\p{Emoji_Presentation}|\s)+$/u.test(content) && [...content].length <= 5;
-    }, [content]);
-    if (isBigEmoji) return <div className="text-5xl md:text-6xl py-4 animate-pop-in">{content}</div>;
-    const parts = content.split(/(!\[.*?\]\(https?:\/\/[^\s)]+\))/g);
-    return (
-      <div className="text-[15px] md:text-[16px] text-gray-800 dark:text-gray-100 leading-relaxed whitespace-pre-wrap break-words">
-        {parts.map((part, i) => {
-          const imgMatch = part.match(/!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/);
-          if (imgMatch) {
-            return (
-              <div key={i} className="my-4 rounded-xl overflow-hidden shadow-sm border border-gray-100 dark:border-slate-700">
-                  <LazyImage src={imgMatch[2]} alt={imgMatch[1]} className="max-w-full h-auto block cursor-zoom-in" onClick={() => window.open(imgMatch[2], '_blank')} />
-              </div>
-            );
-          }
+  const isBigEmoji = useMemo(() => {
+    return /^(\p{Extended_Pictographic}|\p{Emoji_Presentation}|\s)+$/u.test(content) && [...content].length <= 5;
+  }, [content]);
+
+  if (isBigEmoji) return <div className="text-5xl md:text-6xl py-4 animate-pop-in">{content}</div>;
+
+  const parts = content.split(/(!\[.*?\]\(https?:\/\/[^\s)]+\))/g);
+
+  return (
+    <div className="text-[15px] md:text-[16px] text-gray-800 dark:text-gray-100 leading-relaxed whitespace-pre-wrap break-words">
+      {parts.map((part, i) => {
+        const imgMatch = part.match(/!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/);
+        if (imgMatch) {
           return (
-            <span key={i}>
-              {part.split(/((?:https?:\/\/[^\s]+)|(?:@[\w\p{L}]+))/gu).map((sub, j) => {
-                if (sub.match(/^https?:\/\//)) return <a key={j} href={sub} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline font-medium break-all">{sub}</a>;
-                if (sub.startsWith('@')) return <span key={j} className="font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-1 rounded cursor-pointer">{sub}</span>;
-                return sub;
-              })}
-            </span>
+            <div key={i} className="my-4 rounded-xl overflow-hidden shadow-sm border border-gray-100 dark:border-slate-700">
+              <LazyImage
+                src={imgMatch[2]}
+                alt={imgMatch[1]}
+                className="max-w-full h-auto block cursor-zoom-in"
+                onClick={() => window.open(imgMatch[2], '_blank')}
+              />
+            </div>
           );
-        })}
-      </div>
-    );
+        }
+
+        return (
+          <span key={i}>
+            {part.split(/((?:https?:\/\/[^\s]+)|(?:@[\w\p{L}]+))/gu).map((sub, j) => {
+              if (sub.match(/^https?:\/\//)) {
+                return (
+                  <a
+                    key={j}
+                    href={sub}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-600 dark:text-blue-400 hover:underline font-medium break-all"
+                  >
+                    {sub}
+                  </a>
+                );
+              }
+              if (sub.startsWith('@')) {
+                return (
+                  <span
+                    key={j}
+                    className="font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-1 rounded cursor-pointer"
+                  >
+                    {sub}
+                  </span>
+                );
+              }
+              return sub;
+            })}
+          </span>
+        );
+      })}
+    </div>
+  );
 };
 
-const ReportModal: React.FC<{ isOpen: boolean; onClose: () => void; onSubmit: (reason: string) => void }> = ({ isOpen, onClose, onSubmit }) => {
-    const [reason, setReason] = useState('');
-    if (!isOpen) return null;
-    return (
-      <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
-        <div className="bg-white dark:bg-dark-card rounded-3xl w-full max-w-sm p-6 shadow-2xl animate-pop-in border border-gray-100 dark:border-dark-border">
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2"><Flag className="text-red-500" size={20} /> Báo cáo vi phạm</h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Giúp chúng tôi giữ cộng đồng trong sạch.</p>
-          <textarea className="w-full p-3 border border-gray-200 dark:border-slate-700 rounded-xl mb-4 text-sm focus:border-red-500 outline-none bg-gray-50 dark:bg-slate-800 dark:text-white transition-colors resize-none" rows={4} placeholder="Nhập lý do..." value={reason} onChange={(e) => setReason(e.target.value)} />
-          <div className="flex justify-end gap-2">
-            <button onClick={onClose} className="px-4 py-2 text-gray-600 dark:text-gray-300 font-bold hover:bg-gray-100 dark:hover:bg-slate-700 rounded-xl transition-colors">Hủy</button>
-            <button onClick={() => onSubmit(reason)} disabled={!reason.trim()} className="px-4 py-2 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors">Gửi báo cáo</button>
-          </div>
+const ReportModal: React.FC<{ isOpen: boolean; onClose: () => void; onSubmit: (reason: string) => void }> = ({
+  isOpen,
+  onClose,
+  onSubmit,
+}) => {
+  const [reason, setReason] = useState('');
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
+      <div className="bg-white dark:bg-dark-card rounded-3xl w-full max-w-sm p-6 shadow-2xl animate-pop-in border border-gray-100 dark:border-dark-border">
+        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+          <Flag className="text-red-500" size={20} /> Báo cáo vi phạm
+        </h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Giúp chúng tôi giữ cộng đồng trong sạch.</p>
+        <textarea
+          className="w-full p-3 border border-gray-200 dark:border-slate-700 rounded-xl mb-4 text-sm focus:border-red-500 outline-none bg-gray-50 dark:bg-slate-800 dark:text-white transition-colors resize-none"
+          rows={4}
+          placeholder="Nhập lý do..."
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-gray-600 dark:text-gray-300 font-bold hover:bg-gray-100 dark:hover:bg-slate-700 rounded-xl transition-colors"
+          >
+            Hủy
+          </button>
+          <button
+            onClick={() => onSubmit(reason)}
+            disabled={!reason.trim()}
+            className="px-4 py-2 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors"
+          >
+            Gửi báo cáo
+          </button>
         </div>
       </div>
-    );
+    </div>
+  );
 };
 
 // --- MAIN COMPONENT ---
 export default function QuestionDetail({
-  currentUser, onMarkBestAnswer, onVerifyAnswer,
-  onOpenAuth, onEditQuestion, onDeleteQuestion, onEditAnswer, onDeleteAnswer
+  currentUser,
+  onMarkBestAnswer,
+  onVerifyAnswer,
+  onOpenAuth,
+  onEditQuestion,
+  onDeleteQuestion,
+  onDeleteAnswer,
 }: DetailProps) {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  
+
   // Data State
   const [question, setQuestion] = useState<Question | null>(null);
   const [answers, setAnswers] = useState<Answer[]>([]);
@@ -155,15 +257,15 @@ export default function QuestionDetail({
   const [trendingQuestions, setTrendingQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
   const [adConfig, setAdConfig] = useState<AdConfig | null>(null);
-  
+
   // Interaction State
   const [isInputOpen, setIsInputOpen] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [sortOption, setSortOption] = useState<'best' | 'newest' | 'oldest'>('newest');
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [showFloatingInput, setShowFloatingInput] = useState(false); 
-  
+  const [showFloatingInput, setShowFloatingInput] = useState(false);
+
   // Answer Form State
   const [newAnswer, setNewAnswer] = useState('');
   const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
@@ -172,8 +274,8 @@ export default function QuestionDetail({
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [answerImage, setAnswerImage] = useState<string | null>(null);
-  const [uploadingImage, setUploadingImage] = useState(false); 
-  
+  const [uploadingImage, setUploadingImage] = useState(false);
+
   // Mention & Edit State
   const [showMentions, setShowMentions] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
@@ -182,44 +284,52 @@ export default function QuestionDetail({
   const [editQContent, setEditQContent] = useState('');
   const [isSaved, setIsSaved] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
-  const [reportTarget, setReportTarget] = useState<{ id: string, type: 'question' | 'answer' } | null>(null);
+  const [reportTarget, setReportTarget] = useState<{ id: string; type: 'question' | 'answer' } | null>(null);
 
   // Refs
   const menuRef = useRef<HTMLDivElement>(null);
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // --- DEBUG LOG UID (KHÔNG GIẢ ĐỊNH users doc id) ---
+  useEffect(() => {
+    const auth = getAuth();
+    console.log('auth.uid =', auth.currentUser?.uid ?? null);
+    console.log('currentUser.id =', currentUser?.id ?? null);
+  }, [currentUser?.id]);
+
   // --- 1. FETCH DATA (TỔNG HỢP) ---
   useEffect(() => {
-      const fetchData = async () => {
-          if (!slug) return;
-          setLoading(true);
-          const qId = getIdFromSlug(slug);
-          
-          try {
-              const qData = await fetchQuestionById(qId);
-              if (qData) {
-                setQuestion(qData);
-                // Load 5 câu trả lời đầu tiên bằng phân trang
-                const ansResult = await fetchAnswersPaginated(qId, null, 5);
-                setAnswers(ansResult.answers);
-                setLastAnsDoc(ansResult.lastDoc);
-                setHasMoreAnswers(ansResult.hasMore);
-              }
+    const fetchData = async () => {
+      if (!slug) return;
+      setLoading(true);
+      const qId = getIdFromSlug(slug);
 
-              const { questions: trendings } = await fetchQuestionsPaginated('Tất cả', 'active', null, 5);
-              setTrendingQuestions(trendings.filter(q => q.id !== qId));
+      try {
+        const qData = await fetchQuestionById(qId);
+        if (qData) {
+          setQuestion(qData);
 
-              const ads = await getAdConfig();
-              setAdConfig(ads);
+          // Load 5 câu trả lời đầu tiên bằng phân trang
+          const ansResult = await fetchAnswersPaginated(qId, null, 5);
+          setAnswers(ansResult.answers);
+          setLastAnsDoc(ansResult.lastDoc);
+          setHasMoreAnswers(ansResult.hasMore);
+        }
 
-          } catch (e) {
-              console.error("Lỗi tải trang chi tiết:", e);
-          } finally {
-              setLoading(false);
-          }
-      };
-      fetchData();
+        const { questions: trendings } = await fetchQuestionsPaginated('Tất cả', 'active', null, 5);
+        setTrendingQuestions(trendings.filter(q => q.id !== qId));
+
+        const ads = await getAdConfig();
+        setAdConfig(ads);
+      } catch (e) {
+        console.error("Lỗi tải trang chi tiết:", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
   }, [slug]);
 
   // --- 2. SỬA LỖI MẤT TRẠNG THÁI LƯU KHI F5 ---
@@ -296,29 +406,32 @@ export default function QuestionDetail({
       if (b.isBestAnswer) return 1;
       if (a.isExpertVerified && !b.isExpertVerified) return -1;
       if (b.isExpertVerified && !a.isExpertVerified) return 1;
+
       const timeA = new Date(a.createdAt).getTime();
       const timeB = new Date(b.createdAt).getTime();
+
       if (sortOption === 'newest') return timeB - timeA;
       if (sortOption === 'oldest') return timeA - timeB;
-      if (sortOption === 'best') return (b.likes || 0) - (a.likes || 0); 
+      if (sortOption === 'best') return (b.likes || 0) - (a.likes || 0);
+
       return timeB - timeA;
     });
   }, [answers, sortOption]);
 
   const likesCount = useMemo(() => {
-      if (!question) return 0;
-      return Array.isArray(question.likes) ? question.likes.length : 0;
+    if (!question) return 0;
+    return Array.isArray(question.likes) ? question.likes.length : 0;
   }, [question]);
 
   const isLiked = useMemo(() => {
-      if (!question || !currentUser) return false;
-      return Array.isArray(question.likes) ? question.likes.includes(currentUser.id) : false; 
+    if (!question || !currentUser) return false;
+    return Array.isArray(question.likes) ? question.likes.includes(currentUser.id) : false;
   }, [question, currentUser]);
 
   // --- HANDLERS ---
   const ensureAuth = useCallback(async (): Promise<User> => {
     if (currentUser.isGuest) {
-      try { return await loginAnonymously(); } 
+      try { return await loginAnonymously(); }
       catch { onOpenAuth(); throw new Error("LOGIN_REQUIRED"); }
     }
     return currentUser;
@@ -330,34 +443,41 @@ export default function QuestionDetail({
       const user = await ensureAuth();
       toggleQuestionLikeDb(question, user);
       setQuestion(prev => {
-          if (!prev) return null;
-          const currentLikes = Array.isArray(prev.likes) ? prev.likes : [];
-          const isLikedNow = currentLikes.includes(user.id);
-          const newLikes = isLikedNow ? currentLikes.filter(id => id !== user.id) : [...currentLikes, user.id];
-          return { ...prev, likes: newLikes };
+        if (!prev) return null;
+        const currentLikes = Array.isArray(prev.likes) ? prev.likes : [];
+        const isLikedNow = currentLikes.includes(user.id);
+        const newLikes = isLikedNow ? currentLikes.filter(id => id !== user.id) : [...currentLikes, user.id];
+        return { ...prev, likes: newLikes };
       });
-    } catch (e) { }
+    } catch { /* ignore */ }
   }, [question, ensureAuth]);
 
-  // --- 3. SỬA LỖI LOGIC NÚT LƯU ---
+  // --- 3. SỬA LỖI LOGIC NÚT LƯU (KHÔNG LỒNG HOOK) ---
   const handleSave = useCallback(async () => {
-    if (!question || !currentUser || currentUser.isGuest) {
-      onOpenAuth(); // Yêu cầu đăng nhập để lưu
+    if (!question) return;
+
+    if (!currentUser || currentUser.isGuest) {
+      onOpenAuth();
       return;
     }
 
     const previousStatus = isSaved;
     const nextStatus = !previousStatus;
-    
+
     try {
-      // Optimistic UI: Cập nhật giao diện ngay lập tức
-      setIsSaved(nextStatus); 
-      
-      // Đồng bộ vĩnh viễn với Firestore thông qua hàm toggleSaveQuestion chuẩn
-      await toggleSaveQuestion(currentUser.id, question.id, nextStatus);
-      
+      // Optimistic UI
+      setIsSaved(nextStatus);
+
+      // Dùng UID thật của Firebase Auth (nếu users doc id = UID)
+      const authUid = getAuth().currentUser?.uid;
+      if (!authUid) {
+        setIsSaved(previousStatus);
+        onOpenAuth();
+        return;
+      }
+
+      await toggleSaveQuestion(authUid, question.id, nextStatus);
     } catch (e) {
-      // Rollback nếu lỗi Firestore hoặc mạng
       setIsSaved(previousStatus);
       console.error("Lỗi lưu bài:", e);
       alert("Mẹ ơi, có lỗi khi lưu bài. Mẹ kiểm tra lại mạng nhé!");
@@ -367,13 +487,14 @@ export default function QuestionDetail({
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
+
     try {
       setUploadingImage(true);
       await ensureAuth();
       const url = await uploadFile(f, 'answer_images');
       setAnswerImage(url);
-    } catch (e: unknown) {
-      if (e instanceof Error && e.message !== "LOGIN_REQUIRED") alert("Lỗi tải ảnh");
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message !== "LOGIN_REQUIRED") alert("Lỗi tải ảnh");
     } finally {
       setUploadingImage(false);
       if (e.target) e.target.value = '';
@@ -384,6 +505,7 @@ export default function QuestionDetail({
     const val = e.target.value;
     setNewAnswer(val);
     setShowStickers(false);
+
     const lastWord = val.split(/[\s\n]+/).pop();
     if (lastWord && lastWord.startsWith('@')) {
       setShowMentions(true);
@@ -401,7 +523,10 @@ export default function QuestionDetail({
   };
 
   const handleInsertLink = () => {
-    if (!linkUrl) { setShowLinkInput(false); return; }
+    if (!linkUrl) {
+      setShowLinkInput(false);
+      return;
+    }
     let safeUrl = linkUrl;
     if (!safeUrl.startsWith('http')) safeUrl = `https://${safeUrl}`;
     setNewAnswer(prev => prev + ` ${safeUrl} `);
@@ -413,6 +538,7 @@ export default function QuestionDetail({
     if (!question) return;
     if (!newAnswer.trim() && !answerImage) return;
     if (isSubmitting) return;
+
     setIsSubmitting(true);
     setShowStickers(false);
 
@@ -435,12 +561,13 @@ export default function QuestionDetail({
       await addAnswerToDb(question, ans);
       setAnswers(prev => [...prev, ans]);
       setQuestion(prev => prev ? { ...prev, answerCount: (prev.answerCount || 0) + 1 } : null);
+
       setNewAnswer('');
       setAnswerImage(null);
       setIsInputOpen(false);
       setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 100);
-    } catch (e: unknown) {
-      if (e instanceof Error && e.message !== "LOGIN_REQUIRED") alert("Lỗi gửi câu trả lời.");
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message !== "LOGIN_REQUIRED") alert("Lỗi gửi câu trả lời.");
     } finally {
       setIsSubmitting(false);
     }
@@ -450,14 +577,18 @@ export default function QuestionDetail({
     try {
       await onMarkBestAnswer(qId, aId);
       setAnswers(prev => prev.map(a => ({ ...a, isBestAnswer: a.id === aId })));
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const handleVerify = async (qId: string, aId: string) => {
     try {
       await onVerifyAnswer(qId, aId);
       setAnswers(prev => prev.map(a => a.id === aId ? { ...a, isExpertVerified: true } : a));
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const handleAiDraft = async () => {
@@ -481,15 +612,19 @@ export default function QuestionDetail({
 
   const submitReport = async (reason: string) => {
     if (!reportTarget) return;
+
     try {
       let user = currentUser;
       if (user.isGuest) {
-        try { user = await loginAnonymously(); } catch { onOpenAuth(); return; }
+        try { user = await loginAnonymously(); }
+        catch { onOpenAuth(); return; }
       }
       await sendReport(reportTarget.id, reportTarget.type, reason, user.id);
       alert("Đã gửi báo cáo thành công.");
       setShowReportModal(false);
-    } catch { alert("Lỗi khi gửi báo cáo."); }
+    } catch {
+      alert("Lỗi khi gửi báo cáo.");
+    }
   };
 
   const handleToggleUseful = async (ans: Answer) => {
@@ -498,29 +633,33 @@ export default function QuestionDetail({
       const user = await ensureAuth();
       toggleAnswerUseful(question.id, ans.id, user.id);
       setAnswers(prev => prev.map(a => {
-          if (a.id === ans.id) {
-              const usefulBy = Array.isArray(a.usefulBy) ? a.usefulBy : [];
-              const isUseful = usefulBy.includes(user.id);
-              const newUsefulBy = isUseful ? usefulBy.filter(id => id !== user.id) : [...usefulBy, user.id];
-              return { ...a, usefulBy: newUsefulBy, likes: newUsefulBy.length };
-          }
-          return a;
+        if (a.id === ans.id) {
+          const usefulBy = Array.isArray(a.usefulBy) ? a.usefulBy : [];
+          const isUseful = usefulBy.includes(user.id);
+          const newUsefulBy = isUseful ? usefulBy.filter(id => id !== user.id) : [...usefulBy, user.id];
+          return { ...a, usefulBy: newUsefulBy, likes: newUsefulBy.length };
+        }
+        return a;
       }));
-    } catch (e) { }
+    } catch { /* ignore */ }
   };
 
   if (loading || !question) {
     return (
       <div className="p-10 text-center text-gray-500 font-medium mt-10 flex flex-col items-center gap-2 min-h-screen">
         <Loader2 className="animate-spin text-primary" /> {loading ? 'Đang tải câu hỏi...' : 'Câu hỏi không tồn tại'}
-        {!loading && <button onClick={() => navigate('/')} className="mt-4 text-blue-500 font-bold">Về trang chủ</button>}
+        {!loading && (
+          <button onClick={() => navigate('/')} className="mt-4 text-blue-500 font-bold">
+            Về trang chủ
+          </button>
+        )}
       </div>
     );
   }
 
   const isOwner = currentUser.id === question.author.id;
   const isAdmin = currentUser.isAdmin;
-  
+
   const getTagColor = (cat: string) => {
     if (cat.includes('Mang thai')) return 'bg-pink-50 text-pink-600 border-pink-100 dark:bg-pink-900/30 dark:text-pink-400 dark:border-pink-900';
     if (cat.includes('Dinh dưỡng')) return 'bg-green-50 text-green-600 border-green-100 dark:bg-green-900/30 dark:text-green-400 dark:border-green-900';
@@ -533,31 +672,59 @@ export default function QuestionDetail({
 
       {/* --- HEADER --- */}
       <div className="sticky top-0 z-40 bg-white/95 dark:bg-dark-card/95 backdrop-blur-md px-4 py-3 border-b border-gray-100 dark:border-dark-border flex items-center justify-between pt-safe-top shadow-sm transition-colors">
-        <button onClick={() => navigate('/')} className="p-2 -ml-2 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-full active:scale-95 transition-all text-gray-600 dark:text-gray-300">
+        <button
+          onClick={() => navigate('/')}
+          className="p-2 -ml-2 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-full active:scale-95 transition-all text-gray-600 dark:text-gray-300"
+        >
           <ArrowLeft size={24} />
         </button>
-        <h1 className="font-bold text-textDark dark:text-white truncate max-w-[200px] text-sm">{question.category}</h1>
+        <h1 className="font-bold text-textDark dark:text-white truncate max-w-[200px] text-sm">
+          {question.category}
+        </h1>
         <div className="flex gap-1">
-          <button onClick={() => setShowShareModal(true)} className="p-2 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-full text-blue-600 dark:text-blue-400">
+          <button
+            onClick={() => setShowShareModal(true)}
+            className="p-2 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-full text-blue-600 dark:text-blue-400"
+          >
             <Share2 size={20} />
           </button>
           <div className="relative">
-            <button onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === 'q_menu' ? null : 'q_menu'); }} className="p-2 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-full text-gray-600 dark:text-gray-300">
+            <button
+              onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === 'q_menu' ? null : 'q_menu'); }}
+              className="p-2 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-full text-gray-600 dark:text-gray-300"
+            >
               <MoreVertical size={20} />
             </button>
             {activeMenuId === 'q_menu' && (
-              <div ref={menuRef} className="absolute right-0 top-full mt-2 bg-white dark:bg-dark-card rounded-xl shadow-xl border border-gray-100 dark:border-dark-border w-48 overflow-hidden z-30 animate-pop-in">
+              <div
+                ref={menuRef}
+                className="absolute right-0 top-full mt-2 bg-white dark:bg-dark-card rounded-xl shadow-xl border border-gray-100 dark:border-dark-border w-48 overflow-hidden z-30 animate-pop-in"
+              >
                 {(isOwner || isAdmin) && (
                   <>
-                    <button onClick={() => { setIsEditingQuestion(true); setEditQTitle(question.title); setEditQContent(question.content); setActiveMenuId(null); }} className="w-full text-left px-4 py-3 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700 dark:text-white flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setIsEditingQuestion(true);
+                        setEditQTitle(question.title);
+                        setEditQContent(question.content);
+                        setActiveMenuId(null);
+                      }}
+                      className="w-full text-left px-4 py-3 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700 dark:text-white flex items-center gap-2"
+                    >
                       <Edit2 size={16} /> Chỉnh sửa
                     </button>
-                    <button onClick={() => onDeleteQuestion(question.id)} className="w-full text-left px-4 py-3 text-sm font-medium hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 flex items-center gap-2">
+                    <button
+                      onClick={() => onDeleteQuestion(question.id)}
+                      className="w-full text-left px-4 py-3 text-sm font-medium hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 flex items-center gap-2"
+                    >
                       <Trash2 size={16} /> Xóa
                     </button>
                   </>
                 )}
-                <button onClick={() => handleReport(question.id, 'question')} className="w-full text-left px-4 py-3 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-600 dark:text-gray-300 flex items-center gap-2 border-t border-gray-50 dark:border-dark-border">
+                <button
+                  onClick={() => handleReport(question.id, 'question')}
+                  className="w-full text-left px-4 py-3 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-600 dark:text-gray-300 flex items-center gap-2 border-t border-gray-50 dark:border-dark-border"
+                >
                   <Flag size={16} /> Báo cáo
                 </button>
               </div>
@@ -575,29 +742,54 @@ export default function QuestionDetail({
                 <RouterLink to={`/profile/${question.author.id}`} className="flex items-center gap-3 group">
                   <div className="relative">
                     <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white dark:border-dark-border shadow-sm group-hover:scale-105 transition-transform">
-                        <LazyImage src={question.author.avatar} alt="Avatar" className="w-full h-full" />
+                      <LazyImage src={question.author.avatar} alt="Avatar" className="w-full h-full" />
                     </div>
-                    {question.author.isExpert && <div className="absolute -bottom-0.5 -right-0.5 bg-blue-500 text-white rounded-full p-0.5 border-2 border-white dark:border-dark-card"><ShieldCheck size={12} /></div>}
+                    {question.author.isExpert && (
+                      <div className="absolute -bottom-0.5 -right-0.5 bg-blue-500 text-white rounded-full p-0.5 border-2 border-white dark:border-dark-card">
+                        <ShieldCheck size={12} />
+                      </div>
+                    )}
                   </div>
                   <div>
-                    <h3 className="font-bold text-textDark dark:text-white text-[16px] leading-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{question.author.name}</h3>
+                    <h3 className="font-bold text-textDark dark:text-white text-[16px] leading-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                      {question.author.name}
+                    </h3>
                     <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                       <span>{new Date(question.createdAt).toLocaleDateString('vi-VN')}</span>
                       <span>•</span>
-                      <span className="flex items-center gap-0.5"><Eye size={12} /> {question.views || 0}</span>
+                      <span className="flex items-center gap-0.5">
+                        <Eye size={12} /> {question.views || 0}
+                      </span>
                     </div>
                   </div>
                 </RouterLink>
-                <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wide border ${getTagColor(question.category)}`}>{question.category}</span>
+                <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wide border ${getTagColor(question.category)}`}>
+                  {question.category}
+                </span>
               </div>
 
               {isEditingQuestion ? (
                 <div className="space-y-3 mb-4">
-                  <input value={editQTitle} onChange={e => setEditQTitle(e.target.value)} className="w-full font-bold text-lg border-b border-gray-200 dark:border-slate-700 bg-transparent text-textDark dark:text-white p-2 outline-none" />
-                  <textarea value={editQContent} onChange={e => setEditQContent(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-slate-800 text-textDark dark:text-white rounded-xl min-h-[120px] outline-none" />
+                  <input
+                    value={editQTitle}
+                    onChange={e => setEditQTitle(e.target.value)}
+                    className="w-full font-bold text-lg border-b border-gray-200 dark:border-slate-700 bg-transparent text-textDark dark:text-white p-2 outline-none"
+                  />
+                  <textarea
+                    value={editQContent}
+                    onChange={e => setEditQContent(e.target.value)}
+                    className="w-full p-3 bg-gray-50 dark:bg-slate-800 text-textDark dark:text-white rounded-xl min-h-[120px] outline-none"
+                  />
                   <div className="flex justify-end gap-2">
-                    <button onClick={() => setIsEditingQuestion(false)} className="px-4 py-2 text-sm font-bold text-gray-500 dark:text-gray-400">Hủy</button>
-                    <button onClick={() => { onEditQuestion(question.id, editQTitle, editQContent); setIsEditingQuestion(false); }} className="px-4 py-2 text-sm font-bold bg-primary text-white rounded-lg">Lưu</button>
+                    <button onClick={() => setIsEditingQuestion(false)} className="px-4 py-2 text-sm font-bold text-gray-500 dark:text-gray-400">
+                      Hủy
+                    </button>
+                    <button
+                      onClick={() => { onEditQuestion(question.id, editQTitle, editQContent); setIsEditingQuestion(false); }}
+                      className="px-4 py-2 text-sm font-bold bg-primary text-white rounded-lg"
+                    >
+                      Lưu
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -610,15 +802,25 @@ export default function QuestionDetail({
 
               <div className="flex items-center justify-between py-3 border-t border-gray-50 dark:border-slate-800">
                 <div className="flex items-center gap-6">
-                  <button onClick={handleLike} className={`flex items-center gap-2 text-sm font-bold transition-all active:scale-90 ${isLiked ? 'text-red-500' : 'text-gray-500 dark:text-gray-400 hover:text-red-500'}`}>
+                  <button
+                    onClick={handleLike}
+                    className={`flex items-center gap-2 text-sm font-bold transition-all active:scale-90 ${isLiked ? 'text-red-500' : 'text-gray-500 dark:text-gray-400 hover:text-red-500'}`}
+                  >
                     <Heart size={20} className={isLiked ? "fill-red-500" : ""} />
                     <span>{likesCount > 0 ? likesCount : 'Thích'}</span>
                   </button>
-                  <button onClick={() => setIsInputOpen(true)} className="flex items-center gap-2 text-sm font-bold text-gray-500 dark:text-gray-400 hover:text-blue-500 transition-all active:scale-90">
-                    <MessageCircle size={20} /><span>{question.answerCount || answers.length || 'Trả lời'}</span>
+                  <button
+                    onClick={() => setIsInputOpen(true)}
+                    className="flex items-center gap-2 text-sm font-bold text-gray-500 dark:text-gray-400 hover:text-blue-500 transition-all active:scale-90"
+                  >
+                    <MessageCircle size={20} />
+                    <span>{question.answerCount || answers.length || 'Trả lời'}</span>
                   </button>
                 </div>
-                <button onClick={handleSave} className={`transition-colors active:scale-90 ${isSaved ? 'text-orange-500' : 'text-gray-400 dark:text-gray-500 hover:text-orange-500'}`}>
+                <button
+                  onClick={handleSave}
+                  className={`transition-colors active:scale-90 ${isSaved ? 'text-orange-500' : 'text-gray-400 dark:text-gray-500 hover:text-orange-500'}`}
+                >
                   <Bookmark size={20} className={isSaved ? "fill-current" : ""} />
                 </button>
               </div>
@@ -632,17 +834,31 @@ export default function QuestionDetail({
             {/* --- ANSWERS LIST --- */}
             <div>
               <div className="flex items-center justify-between mb-4 px-2">
-                <h3 className="font-bold text-textDark dark:text-white text-lg">Thảo luận ({question.answerCount || answers.length})</h3>
+                <h3 className="font-bold text-textDark dark:text-white text-lg">
+                  Thảo luận ({question.answerCount || answers.length})
+                </h3>
                 <div className="flex bg-white dark:bg-dark-card rounded-lg p-1 shadow-sm border border-gray-200 dark:border-slate-700">
-                  <button onClick={() => setSortOption('best')} className={`p-1.5 rounded-md transition-all ${sortOption === 'best' ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400' : 'text-gray-400'}`}><Sparkles size={16} /></button>
-                  <button onClick={() => setSortOption('newest')} className={`p-1.5 rounded-md transition-all ${sortOption === 'newest' ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'text-gray-400'}`}><Filter size={16} /></button>
+                  <button
+                    onClick={() => setSortOption('best')}
+                    className={`p-1.5 rounded-md transition-all ${sortOption === 'best' ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400' : 'text-gray-400'}`}
+                  >
+                    <Sparkles size={16} />
+                  </button>
+                  <button
+                    onClick={() => setSortOption('newest')}
+                    className={`p-1.5 rounded-md transition-all ${sortOption === 'newest' ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'text-gray-400'}`}
+                  >
+                    <Filter size={16} />
+                  </button>
                 </div>
               </div>
 
               <div className="space-y-4">
                 {answers.length === 0 && !loading && (
                   <div className="bg-white dark:bg-dark-card rounded-3xl p-10 text-center border border-dashed border-gray-300 dark:border-slate-700">
-                    <div className="w-16 h-16 bg-blue-50 dark:bg-slate-800 text-blue-400 rounded-full flex items-center justify-center mx-auto mb-4"><MessageCircle size={32} /></div>
+                    <div className="w-16 h-16 bg-blue-50 dark:bg-slate-800 text-blue-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <MessageCircle size={32} />
+                    </div>
                     <p className="text-textDark dark:text-white font-bold text-lg mb-1">Chưa có thảo luận</p>
                     <p className="text-sm text-textGray dark:text-gray-400">Hãy là người đầu tiên chia sẻ kiến thức nhé!</p>
                   </div>
@@ -651,58 +867,117 @@ export default function QuestionDetail({
                 {sortedAnswers.map((ans) => {
                   const isAnsOwner = currentUser.id === ans.author.id;
                   const isUseful = (ans.usefulBy || []).includes(currentUser.id);
+
                   return (
-                    <div key={ans.id} className={`bg-white dark:bg-dark-card p-5 rounded-3xl border transition-all ${ans.isBestAnswer ? 'border-yellow-400 shadow-lg ring-1 ring-yellow-200' : 'border-gray-200 dark:border-dark-border shadow-sm'}`}>
+                    <div
+                      key={ans.id}
+                      className={`bg-white dark:bg-dark-card p-5 rounded-3xl border transition-all ${ans.isBestAnswer ? 'border-yellow-400 shadow-lg ring-1 ring-yellow-200' : 'border-gray-200 dark:border-dark-border shadow-sm'}`}
+                    >
                       <div className="flex justify-between items-start mb-3">
                         <div className="flex items-center gap-3">
                           <RouterLink to={`/profile/${ans.author.id}`}>
                             <div className="relative">
                               <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-100 dark:border-slate-600 bg-gray-50 dark:bg-slate-700">
-                                  <LazyImage src={ans.author.avatar} alt={ans.author.name} className="w-full h-full" />
+                                <LazyImage src={ans.author.avatar} alt={ans.author.name} className="w-full h-full" />
                               </div>
-                              {ans.author.isExpert && <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white rounded-full p-0.5 border-2 border-white dark:border-dark-card"><ShieldCheck size={10} /></div>}
+                              {ans.author.isExpert && (
+                                <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white rounded-full p-0.5 border-2 border-white dark:border-dark-card">
+                                  <ShieldCheck size={10} />
+                                </div>
+                              )}
                             </div>
                           </RouterLink>
                           <div>
                             <div className="flex items-center gap-1.5">
                               <span className="font-bold text-sm text-textDark dark:text-white">{ans.author.name}</span>
-                              {ans.author.isExpert && <span className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-[10px] font-bold px-2 py-0.5 rounded-md">Chuyên gia</span>}
+                              {ans.author.isExpert && (
+                                <span className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                                  Chuyên gia
+                                </span>
+                              )}
                             </div>
                             <span className="text-[11px] text-gray-400">{new Date(ans.createdAt).toLocaleDateString('vi-VN')}</span>
                           </div>
                         </div>
+
                         <div className="flex items-center gap-2">
                           {(isOwner || isAdmin) && !ans.isBestAnswer && (
-                            <button onClick={() => handleMarkBest(question.id, ans.id)} className="text-gray-300 hover:text-yellow-500 transition-colors p-1" title="Chọn hay nhất"><Sparkles size={18} /></button>
+                            <button
+                              onClick={() => handleMarkBest(question.id, ans.id)}
+                              className="text-gray-300 hover:text-yellow-500 transition-colors p-1"
+                              title="Chọn hay nhất"
+                            >
+                              <Sparkles size={18} />
+                            </button>
                           )}
+
                           <div className="relative">
-                            <button onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === ans.id ? null : ans.id); }} className="text-gray-400 p-1 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-full"><MoreVertical size={18} /></button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === ans.id ? null : ans.id); }}
+                              className="text-gray-400 p-1 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-full"
+                            >
+                              <MoreVertical size={18} />
+                            </button>
+
                             {activeMenuId === ans.id && (
-                              <div ref={menuRef} className="absolute right-0 mt-2 bg-white dark:bg-dark-card rounded-xl shadow-lg border border-gray-100 dark:border-dark-border w-40 overflow-hidden z-20 animate-pop-in">
+                              <div
+                                ref={menuRef}
+                                className="absolute right-0 mt-2 bg-white dark:bg-dark-card rounded-xl shadow-lg border border-gray-100 dark:border-dark-border w-40 overflow-hidden z-20 animate-pop-in"
+                              >
                                 {(isAnsOwner || isAdmin) && (
-                                  <>
-                                    <button onClick={() => onDeleteAnswer(question.id, ans.id)} className="w-full text-left px-4 py-3 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2"><Trash2 size={14} /> Xóa</button>
-                                  </>
+                                  <button
+                                    onClick={() => onDeleteAnswer(question.id, ans.id)}
+                                    className="w-full text-left px-4 py-3 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                  >
+                                    <Trash2 size={14} /> Xóa
+                                  </button>
                                 )}
-                                <button onClick={() => handleReport(ans.id, 'answer')} className="w-full text-left px-4 py-3 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 flex items-center gap-2 border-t"><Flag size={14} /> Báo cáo</button>
+
+                                <button
+                                  onClick={() => handleReport(ans.id, 'answer')}
+                                  className="w-full text-left px-4 py-3 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 flex items-center gap-2 border-t"
+                                >
+                                  <Flag size={14} /> Báo cáo
+                                </button>
                               </div>
                             )}
                           </div>
                         </div>
                       </div>
+
                       <div className="mb-3 pl-1">
                         <div className="flex flex-wrap gap-2 mb-2">
-                          {ans.isBestAnswer && <div className="inline-flex items-center gap-1 bg-gradient-to-r from-yellow-400 to-yellow-500 text-white px-3 py-1 rounded-full text-[11px] font-bold shadow-sm"><CheckCircle2 size={12} /> Câu trả lời hay nhất</div>}
-                          {ans.isExpertVerified && <span className="inline-flex items-center gap-1 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-3 py-1 rounded-full text-[11px] font-bold border border-green-100"><ShieldCheck size={12} /> Đã xác thực y khoa</span>}
+                          {ans.isBestAnswer && (
+                            <div className="inline-flex items-center gap-1 bg-gradient-to-r from-yellow-400 to-yellow-500 text-white px-3 py-1 rounded-full text-[11px] font-bold shadow-sm">
+                              <CheckCircle2 size={12} /> Câu trả lời hay nhất
+                            </div>
+                          )}
+                          {ans.isExpertVerified && (
+                            <span className="inline-flex items-center gap-1 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-3 py-1 rounded-full text-[11px] font-bold border border-green-100">
+                              <ShieldCheck size={12} /> Đã xác thực y khoa
+                            </span>
+                          )}
                         </div>
                         <RichTextRenderer content={ans.content} />
                       </div>
+
                       <div className="flex items-center gap-4 border-t border-gray-50 dark:border-slate-800 pt-3 mt-2">
-                        <button onClick={() => handleToggleUseful(ans)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all active:scale-95 group ${isUseful ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 font-bold' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 font-medium'}`}>
-                          <ThumbsUp size={16} className={isUseful ? 'fill-current' : ''} /> 
+                        <button
+                          onClick={() => handleToggleUseful(ans)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all active:scale-95 group ${isUseful ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 font-bold' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 font-medium'}`}
+                        >
+                          <ThumbsUp size={16} className={isUseful ? 'fill-current' : ''} />
                           <span className="text-xs">Hữu ích ({ans.likes || 0})</span>
                         </button>
-                        {isAdmin && !ans.isExpertVerified && <button onClick={() => handleVerify(question.id, ans.id)} className="text-xs font-bold text-gray-400 hover:text-green-600 ml-auto flex items-center gap-1"><ShieldCheck size={14} /> Xác thực</button>}
+
+                        {isAdmin && !ans.isExpertVerified && (
+                          <button
+                            onClick={() => handleVerify(question.id, ans.id)}
+                            className="text-xs font-bold text-gray-400 hover:text-green-600 ml-auto flex items-center gap-1"
+                          >
+                            <ShieldCheck size={14} /> Xác thực
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -710,22 +985,22 @@ export default function QuestionDetail({
 
                 {/* --- BUTTON XEM THÊM THẢO LUẬN --- */}
                 {hasMoreAnswers && (
-                    <div className="flex justify-center pt-4 animate-fade-in">
-                        <button 
-                            onClick={loadMoreAnswers} 
-                            disabled={isLoadingAnswers}
-                            className="group flex items-center gap-2 px-6 py-3 bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-2xl font-bold text-gray-700 dark:text-gray-200 shadow-sm hover:shadow-md hover:border-blue-200 transition-all active:scale-95 disabled:opacity-50"
-                        >
-                            {isLoadingAnswers ? (
-                                <Loader2 size={18} className="animate-spin text-blue-500" />
-                            ) : (
-                                <>
-                                    <span>Xem thêm thảo luận</span>
-                                    <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
-                                </>
-                            )}
-                        </button>
-                    </div>
+                  <div className="flex justify-center pt-4 animate-fade-in">
+                    <button
+                      onClick={loadMoreAnswers}
+                      disabled={isLoadingAnswers}
+                      className="group flex items-center gap-2 px-6 py-3 bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-2xl font-bold text-gray-700 dark:text-gray-200 shadow-sm hover:shadow-md hover:border-blue-200 transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      {isLoadingAnswers ? (
+                        <Loader2 size={18} className="animate-spin text-blue-500" />
+                      ) : (
+                        <>
+                          <span>Xem thêm thảo luận</span>
+                          <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                        </>
+                      )}
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -735,19 +1010,36 @@ export default function QuestionDetail({
           <aside className="hidden lg:block lg:col-span-4 space-y-6">
             <div className="sticky top-24 space-y-6">
               {!currentUser?.isExpert && <ExpertPromoBox />}
+
               {trendingQuestions.length > 0 && (
                 <div className="bg-white dark:bg-dark-card p-5 rounded-[1.5rem] border border-gray-200 dark:border-dark-border shadow-sm">
                   <h3 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                    <span className="bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 p-1.5 rounded-lg"><TrendingUp size={18} /></span> Đáng quan tâm
+                    <span className="bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 p-1.5 rounded-lg">
+                      <TrendingUp size={18} />
+                    </span>
+                    Đáng quan tâm
                   </h3>
+
                   <div className="flex flex-col gap-4">
                     {trendingQuestions.map((q, idx) => (
-                      <RouterLink to={`/question/${toSlug(q.title, q.id)}`} key={q.id} className="group flex gap-3 items-start">
-                        <span className={`text-xl font-black leading-none mt-0.5 ${idx === 0 ? 'text-orange-500' : idx === 1 ? 'text-blue-500' : 'text-gray-300'}`}>0{idx + 1}</span>
+                      <RouterLink
+                        to={`/question/${toSlug(q.title, q.id)}`}
+                        key={q.id}
+                        className="group flex gap-3 items-start"
+                      >
+                        <span
+                          className={`text-xl font-black leading-none mt-0.5 ${idx === 0 ? 'text-orange-500' : idx === 1 ? 'text-blue-500' : 'text-gray-300'}`}
+                        >
+                          0{idx + 1}
+                        </span>
                         <div className="flex-1 min-w-0">
-                          <h4 className="font-bold text-sm text-gray-700 dark:text-gray-200 leading-snug group-hover:text-blue-600 transition-colors line-clamp-2">{q.title}</h4>
+                          <h4 className="font-bold text-sm text-gray-700 dark:text-gray-200 leading-snug group-hover:text-blue-600 transition-colors line-clamp-2">
+                            {q.title}
+                          </h4>
                           <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-1">
-                            <span>{q.answerCount || q.answers?.length || 0} trả lời</span><span>•</span><span>{q.views} xem</span>
+                            <span>{q.answerCount || q.answers?.length || 0} trả lời</span>
+                            <span>•</span>
+                            <span>{q.views} xem</span>
                           </div>
                         </div>
                       </RouterLink>
@@ -755,14 +1047,20 @@ export default function QuestionDetail({
                   </div>
                 </div>
               )}
+
               {adConfig?.isEnabled && (
                 <div className="bg-white dark:bg-dark-card p-4 rounded-[1.5rem] border border-gray-200 dark:border-dark-border shadow-sm">
-                  <h4 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-1"><Info size={12} /> Gợi ý cho bạn</h4>
+                  <h4 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-1">
+                    <Info size={12} /> Gợi ý cho bạn
+                  </h4>
                   <SidebarAd variant="minimal" />
                 </div>
               )}
+
               <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 p-5 rounded-[1.5rem] border border-blue-100 dark:border-blue-900/30">
-                <h4 className="font-bold text-blue-800 dark:text-blue-300 mb-3 flex items-center gap-2 text-sm"><ShieldCheck size={16} /> Lưu ý cộng đồng</h4>
+                <h4 className="font-bold text-blue-800 dark:text-blue-300 mb-3 flex items-center gap-2 text-sm">
+                  <ShieldCheck size={16} /> Lưu ý cộng đồng
+                </h4>
                 <ul className="text-xs text-blue-700 dark:text-blue-400 space-y-2 list-disc pl-4 leading-relaxed font-medium">
                   <li>Chia sẻ kinh nghiệm thực tế, khách quan.</li>
                   <li>Tôn trọng ý kiến khác biệt của các mẹ.</li>
@@ -776,7 +1074,8 @@ export default function QuestionDetail({
       </div>
 
       {/* --- FOOTER INPUT BOTTOM SHEET --- */}
-      <div className={`fixed left-0 right-0 pointer-events-none flex flex-col justify-end transition-all duration-300 ease-in-out
+      <div
+        className={`fixed left-0 right-0 pointer-events-none flex flex-col justify-end transition-all duration-300 ease-in-out
         ${isInputOpen ? 'bottom-0 z-[60] opacity-100 translate-y-0' : showFloatingInput ? 'bottom-[60px] lg:bottom-0 z-50 opacity-100 translate-y-0' : 'bottom-0 opacity-0 translate-y-full'}`}
       >
         <div className="max-w-6xl w-full mx-auto px-0 md:px-6">
@@ -784,70 +1083,170 @@ export default function QuestionDetail({
             <div className="lg:col-span-8 relative">
               {!isInputOpen && (
                 <div className="pointer-events-auto bg-white dark:bg-dark-card border-t border-gray-100 dark:border-dark-border p-3 pb-safe-bottom shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] md:rounded-t-2xl md:border-x md:border-t">
-                  <button onClick={() => setIsInputOpen(true)} className="w-full bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-gray-400 text-left rounded-full px-4 py-3 text-sm flex items-center justify-between hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors">
-                    <span>Viết câu trả lời của bạn...</span><MessageCircle size={18} className="text-gray-400" />
+                  <button
+                    onClick={() => setIsInputOpen(true)}
+                    className="w-full bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-gray-400 text-left rounded-full px-4 py-3 text-sm flex items-center justify-between hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                  >
+                    <span>Viết câu trả lời của bạn...</span>
+                    <MessageCircle size={18} className="text-gray-400" />
                   </button>
                 </div>
               )}
+
               {isInputOpen && (
                 <>
                   <div className="fixed inset-0 bg-black/60 backdrop-blur-sm lg:hidden pointer-events-auto" onClick={() => setIsInputOpen(false)} />
                   <div className="pointer-events-auto bg-white dark:bg-dark-card w-full rounded-t-3xl shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.2)] animate-slide-up border border-gray-100 dark:border-slate-800 flex flex-col max-h-[85vh] md:max-h-[600px] relative z-50">
                     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50 dark:border-slate-800 bg-white dark:bg-dark-card rounded-t-3xl">
                       <span className="font-bold text-sm text-gray-500 dark:text-gray-400">Trả lời thảo luận</span>
-                      <button onClick={() => setIsInputOpen(false)} className="p-1.5 bg-gray-100 dark:bg-slate-800 rounded-full text-gray-500 hover:bg-gray-200 transition-colors"><ChevronDown size={20} /></button>
+                      <button
+                        onClick={() => setIsInputOpen(false)}
+                        className="p-1.5 bg-gray-100 dark:bg-slate-800 rounded-full text-gray-500 hover:bg-gray-200 transition-colors"
+                      >
+                        <ChevronDown size={20} />
+                      </button>
                     </div>
+
                     <div className="p-4 pb-safe-bottom overflow-y-auto custom-scrollbar">
                       {currentUser.isGuest && (
                         <div className="bg-blue-50 dark:bg-blue-900/30 px-4 py-2 rounded-xl flex justify-between items-center text-xs text-blue-700 dark:text-blue-300 mb-3 border border-blue-100 dark:border-blue-900/30">
-                          <span className="font-bold flex items-center gap-1"><LogIn size={14} /> Bạn đang là Khách</span>
-                          <button onClick={onOpenAuth} className="font-bold underline hover:text-blue-900 dark:hover:text-blue-100">Đăng nhập ngay</button>
+                          <span className="font-bold flex items-center gap-1">
+                            <LogIn size={14} /> Bạn đang là Khách
+                          </span>
+                          <button onClick={onOpenAuth} className="font-bold underline hover:text-blue-900 dark:hover:text-blue-100">
+                            Đăng nhập ngay
+                          </button>
                         </div>
                       )}
+
                       {showMentions && filteredParticipants.length > 0 && (
                         <div className="bg-white dark:bg-dark-card rounded-xl shadow-lg border border-gray-100 dark:border-dark-border max-h-40 overflow-y-auto mb-2">
                           {filteredParticipants.map(p => (
-                            <button key={p.id} onClick={() => handleSelectMention(p)} className="w-full flex items-center gap-3 p-2 hover:bg-blue-50 dark:hover:bg-slate-700 text-left border-b border-gray-50 dark:border-slate-800 last:border-0">
+                            <button
+                              key={p.id}
+                              onClick={() => handleSelectMention(p)}
+                              className="w-full flex items-center gap-3 p-2 hover:bg-blue-50 dark:hover:bg-slate-700 text-left border-b border-gray-50 dark:border-slate-800 last:border-0"
+                            >
                               <img src={p.avatar} className="w-8 h-8 rounded-full border border-gray-200" alt={p.name} />
                               <p className="font-bold text-sm text-textDark dark:text-white">{p.name}</p>
                             </button>
                           ))}
                         </div>
                       )}
+
                       {answerImage && (
                         <div className="flex items-center gap-2 mb-3 bg-gray-50 dark:bg-slate-800 p-2 rounded-xl w-fit border border-gray-200 dark:border-slate-700">
                           <img src={answerImage} className="w-12 h-12 rounded-lg object-cover" alt="Uploaded" />
                           <span className="text-xs text-green-600 dark:text-green-400 font-bold">Ảnh đính kèm</span>
-                          <button onClick={() => setAnswerImage(null)} className="bg-white dark:bg-slate-700 text-gray-400 p-1 rounded-full shadow-sm hover:text-red-500 transition-colors"><X size={12} /></button>
+                          <button
+                            onClick={() => setAnswerImage(null)}
+                            className="bg-white dark:bg-slate-700 text-gray-400 p-1 rounded-full shadow-sm hover:text-red-500 transition-colors"
+                          >
+                            <X size={12} />
+                          </button>
                         </div>
                       )}
+
                       {showLinkInput && (
                         <div className="bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-2 flex gap-2 mb-3">
-                          <input type="url" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="Dán link..." className="flex-1 text-sm bg-white dark:bg-dark-card border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-1.5 outline-none focus:border-primary text-textDark dark:text-white" autoFocus />
-                          <button onClick={handleInsertLink} className="bg-primary text-white text-xs font-bold px-3 rounded-lg">Thêm</button>
-                          <button onClick={() => setShowLinkInput(false)} className="text-gray-400 p-1"><X size={16} /></button>
+                          <input
+                            type="url"
+                            value={linkUrl}
+                            onChange={(e) => setLinkUrl(e.target.value)}
+                            placeholder="Dán link..."
+                            className="flex-1 text-sm bg-white dark:bg-dark-card border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-1.5 outline-none focus:border-primary text-textDark dark:text-white"
+                            autoFocus
+                          />
+                          <button onClick={handleInsertLink} className="bg-primary text-white text-xs font-bold px-3 rounded-lg">
+                            Thêm
+                          </button>
+                          <button onClick={() => setShowLinkInput(false)} className="text-gray-400 p-1">
+                            <X size={16} />
+                          </button>
                         </div>
                       )}
-                      <textarea ref={answerInputRef} value={newAnswer} onChange={handleInputChange} placeholder="Nhập nội dung thảo luận..." className="w-full bg-gray-50 dark:bg-slate-800 rounded-xl border-none outline-none text-[16px] resize-none min-h-[100px] p-3 placeholder-gray-400 dark:placeholder-gray-500 text-textDark dark:text-white focus:ring-2 focus:ring-primary/20 transition-all" />
+
+                      <textarea
+                        ref={answerInputRef}
+                        value={newAnswer}
+                        onChange={handleInputChange}
+                        placeholder="Nhập nội dung thảo luận..."
+                        className="w-full bg-gray-50 dark:bg-slate-800 rounded-xl border-none outline-none text-[16px] resize-none min-h-[100px] p-3 placeholder-gray-400 dark:placeholder-gray-500 text-textDark dark:text-white focus:ring-2 focus:ring-primary/20 transition-all"
+                      />
+
                       <div className="flex justify-between items-center mt-3">
                         <div className="flex items-center gap-1">
-                          <button onClick={handleAiDraft} disabled={isGeneratingDraft} className="p-2 rounded-full bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 transition-colors" title="AI Gợi ý">{isGeneratingDraft ? <Loader2 size={20} className="animate-spin" /> : <Sparkles size={20} />}</button>
-                          <button onClick={() => fileInputRef.current?.click()} className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 transition-colors" disabled={uploadingImage} title="Tải ảnh"><ImageIcon size={20} /></button>
+                          <button
+                            onClick={handleAiDraft}
+                            disabled={isGeneratingDraft}
+                            className="p-2 rounded-full bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 transition-colors"
+                            title="AI Gợi ý"
+                          >
+                            {isGeneratingDraft ? <Loader2 size={20} className="animate-spin" /> : <Sparkles size={20} />}
+                          </button>
+
+                          <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 transition-colors"
+                            disabled={uploadingImage}
+                            title="Tải ảnh"
+                          >
+                            <ImageIcon size={20} />
+                          </button>
                           <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                          <button onClick={() => { setShowStickers(!showStickers); setShowLinkInput(false); }} className={`p-2 rounded-full transition-colors ${showStickers ? 'bg-yellow-100 text-yellow-600' : 'text-gray-500 hover:bg-gray-100'}`} title="Nhãn dán"><Smile size={20} /></button>
-                          <button onClick={() => { setShowLinkInput(!showLinkInput); setShowStickers(false); }} className={`p-2 rounded-full transition-colors ${showLinkInput ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`} title="Chèn link"><Paperclip size={20} /></button>
-                          <button onClick={() => setNewAnswer(prev => prev + "@")} className="p-2 rounded-full text-gray-500 hover:bg-gray-100 md:hidden" title="Nhắc tên"><AtSign size={20} /></button>
+
+                          <button
+                            onClick={() => { setShowStickers(!showStickers); setShowLinkInput(false); }}
+                            className={`p-2 rounded-full transition-colors ${showStickers ? 'bg-yellow-100 text-yellow-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                            title="Nhãn dán"
+                          >
+                            <Smile size={20} />
+                          </button>
+
+                          <button
+                            onClick={() => { setShowLinkInput(!showLinkInput); setShowStickers(false); }}
+                            className={`p-2 rounded-full transition-colors ${showLinkInput ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                            title="Chèn link"
+                          >
+                            <Paperclip size={20} />
+                          </button>
+
+                          <button
+                            onClick={() => setNewAnswer(prev => prev + "@")}
+                            className="p-2 rounded-full text-gray-500 hover:bg-gray-100 md:hidden"
+                            title="Nhắc tên"
+                          >
+                            <AtSign size={20} />
+                          </button>
                         </div>
-                        <button onClick={handleSubmitAnswer} disabled={(!newAnswer.trim() && !answerImage) || isSubmitting} className="px-5 py-2 bg-primary text-white rounded-full font-bold shadow-lg shadow-primary/30 active:scale-95 disabled:opacity-50 flex items-center gap-2 transition-all">
+
+                        <button
+                          onClick={handleSubmitAnswer}
+                          disabled={(!newAnswer.trim() && !answerImage) || isSubmitting}
+                          className="px-5 py-2 bg-primary text-white rounded-full font-bold shadow-lg shadow-primary/30 active:scale-95 disabled:opacity-50 flex items-center gap-2 transition-all"
+                        >
                           {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <>Gửi <Send size={18} /></>}
                         </button>
                       </div>
+
                       {showStickers && (
                         <div className="h-48 overflow-y-auto bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl mt-3 p-3 animate-slide-up">
                           {Object.entries(STICKER_PACKS).map(([cat, emojis]) => (
                             <div key={cat} className="mb-3">
-                              <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-2 sticky top-0 bg-gray-50 dark:bg-slate-800 py-1">{cat}</h4>
-                              <div className="grid grid-cols-8 gap-2">{emojis.map(e => <button key={e} onClick={() => setNewAnswer(prev => prev + e)} className="text-2xl hover:scale-125 transition-transform p-1">{e}</button>)}</div>
+                              <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-2 sticky top-0 bg-gray-50 dark:bg-slate-800 py-1">
+                                {cat}
+                              </h4>
+                              <div className="grid grid-cols-8 gap-2">
+                                {emojis.map(e => (
+                                  <button
+                                    key={e}
+                                    onClick={() => setNewAnswer(prev => prev + e)}
+                                    className="text-2xl hover:scale-125 transition-transform p-1"
+                                  >
+                                    {e}
+                                  </button>
+                                ))}
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -861,8 +1260,18 @@ export default function QuestionDetail({
         </div>
       </div>
 
-      <ShareModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} url={window.location.href} title={question?.title || "Câu hỏi"} />
-      <ReportModal isOpen={showReportModal} onClose={() => setShowReportModal(false)} onSubmit={submitReport} />
+      <ShareModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        url={window.location.href}
+        title={question?.title || "Câu hỏi"}
+      />
+
+      <ReportModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        onSubmit={submitReport}
+      />
     </div>
   );
 }
