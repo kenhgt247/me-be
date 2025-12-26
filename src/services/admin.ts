@@ -184,7 +184,7 @@ export const searchUsersForAdmin = async (keyword: string, maxResults: number = 
   }
 };
 
-// ✅ HÀM QUAN TRỌNG ĐÃ SỬA: Thêm Header Content-Type để tránh lỗi 500
+// ✅ HÀM QUAN TRỌNG ĐÃ SỬA: Thêm Header Content-Type
 export const createUserByAdmin = async (payload: {
   email: string;
   password: string;
@@ -199,7 +199,7 @@ export const createUserByAdmin = async (payload: {
   const res = await fetch("/api/admin/create-user", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json", // ⚠️ QUAN TRỌNG: Backend cần dòng này để đọc body
+      "Content-Type": "application/json", // ⚠️ QUAN TRỌNG: Backend cần dòng này để đọc body JSON
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
