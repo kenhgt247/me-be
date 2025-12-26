@@ -199,7 +199,7 @@ export const createUserByAdmin = async (payload: {
   const res = await fetch("/api/admin/create-user", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json", // ⚠️ QUAN TRỌNG: Backend cần dòng này để đọc body JSON
+      "Content-Type": "application/json", // ⚠️ QUAN TRỌNG: Backend cần dòng này để đọc body
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
