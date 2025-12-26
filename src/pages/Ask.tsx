@@ -154,7 +154,7 @@ function useKeyboardInset() {
     vv.addEventListener('resize', handle);
     vv.addEventListener('scroll', handle);
     window.addEventListener('orientationchange', handle);
-
+const canTogglePreview = title.trim().length > 0 || content.trim().length > 0 || attachments.length > 0;
     return () => {
       vv.removeEventListener('resize', handle);
       vv.removeEventListener('scroll', handle);
