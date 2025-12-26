@@ -1,716 +1,441 @@
-import {
-  collection,
-  getDocs,
-  doc,
-  updateDoc,
-  query,
-  orderBy,
-  where,
-  deleteDoc,
-  getDoc,
-  writeBatch,
-  addDoc,
-  limit,
-  startAfter,
-  QueryDocumentSnapshot,
-  DocumentData,
-  getCountFromServer,
-  FieldPath,
-} from "firebase/firestore";
-import { db } from "../firebaseConfig";
-import { getAuth } from "firebase/auth";
-import {
-  User,
-  Question,
-  ExpertApplication,
-  Report,
-  Category,
-  toSlug,
-  CATEGORIES,
-} from "../types";
+// src/services/auth.ts
+import * as firebaseAuth from 'firebase/auth';
+import { doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { auth, googleProvider, db } from '../firebaseConfig';
+import { User } from '../types';
 
-/* ============================================================
-   SYSTEM STATS (Tối ưu cho Dashboard)
-   ============================================================ */
-export const getSystemStats = async () => {
-  if (!db)
-    return { totalUsers: 0, totalQuestions: 0, totalBlogs: 0, totalDocuments: 0 };
-  try {
-    const usersCol = collection(db, "users");
-    const questionsCol = collection(db, "questions");
-    const blogsCol = collection(db, "blogPosts");
-    const docsCol = collection(db, "documents");
+/* =========================
+   Helper: Map Firebase User + Firestore Data to App User Type
+========================= */
+const mapUser = (fbUser: firebaseAuth.User, dbUser?: any): User => {
+  return {
+    id: fbUser.uid,
+    name:
+      dbUser?.name ||
+      fbUser.displayName ||
+      (fbUser.isAnonymous ? 'Khách ẩn danh' : 'Người dùng'),
+    avatar:
+      dbUser?.avatar ||
+      fbUser.photoURL ||
+      'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
 
-    const [usersSnap, questionsSnap, blogsSnap, docsSnap] = await Promise.all([
-      getCountFromServer(usersCol),
-      getCountFromServer(questionsCol),
-      getCountFromServer(blogsCol),
-      getCountFromServer(docsCol),
-    ]);
+    isExpert: dbUser?.isExpert || false,
+    expertStatus: dbUser?.expertStatus || 'none',
+    isAdmin: dbUser?.isAdmin || false,
+    bio: dbUser?.bio || '',
+    points: dbUser?.points || 0,
 
-    return {
-      totalUsers: usersSnap.data().count,
-      totalQuestions: questionsSnap.data().count,
-      totalBlogs: blogsSnap.data().count,
-      totalDocuments: docsSnap.data().count,
-    };
-  } catch (error) {
-    console.error("Error getting stats:", error);
-    return { totalUsers: 0, totalQuestions: 0, totalBlogs: 0, totalDocuments: 0 };
-  }
+    joinedAt: dbUser?.joinedAt || dbUser?.createdAt || new Date().toISOString(),
+    specialty: dbUser?.specialty,
+    workplace: dbUser?.workplace,
+    username: dbUser?.username || null,
+    coverUrl: dbUser?.coverUrl || null,
+
+    followers: Array.isArray(dbUser?.followers) ? dbUser.followers : [],
+    following: Array.isArray(dbUser?.following) ? dbUser.following : [],
+
+    // ✅ cực quan trọng để UI nút Lưu + đồng bộ F5
+    savedQuestions: Array.isArray(dbUser?.savedQuestions) ? dbUser.savedQuestions : [],
+
+    // ⚠️ Giữ cơ chế của bạn: đăng nhập rồi => không phải guest
+    isGuest: false,
+  } as User;
 };
 
-/* ============================================================
-   USERS MANAGEMENT
-   ============================================================ */
+/* =========================
+   Internal: Ensure user doc exists (SAFE & NO-PERMISSION BUG)
+   ✅ FIX CHÍNH:
+   - ÉP token mới sau đăng nhập/đăng ký ở các flow bên dưới
+   - Payload "safe": KHÔNG set isAdmin/isExpert từ client (tránh rules chặn)
+   - merge:true để không overwrite dữ liệu cũ
+========================= */
+const ensureUserDoc = async (fbUser: firebaseAuth.User, partialData: any = {}) => {
+  const userDocRef = doc(db, 'users', fbUser.uid);
 
-/**
- * ✅ FIX: Phân trang không bao giờ bỏ sót user
- * - Không orderBy joinedAt (vì user cũ có thể thiếu field)
- * - Dùng orderBy documentId() để phân trang ổn định
- * - Sort thủ công ở client theo joinedAt/createdAt/created_at để hiển thị “mới trước”
- *
- * Lưu ý:
- * - Phân trang ổn định theo documentId => không “mất” user do thiếu field/index.
- * - Nhưng “mới nhất lên đầu” chỉ là sắp xếp trong TRANG hiện tại (page). Muốn đúng toàn hệ thống cần 1 trường timestamp đồng nhất.
- */
-export const fetchUsersAdminPaginated = async (
-  lastVisible: QueryDocumentSnapshot<DocumentData> | null = null,
-  pageSize: number = 20
-) => {
-  if (!db) return { users: [], lastDoc: null, hasMore: false };
+  let existing: any = {};
+  try {
+    const snap = await getDoc(userDocRef);
+    if (snap.exists()) existing = snap.data();
+  } catch {
+    // ignore
+  }
+
+  const now = new Date().toISOString();
+  const createdAt = existing?.createdAt || partialData?.createdAt || now;
+  const joinedAt = existing?.joinedAt || partialData?.joinedAt || createdAt;
+
+  const savedQuestions = Array.isArray(existing?.savedQuestions)
+    ? existing.savedQuestions
+    : Array.isArray(partialData?.savedQuestions)
+      ? partialData.savedQuestions
+      : [];
+
+  const followers = Array.isArray(existing?.followers)
+    ? existing.followers
+    : Array.isArray(partialData?.followers)
+      ? partialData.followers
+      : [];
+
+  const following = Array.isArray(existing?.following)
+    ? existing.following
+    : Array.isArray(partialData?.following)
+      ? partialData.following
+      : [];
+
+  // ✅ Payload an toàn: KHÔNG gửi isAdmin/isExpert từ client
+  const safePayload: any = {
+    name:
+      existing?.name ||
+      partialData?.name ||
+      fbUser.displayName ||
+      (fbUser.isAnonymous ? 'Khách ẩn danh' : 'Người dùng'),
+
+    avatar:
+      existing?.avatar ||
+      partialData?.avatar ||
+      fbUser.photoURL ||
+      'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
+
+    email: existing?.email ?? partialData?.email ?? fbUser.email ?? null,
+
+    createdAt,
+    joinedAt,
+
+    // expertStatus phục vụ UI
+    expertStatus: existing?.expertStatus ?? partialData?.expertStatus ?? 'none',
+
+    points: existing?.points ?? partialData?.points ?? (fbUser.isAnonymous ? 0 : 10),
+    isAnonymous: existing?.isAnonymous ?? partialData?.isAnonymous ?? fbUser.isAnonymous ?? false,
+
+    savedQuestions,
+    followers,
+    following,
+
+    updatedAt: now,
+  };
+
+  await setDoc(userDocRef, safePayload, { merge: true });
+};
+
+/* =========================
+   Anonymous Login
+   ✅ FIX: ép token trước khi ghi Firestore
+========================= */
+export const loginAnonymously = async (): Promise<User> => {
+  if (!auth) throw new Error('Firebase chưa được cấu hình.');
 
   try {
-    // ✅ Phân trang ổn định: theo documentId() (không phụ thuộc joinedAt)
-    let q = query(
-      collection(db, "users"),
-      orderBy(FieldPath.documentId()),
-      limit(pageSize)
-    );
+    const result = await firebaseAuth.signInAnonymously(auth);
+    const fbUser = result.user;
 
-    if (lastVisible) {
-      q = query(
-        collection(db, "users"),
-        orderBy(FieldPath.documentId()),
-        startAfter(lastVisible),
-        limit(pageSize)
-      );
-    }
+    // ✅ FIX RACE TOKEN
+    await fbUser.getIdToken(true);
 
-    const snapshot = await getDocs(q);
+    const userDocRef = doc(db, 'users', fbUser.uid);
+    const userDoc = await getDoc(userDocRef);
 
-    const users = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as User));
-
-    // ✅ sort client để ưu tiên user mới hơn (trong trang)
-    users.sort((a: any, b: any) => {
-      const dateA = new Date(a.joinedAt || a.createdAt || a.created_at || 0).getTime();
-      const dateB = new Date(b.joinedAt || b.createdAt || b.created_at || 0).getTime();
-      return dateB - dateA;
-    });
-
-    return {
-      users,
-      lastDoc: snapshot.docs[snapshot.docs.length - 1] || null,
-      hasMore: snapshot.docs.length === pageSize,
-    };
-  } catch (error) {
-    console.error("Error fetching users:", error);
-
-    // fallback cuối cùng: vẫn trả dữ liệu để admin luôn nhìn thấy (khỏi trắng trang)
-    try {
-      const fallbackSnap = await getDocs(
-        query(collection(db, "users"), limit(pageSize))
-      );
-      const fallbackUsers = fallbackSnap.docs.map(
-        (d) => ({ id: d.id, ...d.data() } as User)
-      );
-
-      fallbackUsers.sort((a: any, b: any) => {
-        const dateA = new Date(a.joinedAt || a.createdAt || a.created_at || 0).getTime();
-        const dateB = new Date(b.joinedAt || b.createdAt || b.created_at || 0).getTime();
-        return dateB - dateA;
+    if (!userDoc.exists()) {
+      await ensureUserDoc(fbUser, {
+        name: 'Khách ẩn danh',
+        avatar: 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
+        createdAt: new Date().toISOString(),
+        joinedAt: new Date().toISOString(),
+        points: 0,
+        isAnonymous: true,
+        expertStatus: 'none',
+        savedQuestions: [],
+        followers: [],
+        following: [],
       });
 
-      return {
-        users: fallbackUsers,
-        lastDoc: fallbackSnap.docs[fallbackSnap.docs.length - 1] || null,
-        hasMore: fallbackSnap.docs.length === pageSize,
-      };
-    } catch {
-      return { users: [], lastDoc: null, hasMore: false };
+      const freshSnap = await getDoc(userDocRef);
+      return mapUser(fbUser, freshSnap.exists() ? freshSnap.data() : undefined);
     }
-  }
-};
 
-// Update thông tin cơ bản user
-export const updateUserInfo = async (
-  userId: string,
-  data: { name?: string; bio?: string; specialty?: string }
-) => {
-  if (!db) return;
-  try {
-    await updateDoc(doc(db, "users", userId), data);
-    return true;
-  } catch (error) {
-    console.error("Error updating user info:", error);
+    const data: any = userDoc.data() || {};
+
+    // đảm bảo savedQuestions tồn tại
+    if (!Array.isArray(data.savedQuestions)) {
+      await setDoc(userDocRef, { savedQuestions: [] }, { merge: true });
+      return mapUser(fbUser, { ...data, savedQuestions: [] });
+    }
+
+    return mapUser(fbUser, data);
+  } catch (error: any) {
+    console.warn('Anonymous login failed:', error?.code);
+    if (
+      error?.code === 'auth/admin-restricted-operation' ||
+      error?.code === 'auth/operation-not-allowed'
+    ) {
+      throw new Error('ANONYMOUS_DISABLED');
+    }
     throw error;
   }
 };
 
-// Update role user
-export const updateUserRole = async (
-  userId: string,
-  updates: { isExpert?: boolean; isAdmin?: boolean; isBanned?: boolean }
-) => {
-  if (!db) return;
-  try {
-    await updateDoc(doc(db, "users", userId), updates);
-  } catch (error) {
-    console.error("Error updating user role:", error);
-    throw error;
+/* =========================
+   Google Login
+   ✅ FIX: ép token trước khi ghi Firestore
+========================= */
+export const loginWithGoogle = async (): Promise<User> => {
+  if (!auth) throw new Error('Firebase chưa được cấu hình.');
+
+  const result = await firebaseAuth.signInWithPopup(auth, googleProvider);
+  const fbUser = result.user;
+
+  // ✅ FIX RACE TOKEN
+  await fbUser.getIdToken(true);
+
+  const userDocRef = doc(db, 'users', fbUser.uid);
+  const userDoc = await getDoc(userDocRef);
+
+  // ✅ Ảnh Google HD
+  let avatarUrl = fbUser.photoURL || '';
+  if (avatarUrl && avatarUrl.includes('=s96-c')) {
+    avatarUrl = avatarUrl.replace('=s96-c', '=s400-c');
   }
-};
 
-export const fetchAllUsers = async (): Promise<User[]> => {
-  if (!db) return [];
-  try {
-    const snapshot = await getDocs(collection(db, "users"));
-    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as User));
-  } catch (error) {
-    console.error("Error fetching users:", error);
-    return [];
+  if (userDoc.exists()) {
+    const currentData: any = userDoc.data() || {};
+
+    // ✅ đảm bảo savedQuestions tồn tại
+    if (!Array.isArray(currentData.savedQuestions)) {
+      await setDoc(userDocRef, { savedQuestions: [] }, { merge: true });
+      currentData.savedQuestions = [];
+    }
+
+    // ✅ nếu avatar mới khác avatar cũ thì update
+    if (avatarUrl && currentData.avatar !== avatarUrl) {
+      await updateDoc(userDocRef, {
+        avatar: avatarUrl,
+        name: fbUser.displayName || currentData.name,
+        updatedAt: new Date().toISOString(),
+      });
+
+      return mapUser(fbUser, {
+        ...currentData,
+        avatar: avatarUrl,
+        name: fbUser.displayName || currentData.name,
+      });
+    }
+
+    return mapUser(fbUser, currentData);
   }
-};
 
-export const deleteUser = async (userId: string) => {
-  if (!db) return;
-  try {
-    await deleteDoc(doc(db, "users", userId));
-  } catch (error) {
-    console.error("Error deleting user:", error);
-    throw error;
-  }
-};
-
-export const searchUsersForAdmin = async (
-  keyword: string,
-  maxResults: number = 12
-): Promise<User[]> => {
-  if (!db) return [];
-  const k = (keyword || "").trim().toLowerCase();
-  if (!k) return [];
-
-  try {
-    // ✅ Cách đơn giản & chắc chạy: lấy 200 user gần nhất (có thể tăng nếu bạn muốn)
-    const snap = await getDocs(query(collection(db, "users"), limit(200)));
-    const users = snap.docs.map((d) => ({ id: d.id, ...d.data() } as User));
-
-    const filtered = users.filter((u: any) => {
-      const name = (u?.name || "").toLowerCase();
-      const email = (u?.email || "").toLowerCase();
-      const username = (u?.username || "").toLowerCase();
-      return (
-        name.includes(k) ||
-        email.includes(k) ||
-        username.includes(k) ||
-        (u?.id || "").includes(k)
-      );
-    });
-
-    // ưu tiên user có email/name lên đầu
-    filtered.sort((a: any, b: any) => {
-      const sa = (a?.email ? 1 : 0) + (a?.name ? 1 : 0);
-      const sb = (b?.email ? 1 : 0) + (b?.name ? 1 : 0);
-      return sb - sa;
-    });
-
-    return filtered.slice(0, maxResults);
-  } catch (error) {
-    console.error("Error searchUsersForAdmin:", error);
-    return [];
-  }
-};
-
-export const createUserByAdmin = async (payload: {
-  email: string;
-  password: string;
-  name?: string;
-}) => {
-  const auth = getAuth();
-  const me = auth.currentUser;
-  if (!me) throw new Error("Bạn chưa đăng nhập.");
-
-  const token = await me.getIdToken(true);
-
-  const res = await fetch("/api/admin/create-user", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload),
+  // doc chưa tồn tại -> tạo
+  await ensureUserDoc(fbUser, {
+    name: fbUser.displayName || 'Người dùng mới',
+    email: fbUser.email,
+    avatar: avatarUrl || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
+    createdAt: new Date().toISOString(),
+    joinedAt: new Date().toISOString(),
+    points: 10,
+    isAnonymous: false,
+    expertStatus: 'none',
+    savedQuestions: [],
+    followers: [],
+    following: [],
   });
 
-  const data = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    throw new Error(data?.message || "Không tạo được người dùng.");
-  }
-
-  return data;
+  const freshSnap = await getDoc(userDocRef);
+  return mapUser(fbUser, freshSnap.exists() ? freshSnap.data() : undefined);
 };
 
-/* ============================================================
-   EXPERT APPLICATIONS
-   ============================================================ */
-export const fetchExpertApplications = async (): Promise<ExpertApplication[]> => {
-  if (!db) return [];
-  try {
-    const q = query(collection(db, "expert_applications"), orderBy("createdAt", "desc"));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as ExpertApplication));
-  } catch (error) {
-    console.error("Error fetching expert apps:", error);
-    return [];
-  }
+/* =========================
+   Register Email
+   ✅ FIX: ép token mới trước khi setDoc users/{uid}
+========================= */
+export const registerWithEmail = async (
+  email: string,
+  pass: string,
+  name: string
+): Promise<User> => {
+  if (!auth) throw new Error('Firebase chưa được cấu hình.');
+
+  const result = await firebaseAuth.createUserWithEmailAndPassword(auth, email, pass);
+  const fbUser = result.user;
+
+  await firebaseAuth.updateProfile(fbUser, { displayName: name });
+
+  // ✅ FIX RACE TOKEN (quan trọng nhất)
+  await fbUser.getIdToken(true);
+
+  const userDocRef = doc(db, 'users', fbUser.uid);
+
+  await ensureUserDoc(fbUser, {
+    name,
+    email,
+    avatar: 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
+    createdAt: new Date().toISOString(),
+    joinedAt: new Date().toISOString(),
+    points: 10,
+    isAnonymous: false,
+    expertStatus: 'none',
+    savedQuestions: [],
+    followers: [],
+    following: [],
+  });
+
+  const freshSnap = await getDoc(userDocRef);
+  return mapUser(fbUser, freshSnap.exists() ? freshSnap.data() : undefined);
 };
 
-export const processExpertApplication = async (
-  appId: string,
-  userId: string,
-  status: "approved" | "rejected",
-  reason?: string,
-  specialty?: string
-) => {
-  if (!db) return;
-  try {
-    const batch = writeBatch(db);
-    const now = new Date().toISOString();
+/* =========================
+   Login Email
+   ✅ FIX: ép token trước khi đọc/ghi Firestore
+========================= */
+export const loginWithEmail = async (email: string, pass: string): Promise<User> => {
+  if (!auth) throw new Error('Firebase chưa được cấu hình.');
 
-    const appRef = doc(db, "expert_applications", appId);
-    batch.update(appRef, {
-      status,
-      rejectionReason: status === "rejected" ? (reason || "Không có lý do") : null,
-      reviewedAt: now,
-      approvedSpecialty: status === "approved" ? (specialty || "") : null,
+  const result = await firebaseAuth.signInWithEmailAndPassword(auth, email, pass);
+  const fbUser = result.user;
+
+  // ✅ FIX RACE TOKEN
+  await fbUser.getIdToken(true);
+
+  const userDocRef = doc(db, 'users', fbUser.uid);
+  const userDoc = await getDoc(userDocRef);
+
+  // ✅ nếu thiếu doc -> tạo để các chức năng sau không lỗi
+  if (!userDoc.exists()) {
+    await ensureUserDoc(fbUser, {
+      name: fbUser.displayName || 'Người dùng',
+      email: fbUser.email || email,
+      avatar: fbUser.photoURL || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
+      createdAt: new Date().toISOString(),
+      joinedAt: new Date().toISOString(),
+      points: 10,
+      isAnonymous: fbUser.isAnonymous,
+      expertStatus: 'none',
+      savedQuestions: [],
+      followers: [],
+      following: [],
     });
 
-    const userRef = doc(db, "users", userId);
-    if (status === "approved") {
-      batch.update(userRef, {
-        isExpert: true,
-        expertStatus: "approved",
-        specialty: specialty || "",
-        expertApprovedAt: now,
-        expertRejectedAt: null,
-        expertRejectionReason: null,
-      });
-    } else {
-      batch.update(userRef, {
-        isExpert: false,
-        expertStatus: "rejected",
-        specialty: "",
-        expertApprovedAt: null,
-        expertRejectedAt: now,
-        expertRejectionReason: reason || "Không có lý do",
-      });
+    const fresh = await getDoc(userDocRef);
+    return mapUser(fbUser, fresh.exists() ? fresh.data() : undefined);
+  }
+
+  const data: any = userDoc.data() || {};
+
+  // ✅ đảm bảo savedQuestions là array
+  if (!Array.isArray(data.savedQuestions)) {
+    await setDoc(userDocRef, { savedQuestions: [] }, { merge: true });
+    return mapUser(fbUser, { ...data, savedQuestions: [] });
+  }
+
+  return mapUser(fbUser, data);
+};
+
+/* =========================
+   Logout
+========================= */
+export const logoutUser = async () => {
+  if (!auth) return;
+  await firebaseAuth.signOut(auth);
+};
+
+/* =========================
+   Subscribe Auth Changes (FIX TRIỆT ĐỂ SPAM LỖI)
+   - Cleanup đúng chuẩn
+   - Nếu permission-denied => unsubscribe để dừng retry spam
+========================= */
+export const subscribeToAuthChanges = (callback: (user: User | null) => void) => {
+  if (!auth) return () => {};
+
+  let unsubUserDoc: (() => void) | null = null;
+  let stoppedDueToPermission = false;
+
+  const unsubAuth = firebaseAuth.onAuthStateChanged(auth, (fbUser) => {
+    // ✅ huỷ listener cũ mỗi khi auth thay đổi
+    if (unsubUserDoc) {
+      unsubUserDoc();
+      unsubUserDoc = null;
+    }
+    stoppedDueToPermission = false;
+
+    if (!fbUser) {
+      callback(null);
+      return;
     }
 
-    await batch.commit();
-  } catch (error) {
-    console.error("Error processing expert app:", error);
-    throw error;
-  }
-};
+    const userDocRef = doc(db, 'users', fbUser.uid);
 
-/* ============================================================
-   EXPERT MANAGEMENT (Admin CRUD chuyên gia)
-   ============================================================ */
+    unsubUserDoc = onSnapshot(
+      userDocRef,
+      (docSnap) => {
+        if (stoppedDueToPermission) return;
 
-export const deleteExpertApplication = async (appId: string) => {
-  if (!db) return;
-  try {
-    await deleteDoc(doc(db, "expert_applications", appId));
-  } catch (error) {
-    console.error("Error deleting expert application:", error);
-    throw error;
-  }
-};
+        void (async () => {
+          try {
+            if (docSnap.exists()) {
+              const data: any = docSnap.data() || {};
 
-export const fetchExperts = async (): Promise<User[]> => {
-  if (!db) return [];
-  try {
-    const snap = await getDocs(
-      query(collection(db, "users"), where("isExpert", "==", true), limit(200))
-    );
+              // đảm bảo savedQuestions
+              if (!Array.isArray(data.savedQuestions)) {
+                await setDoc(userDocRef, { savedQuestions: [] }, { merge: true });
+                callback(mapUser(fbUser, { ...data, savedQuestions: [] }));
+                return;
+              }
 
-    const users = snap.docs.map((d) => ({ id: d.id, ...d.data() } as User));
+              callback(mapUser(fbUser, data));
+              return;
+            }
 
-    users.sort((a: any, b: any) => {
-      const ta =
-        (a.expertApprovedAt && new Date(a.expertApprovedAt).getTime()) ||
-        (a.joinedAt && new Date(a.joinedAt).getTime()) ||
-        0;
-      const tb =
-        (b.expertApprovedAt && new Date(b.expertApprovedAt).getTime()) ||
-        (b.joinedAt && new Date(b.joinedAt).getTime()) ||
-        0;
-      return tb - ta;
-    });
+            // doc chưa có -> tạo
+            // ✅ FIX RACE TOKEN trước khi ensure (tăng độ chắc)
+            await fbUser.getIdToken(true);
 
-    return users;
-  } catch (error) {
-    console.error("Error fetching experts:", error);
-    return [];
-  }
-};
+            await ensureUserDoc(fbUser, {
+              name: fbUser.displayName || (fbUser.isAnonymous ? 'Khách ẩn danh' : 'Người dùng'),
+              avatar: fbUser.photoURL || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
+              createdAt: new Date().toISOString(),
+              joinedAt: new Date().toISOString(),
+              points: fbUser.isAnonymous ? 0 : 10,
+              savedQuestions: [],
+              followers: [],
+              following: [],
+              isAnonymous: fbUser.isAnonymous,
+              expertStatus: 'none',
+            });
 
-export type ExpertAdminUpdate = {
-  name?: string;
-  bio?: string;
-  specialty?: string;
-  avatar?: string;
-  phone?: string;
-  workplace?: string;
-  isExpert?: boolean;
-  expertStatus?: "approved" | "pending" | "rejected";
-};
+            const fresh = await getDoc(userDocRef);
+            callback(mapUser(fbUser, fresh.exists() ? fresh.data() : undefined));
+          } catch (err: any) {
+            if (err?.code === 'permission-denied') {
+              stoppedDueToPermission = true;
+              if (unsubUserDoc) {
+                unsubUserDoc();
+                unsubUserDoc = null;
+              }
+              callback(mapUser(fbUser, docSnap.exists() ? docSnap.data() : undefined));
+              return;
+            }
 
-export const updateExpertByAdmin = async (userId: string, updates: ExpertAdminUpdate) => {
-  if (!db) return;
-  try {
-    await updateDoc(doc(db, "users", userId), {
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    } as any);
-  } catch (error) {
-    console.error("Error updateExpertByAdmin:", error);
-    throw error;
-  }
-};
+            console.error('Auth snapshot handler error:', err);
+            callback(mapUser(fbUser, docSnap.exists() ? docSnap.data() : undefined));
+          }
+        })();
+      },
+      (error: any) => {
+        if (error?.code === 'permission-denied') {
+          stoppedDueToPermission = true;
+          if (unsubUserDoc) {
+            unsubUserDoc();
+            unsubUserDoc = null;
+          }
+          callback(mapUser(fbUser));
+          return;
+        }
 
-export const addExpertManually = async (payload: {
-  userId: string;
-  specialty: string;
-  name?: string;
-  phone?: string;
-  workplace?: string;
-  bio?: string;
-  avatar?: string;
-}) => {
-  if (!db) return;
-  const { userId, specialty, ...rest } = payload;
-
-  try {
-    const now = new Date().toISOString();
-    const userRef = doc(db, "users", userId);
-
-    const snap = await getDoc(userRef);
-    if (!snap.exists()) throw new Error("USER_NOT_FOUND");
-
-    await updateDoc(userRef, {
-      ...rest,
-      isExpert: true,
-      expertStatus: "approved",
-      specialty: specialty || "",
-      expertApprovedAt: now,
-      expertRejectedAt: null,
-      expertRejectionReason: null,
-      updatedAt: now,
-    } as any);
-  } catch (error) {
-    console.error("Error addExpertManually:", error);
-    throw error;
-  }
-};
-
-export const revokeExpertByAdmin = async (payload: {
-  userId: string;
-  appId?: string;
-  reason?: string;
-}) => {
-  if (!db) return;
-  const { userId, appId, reason } = payload;
-
-  try {
-    const batch = writeBatch(db);
-    const now = new Date().toISOString();
-
-    batch.update(doc(db, "users", userId), {
-      isExpert: false,
-      expertStatus: "rejected",
-      specialty: "",
-      expertApprovedAt: null,
-      expertRejectedAt: now,
-      expertRejectionReason: reason || "Admin gỡ quyền chuyên gia",
-      updatedAt: now,
-    });
-
-    if (appId) {
-      batch.update(doc(db, "expert_applications", appId), {
-        status: "rejected",
-        rejectionReason: reason || "Admin gỡ quyền chuyên gia",
-        reviewedAt: now,
-      });
-    }
-
-    await batch.commit();
-  } catch (error) {
-    console.error("Error revokeExpertByAdmin:", error);
-    throw error;
-  }
-};
-
-export const updateExpertSpecialtyFromApp = async (payload: {
-  appId: string;
-  userId: string;
-  specialty: string;
-}) => {
-  if (!db) return;
-  const { appId, userId, specialty } = payload;
-
-  try {
-    const batch = writeBatch(db);
-    const now = new Date().toISOString();
-
-    batch.update(doc(db, "expert_applications", appId), {
-      approvedSpecialty: specialty,
-      updatedAt: now,
-    });
-
-    batch.update(doc(db, "users", userId), {
-      specialty,
-      updatedAt: now,
-    });
-
-    await batch.commit();
-  } catch (error) {
-    console.error("Error updateExpertSpecialtyFromApp:", error);
-    throw error;
-  }
-};
-
-/* ============================================================
-   QUESTIONS MANAGEMENT (Phân trang & Bulk)
-   ============================================================ */
-export const fetchQuestionsAdminPaginated = async (
-  lastVisible: QueryDocumentSnapshot<DocumentData> | null = null,
-  pageSize: number = 15,
-  filters?: { category?: string; isHidden?: boolean; searchTerm?: string }
-) => {
-  if (!db) return { questions: [], lastDoc: null, hasMore: false };
-  try {
-    let q = query(collection(db, "questions"), orderBy("createdAt", "desc"));
-
-    if (filters?.category && filters.category !== "Tất cả") {
-      q = query(q, where("category", "==", filters.category));
-    }
-    if (filters?.isHidden !== undefined) {
-      q = query(q, where("isHidden", "==", filters.isHidden));
-    }
-
-    if (lastVisible) q = query(q, startAfter(lastVisible), limit(pageSize));
-    else q = query(q, limit(pageSize));
-
-    const snapshot = await getDocs(q);
-    let questions = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Question));
-
-    if (filters?.searchTerm) {
-      const term = filters.searchTerm.toLowerCase();
-      questions = questions.filter((qq) => (qq.title || "").toLowerCase().includes(term));
-    }
-
-    return {
-      questions,
-      lastDoc: snapshot.docs[snapshot.docs.length - 1] || null,
-      hasMore: snapshot.docs.length === pageSize,
-    };
-  } catch (error) {
-    console.error("Error fetching questions paginated:", error);
-    return { questions: [], lastDoc: null, hasMore: false };
-  }
-};
-
-export const fetchQuestionById = async (id: string): Promise<Question | null> => {
-  if (!db) return null;
-  const snap = await getDoc(doc(db, "questions", id));
-  if (snap.exists()) return { id: snap.id, ...snap.data() } as Question;
-  return null;
-};
-
-export const bulkUpdateQuestions = async (ids: string[], updates: { isHidden?: boolean }) => {
-  if (!db) return;
-  try {
-    const batch = writeBatch(db);
-    ids.forEach((id) => batch.update(doc(db, "questions", id), updates));
-    await batch.commit();
-  } catch (error) {
-    console.error("Error bulk updating questions:", error);
-    throw error;
-  }
-};
-
-export const bulkDeleteQuestions = async (ids: string[]) => {
-  if (!db) return;
-  try {
-    const batch = writeBatch(db);
-    ids.forEach((id) => batch.delete(doc(db, "questions", id)));
-    await batch.commit();
-  } catch (error) {
-    console.error("Error bulk deleting questions:", error);
-    throw error;
-  }
-};
-
-/* ============================================================
-   REPORTS MANAGEMENT
-   ============================================================ */
-export const fetchReports = async (): Promise<Report[]> => {
-  if (!db) return [];
-  try {
-    const q = query(collection(db, "reports"), orderBy("createdAt", "desc"));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Report));
-  } catch (error) {
-    console.error("Error fetching reports:", error);
-    return [];
-  }
-};
-
-export const resolveReport = async (reportId: string, action: "resolved" | "dismissed") => {
-  if (!db) return;
-  try {
-    await updateDoc(doc(db, "reports", reportId), {
-      status: action,
-      resolvedAt: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error("Error resolving report:", error);
-    throw error;
-  }
-};
-
-export const deleteReportedContent = async (report: Report) => {
-  if (!db) return;
-  try {
-    const batch = writeBatch(db);
-    batch.update(doc(db, "reports", report.id), {
-      status: "resolved",
-      resolvedAt: new Date().toISOString(),
-    });
-
-    if (report.targetType === "question") batch.delete(doc(db, "questions", report.targetId));
-    else if (report.targetType === "answer") batch.delete(doc(db, "answers", report.targetId));
-
-    await batch.commit();
-  } catch (error) {
-    console.error("Error deleting reported content:", error);
-    throw error;
-  }
-};
-
-/* ============================================================
-   CATEGORIES MANAGEMENT
-   ============================================================ */
-export const fetchCategories = async (): Promise<Category[]> => {
-  if (!db) return [];
-  try {
-    const snapshot = await getDocs(collection(db, "categories"));
-    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Category));
-  } catch (error) {
-    console.error("Error fetching categories:", error);
-    return [];
-  }
-};
-
-export const addCategory = async (
-  name: string,
-  style?: { icon: string; color: string; bg: string }
-) => {
-  if (!db) return;
-  try {
-    await addDoc(collection(db, "categories"), { name, slug: toSlug(name), ...style });
-  } catch (error) {
-    console.error("Error adding category:", error);
-    throw error;
-  }
-};
-
-export const updateCategory = async (
-  id: string,
-  name: string,
- style?: { icon: string; color: string; bg: string }
-) => {
-  if (!db) return;
-  try {
-    await updateDoc(doc(db, "categories", id), { name, slug: toSlug(name), ...style });
-  } catch (error) {
-    console.error("Error updating category:", error);
-    throw error;
-  }
-};
-
-export const deleteCategory = async (id: string) => {
-  if (!db) return;
-  try {
-    await deleteDoc(doc(db, "categories", id));
-  } catch (error) {
-    console.error("Error deleting category:", error);
-    throw error;
-  }
-};
-
-export const syncCategoriesFromCode = async () => {
-  if (!db) return;
-  try {
-    const batch = writeBatch(db);
-    const existing = await fetchCategories();
-    const existingNames = existing.map((c) => c.name);
-    let count = 0;
-
-    CATEGORIES.forEach((catName) => {
-      if (!existingNames.includes(catName)) {
-        const docRef = doc(collection(db, "categories"));
-        batch.set(docRef, {
-          name: catName,
-          slug: toSlug(catName),
-          icon: "Tag",
-          color: "text-gray-600",
-          bg: "bg-gray-100",
-        });
-        count++;
+        console.error('Firestore user sync error:', error);
+        callback(mapUser(fbUser));
       }
-    });
+    );
+  });
 
-    if (count > 0) await batch.commit();
-    return count;
-  } catch (error) {
-    console.error("Error syncing categories:", error);
-    return 0;
-  }
-};
-
-/* ============================================================
-   BLOGS & DOCUMENTS
-   ============================================================ */
-export const fetchAllBlogs = async () => {
-  if (!db) return [];
-  try {
-    const snapshot = await getDocs(collection(db, "blogPosts"));
-    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-  } catch (error) {
-    console.error("Error fetching blogs:", error);
-    return [];
-  }
-};
-
-export const fetchAllDocuments = async () => {
-  if (!db) return [];
-  try {
-    const snapshot = await getDocs(collection(db, "documents"));
-    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-  } catch (error) {
-    console.error("Error fetching docs:", error);
-    return [];
-  }
+  return () => {
+    if (unsubUserDoc) unsubUserDoc();
+    unsubAuth();
+  };
 };
