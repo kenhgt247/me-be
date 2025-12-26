@@ -1,3 +1,4 @@
+// pages/api/admin/create-user.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import * as admin from 'firebase-admin';
 
@@ -53,7 +54,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ message: "Lỗi: Không nhận được dữ liệu (Body is empty). Frontend chưa gửi Content-Type?" });
     }
 
-    const { email, password, name } = req.body;
+    // Sử dụng fallback để tránh lỗi destructuring nếu body là null (dù đã check ở trên)
+    const { email, password, name } = req.body || {};
 
     if (!email || !password) {
       return res.status(400).json({ message: 'Thiếu email hoặc mật khẩu.' });
@@ -92,7 +94,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       photoURL: 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
     });
 
-    // 8. Tạo User bên Firestore (Bypass Rules)
+    // 8. Tạo User bên Firestore (Bypass Rules vì dùng Admin SDK)
     console.log("💾 Saving to Firestore:", userRecord.uid);
     const now = new Date().toISOString();
     
@@ -102,10 +104,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       email: cleanEmail,
       avatar: 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
       
-      isAdmin: false,
+      isAdmin: false,       // Mặc định tạo ra là user thường
       isExpert: false,
       expertStatus: 'none',
-      points: 10,
+      points: 10,           // Tặng 10 điểm khởi tạo
       
       createdAt: now,
       joinedAt: now,
@@ -116,13 +118,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       savedQuestions: [],
       followers: [],
       following: [],
+      
       bio: '',
       specialty: '',
       workplace: ''
     });
 
     console.log("✅ Success!");
-    return res.status(200).json({ ok: true, uid: userRecord.uid });
+    return res.status(200).json({ ok: true, uid: userRecord.uid, message: 'Tạo thành công!' });
 
   } catch (error: any) {
     console.error('❌ API CRITICAL ERROR:', error);
