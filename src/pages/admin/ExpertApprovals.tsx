@@ -1,17 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ExpertApplication } from '../../types';
+import type { ExpertApplication, User } from '../../types';
+
 import {
   fetchExpertApplications,
   processExpertApplication,
   deleteExpertApplication,
   revokeExpertByAdmin,
   updateExpertSpecialtyFromApp,
+  // ✅ thêm 2 hàm này trong services/admin.ts
+  addExpertManually,
+  searchUsersForAdmin,
 } from '../../services/admin';
 
 import {
   Check, X, FileText, Clock, ExternalLink, Filter,
   ZoomIn, AlertTriangle, RefreshCw, Loader2, UserCheck, UserX,
-  Trash2, Pencil, Save
+  Trash2, Pencil, Save, Plus,
 } from 'lucide-react';
 
 type FilterStatus = 'all' | 'pending' | 'approved' | 'rejected';
@@ -32,6 +36,18 @@ export const ExpertApprovals: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editSpecialty, setEditSpecialty] = useState('');
 
+  // ✅ Manual create expert modal
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [userQuery, setUserQuery] = useState('');
+  const [userResults, setUserResults] = useState<User[]>([]);
+  const [userSearching, setUserSearching] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+
+  const [manualSpecialty, setManualSpecialty] = useState('');
+  const [manualWorkplace, setManualWorkplace] = useState('');
+  const [manualBio, setManualBio] = useState('');
+  const [manualPhone, setManualPhone] = useState('');
+
   useEffect(() => {
     loadApps();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -42,15 +58,40 @@ export const ExpertApprovals: React.FC = () => {
     try {
       const data = await fetchExpertApplications();
       setApps(data);
-      // auto select first
+
+      // auto-select first visible if none selected
       if (!selectedApp && data.length) setSelectedApp(data[0]);
     } catch (e) {
-      console.error("Failed to load apps", e);
+      console.error('Failed to load apps', e);
     } finally {
       setLoading(false);
     }
   };
 
+  const filteredApps = useMemo(() => {
+    return apps.filter(app => (filterStatus === 'all' ? true : app.status === filterStatus));
+  }, [apps, filterStatus]);
+
+  const counts = useMemo(() => {
+    return {
+      all: apps.length,
+      pending: apps.filter(a => a.status === 'pending').length,
+      approved: apps.filter(a => a.status === 'approved').length,
+      rejected: apps.filter(a => a.status === 'rejected').length,
+    };
+  }, [apps]);
+
+  const safeSelected = (app: ExpertApplication | null) => {
+    setSelectedApp(app);
+    setIsEditing(false);
+    setEditSpecialty('');
+    setShowRejectModal(false);
+    setRejectReason('');
+  };
+
+  // ===========================
+  // Actions: Approve / Reject
+  // ===========================
   const handleApprove = async () => {
     if (!selectedApp || isProcessing) return;
     if (!confirm(`Bạn xác nhận DUYỆT hồ sơ của ${selectedApp.fullName}?`)) return;
@@ -62,45 +103,50 @@ export const ExpertApprovals: React.FC = () => {
         selectedApp.userId,
         'approved',
         undefined,
-        selectedApp.specialty
+        // ưu tiên approvedSpecialty nếu có (admin đã sửa)
+        ((selectedApp as any)?.approvedSpecialty || selectedApp.specialty) as any
       );
 
-      setApps(prev =>
-        prev.map(a => a.id === selectedApp.id ? { ...a, status: 'approved' } : a)
-      );
-      setSelectedApp(prev => prev ? { ...prev, status: 'approved' } : prev);
+      setApps(prev => prev.map(a => (a.id === selectedApp.id ? { ...a, status: 'approved' } : a)));
+      setSelectedApp(prev => (prev ? { ...prev, status: 'approved' } : prev));
     } catch (e) {
-      alert("Lỗi khi duyệt hồ sơ!");
+      console.error(e);
+      alert('Lỗi khi duyệt hồ sơ!');
     } finally {
       setIsProcessing(false);
     }
   };
 
   const handleRejectSubmit = async () => {
-    if (!selectedApp || !rejectReason.trim() || isProcessing) return;
+    if (!selectedApp || isProcessing) return;
+    if (!rejectReason.trim()) return alert('Vui lòng nhập lý do từ chối.');
 
     setIsProcessing(true);
     try {
-      await processExpertApplication(
-        selectedApp.id,
-        selectedApp.userId,
-        'rejected',
-        rejectReason
-      );
+      await processExpertApplication(selectedApp.id, selectedApp.userId, 'rejected', rejectReason.trim());
 
       setApps(prev =>
-        prev.map(a => a.id === selectedApp.id ? { ...a, status: 'rejected', rejectionReason: rejectReason } : a)
+        prev.map(a =>
+          a.id === selectedApp.id ? ({ ...a, status: 'rejected', rejectionReason: rejectReason.trim() } as any) : a
+        )
       );
-      setSelectedApp(prev => prev ? { ...prev, status: 'rejected', rejectionReason: rejectReason } : prev);
+      setSelectedApp(prev =>
+        prev ? ({ ...prev, status: 'rejected', rejectionReason: rejectReason.trim() } as any) : prev
+      );
+
       setShowRejectModal(false);
       setRejectReason('');
     } catch (e) {
-      alert("Lỗi khi từ chối hồ sơ!");
+      console.error(e);
+      alert('Lỗi khi từ chối hồ sơ!');
     } finally {
       setIsProcessing(false);
     }
   };
 
+  // ===========================
+  // Actions: Delete app / Revoke
+  // ===========================
   const handleDeleteApp = async () => {
     if (!selectedApp || isProcessing) return;
     if (!confirm(`Xoá hồ sơ ứng tuyển của ${selectedApp.fullName}? Thao tác này không thể hoàn tác.`)) return;
@@ -108,12 +154,13 @@ export const ExpertApprovals: React.FC = () => {
     setIsProcessing(true);
     try {
       await deleteExpertApplication(selectedApp.id);
+
+      // UI sync
       setApps(prev => prev.filter(a => a.id !== selectedApp.id));
-      setSelectedApp(null);
-      setIsEditing(false);
-      setEditSpecialty('');
+      safeSelected(null);
     } catch (e) {
-      alert("Không xoá được hồ sơ!");
+      console.error(e);
+      alert('Không xoá được hồ sơ! (Kiểm tra Firestore Rules: expert_applications cần allow delete cho admin)');
     } finally {
       setIsProcessing(false);
     }
@@ -121,77 +168,132 @@ export const ExpertApprovals: React.FC = () => {
 
   const handleRevokeExpert = async () => {
     if (!selectedApp || isProcessing) return;
-    if (!confirm(`GỠ QUYỀN chuyên gia của ${selectedApp.fullName}? (user sẽ mất isExpert)`)) return;
+    if (!confirm(`GỠ QUYỀN chuyên gia của ${selectedApp.fullName}? (User sẽ mất isExpert)`)) return;
 
     setIsProcessing(true);
     try {
+      const reason = 'Admin gỡ quyền chuyên gia';
       await revokeExpertByAdmin({
         userId: selectedApp.userId,
         appId: selectedApp.id,
-        reason: 'Admin gỡ quyền chuyên gia'
+        reason,
       });
 
-      // Đồng bộ UI: chuyển về rejected (để đúng filter + nhìn thấy trạng thái)
+      // UI sync -> rejected để nhìn đúng trạng thái
       setApps(prev =>
-        prev.map(a => a.id === selectedApp.id ? { ...a, status: 'rejected', rejectionReason: 'Admin gỡ quyền chuyên gia' } : a)
+        prev.map(a => (a.id === selectedApp.id ? ({ ...a, status: 'rejected', rejectionReason: reason } as any) : a))
       );
-      setSelectedApp(prev => prev ? { ...prev, status: 'rejected', rejectionReason: 'Admin gỡ quyền chuyên gia' } : prev);
+      setSelectedApp(prev => (prev ? ({ ...prev, status: 'rejected', rejectionReason: reason } as any) : prev));
     } catch (e) {
-      alert("Không gỡ quyền được!");
+      console.error(e);
+      alert('Không gỡ quyền được!');
     } finally {
       setIsProcessing(false);
     }
   };
 
+  // ===========================
+  // Edit specialty (sync app+user)
+  // ===========================
   const handleStartEdit = () => {
     if (!selectedApp) return;
     setIsEditing(true);
-    setEditSpecialty((selectedApp as any)?.approvedSpecialty || selectedApp.specialty || '');
+    setEditSpecialty(((selectedApp as any)?.approvedSpecialty || selectedApp.specialty || '') as any);
   };
 
   const handleSaveEdit = async () => {
-    if (!selectedApp || !editSpecialty.trim() || isProcessing) return;
+    if (!selectedApp || isProcessing) return;
+    if (!editSpecialty.trim()) return alert('Chuyên môn không được để trống.');
 
     setIsProcessing(true);
     try {
       await updateExpertSpecialtyFromApp({
         appId: selectedApp.id,
         userId: selectedApp.userId,
-        specialty: editSpecialty.trim()
+        specialty: editSpecialty.trim(),
       });
 
       setApps(prev =>
-        prev.map(a => a.id === selectedApp.id
-          ? ({ ...a, specialty: editSpecialty.trim(), approvedSpecialty: editSpecialty.trim() } as any)
-          : a
+        prev.map(a =>
+          a.id === selectedApp.id
+            ? ({ ...a, specialty: editSpecialty.trim(), approvedSpecialty: editSpecialty.trim() } as any)
+            : a
         )
       );
-      setSelectedApp(prev => prev
-        ? ({ ...prev, specialty: editSpecialty.trim(), approvedSpecialty: editSpecialty.trim() } as any)
-        : prev
+      setSelectedApp(prev =>
+        prev ? ({ ...prev, specialty: editSpecialty.trim(), approvedSpecialty: editSpecialty.trim() } as any) : prev
       );
 
       setIsEditing(false);
     } catch (e) {
-      alert("Không lưu được chỉnh sửa!");
+      console.error(e);
+      alert('Không lưu được chỉnh sửa!');
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const filteredApps = useMemo(() => {
-    return apps.filter(app => filterStatus === 'all' ? true : app.status === filterStatus);
-  }, [apps, filterStatus]);
+  // ===========================
+  // Manual create expert (search user + approve)
+  // ===========================
+  const resetManualModal = () => {
+    setSelectedUser(null);
+    setUserQuery('');
+    setUserResults([]);
+    setManualSpecialty('');
+    setManualWorkplace('');
+    setManualBio('');
+    setManualPhone('');
+  };
 
-  const counts = useMemo(() => {
-    return {
-      all: apps.length,
-      pending: apps.filter(a => a.status === 'pending').length,
-      approved: apps.filter(a => a.status === 'approved').length,
-      rejected: apps.filter(a => a.status === 'rejected').length
-    };
-  }, [apps]);
+  const handleSearchUsers = async () => {
+    const k = userQuery.trim();
+    if (!k) return;
 
+    setUserSearching(true);
+    try {
+      const res = await searchUsersForAdmin(k, 12);
+      setUserResults(res);
+    } catch (e) {
+      console.error(e);
+      alert('Không tìm được user.');
+    } finally {
+      setUserSearching(false);
+    }
+  };
+
+  const handleCreateExpertManual = async () => {
+    if (!selectedUser) return alert('Bạn chưa chọn user.');
+    if (!manualSpecialty.trim()) return alert('Vui lòng nhập chuyên môn.');
+
+    setIsProcessing(true);
+    try {
+      await addExpertManually({
+        userId: selectedUser.id,
+        specialty: manualSpecialty.trim(),
+        name: selectedUser.name,
+        phone: manualPhone.trim() || undefined,
+        workplace: manualWorkplace.trim() || undefined,
+        bio: manualBio.trim() || undefined,
+      });
+
+      alert('Đã tạo chuyên gia thủ công!');
+      setShowManualModal(false);
+      resetManualModal();
+
+      // Refresh approvals list (không bắt buộc nhưng cho sạch UI)
+      await loadApps();
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message === 'USER_NOT_FOUND' ? 'User không tồn tại.' : 'Tạo chuyên gia thất bại.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // ===========================
+  // Render
+  // ===========================
   return (
     <div className="flex flex-col h-[calc(100vh-100px)] animate-fade-in">
       {/* Toolbar */}
@@ -202,7 +304,7 @@ export const ExpertApprovals: React.FC = () => {
           className="mr-2 p-2 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 active:scale-95 transition-all disabled:opacity-50"
           title="Làm mới dữ liệu"
         >
-          <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
+          <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
         </button>
 
         <div className="flex items-center gap-2 mr-4 text-gray-400 font-bold text-xs uppercase tracking-widest">
@@ -212,19 +314,44 @@ export const ExpertApprovals: React.FC = () => {
         {(['all', 'pending', 'approved', 'rejected'] as const).map(status => (
           <button
             key={status}
-            onClick={() => { setFilterStatus(status); setSelectedApp(null); }}
+            onClick={() => {
+              setFilterStatus(status);
+              safeSelected(null);
+            }}
             className={`px-4 py-2 rounded-lg text-sm font-bold capitalize transition-all flex items-center gap-2 ${
               filterStatus === status
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-100'
                 : 'bg-white border border-gray-100 text-gray-500 hover:bg-gray-50'
             }`}
           >
-            {status === 'all' ? 'Tất cả' : status === 'pending' ? 'Chờ duyệt' : status === 'approved' ? 'Đã duyệt' : 'Đã từ chối'}
-            <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${filterStatus === status ? 'bg-white/20' : 'bg-gray-100'}`}>
+            {status === 'all'
+              ? 'Tất cả'
+              : status === 'pending'
+              ? 'Chờ duyệt'
+              : status === 'approved'
+              ? 'Đã duyệt'
+              : 'Đã từ chối'}
+            <span
+              className={`px-1.5 py-0.5 rounded-md text-[10px] ${
+                filterStatus === status ? 'bg-white/20' : 'bg-gray-100'
+              }`}
+            >
               {(counts as any)[status]}
             </span>
           </button>
         ))}
+
+        {/* ✅ Admin tạo chuyên gia thủ công */}
+        <button
+          onClick={() => {
+            setShowManualModal(true);
+            resetManualModal();
+          }}
+          className="ml-auto px-4 py-2 rounded-lg text-sm font-black bg-blue-600 text-white shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all flex items-center gap-2 active:scale-95"
+          title="Tạo chuyên gia thủ công"
+        >
+          <Plus size={16} /> Tạo chuyên gia
+        </button>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6 flex-1 min-h-0">
@@ -240,42 +367,46 @@ export const ExpertApprovals: React.FC = () => {
               <div className="text-center py-20 bg-gray-50 rounded-xl border border-dashed border-gray-200 mx-2">
                 <p className="text-gray-400 text-sm font-medium">Không có hồ sơ nào</p>
               </div>
-            ) : filteredApps.map(app => (
-              <button
-                key={app.id}
-                onClick={() => { setSelectedApp(app); setIsEditing(false); setEditSpecialty(''); }}
-                className={`w-full text-left p-4 rounded-xl border transition-all relative group ${
-                  selectedApp?.id === app.id
-                    ? 'bg-blue-50 border-blue-200 shadow-sm'
-                    : 'bg-white border-transparent hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex justify-between items-start mb-1">
-                  <span className={`font-bold text-sm ${selectedApp?.id === app.id ? 'text-blue-700' : 'text-gray-900'}`}>
-                    {app.fullName}
-                  </span>
+            ) : (
+              filteredApps.map(app => (
+                <button
+                  key={app.id}
+                  onClick={() => safeSelected(app)}
+                  className={`w-full text-left p-4 rounded-xl border transition-all relative group ${
+                    selectedApp?.id === app.id ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-transparent hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex justify-between items-start mb-1">
+                    <span
+                      className={`font-bold text-sm ${
+                        selectedApp?.id === app.id ? 'text-blue-700' : 'text-gray-900'
+                      }`}
+                    >
+                      {app.fullName}
+                    </span>
 
-                  <div className="flex items-center gap-2">
-                    {app.status === 'pending' && (
-                      <span className="flex h-2 w-2 relative mt-1.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
-                      </span>
-                    )}
-                    {app.status === 'approved' && <Check size={14} className="text-green-500 shrink-0" />}
-                    {app.status === 'rejected' && <X size={14} className="text-red-500 shrink-0" />}
+                    <div className="flex items-center gap-2">
+                      {app.status === 'pending' && (
+                        <span className="flex h-2 w-2 relative mt-1.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
+                        </span>
+                      )}
+                      {app.status === 'approved' && <Check size={14} className="text-green-500 shrink-0" />}
+                      {app.status === 'rejected' && <X size={14} className="text-red-500 shrink-0" />}
+                    </div>
                   </div>
-                </div>
 
-                <p className="text-[11px] text-blue-600 font-bold mb-2 uppercase tracking-tight">
-                  {(app as any)?.approvedSpecialty || app.specialty}
-                </p>
+                  <p className="text-[11px] text-blue-600 font-bold mb-2 uppercase tracking-tight">
+                    {(app as any)?.approvedSpecialty || app.specialty}
+                  </p>
 
-                <p className="text-[10px] text-gray-400 flex items-center gap-1 font-medium">
-                  <Clock size={10} /> Gửi ngày {new Date(app.createdAt).toLocaleDateString('vi-VN')}
-                </p>
-              </button>
-            ))}
+                  <p className="text-[10px] text-gray-400 flex items-center gap-1 font-medium">
+                    <Clock size={10} /> Gửi ngày {new Date(app.createdAt).toLocaleDateString('vi-VN')}
+                  </p>
+                </button>
+              ))
+            )}
           </div>
         </div>
 
@@ -287,17 +418,25 @@ export const ExpertApprovals: React.FC = () => {
               <div className="flex flex-col md:flex-row justify-between items-start gap-4 pb-6 border-b border-gray-100">
                 <div className="flex items-center gap-4">
                   <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 font-black text-2xl border border-blue-100">
-                    {selectedApp.fullName.charAt(0)}
+                    {selectedApp.fullName?.charAt(0) || 'E'}
                   </div>
                   <div>
                     <div className="flex items-center gap-3 mb-1">
                       <h2 className="text-2xl font-black text-gray-900 tracking-tight">{selectedApp.fullName}</h2>
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${
-                        selectedApp.status === 'pending' ? 'bg-yellow-50 text-yellow-600 border-yellow-200' :
-                        selectedApp.status === 'approved' ? 'bg-green-50 text-green-600 border-green-200' :
-                        'bg-red-50 text-red-600 border-red-200'
-                      }`}>
-                        {selectedApp.status === 'pending' ? 'Chờ duyệt' : selectedApp.status === 'approved' ? 'Đã duyệt' : 'Đã từ chối'}
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${
+                          selectedApp.status === 'pending'
+                            ? 'bg-yellow-50 text-yellow-600 border-yellow-200'
+                            : selectedApp.status === 'approved'
+                            ? 'bg-green-50 text-green-600 border-green-200'
+                            : 'bg-red-50 text-red-600 border-red-200'
+                        }`}
+                      >
+                        {selectedApp.status === 'pending'
+                          ? 'Chờ duyệt'
+                          : selectedApp.status === 'approved'
+                          ? 'Đã duyệt'
+                          : 'Đã từ chối'}
                       </span>
                     </div>
 
@@ -337,7 +476,10 @@ export const ExpertApprovals: React.FC = () => {
                   {selectedApp.status === 'pending' && (
                     <>
                       <button
-                        onClick={() => { setShowRejectModal(true); setRejectReason(''); }}
+                        onClick={() => {
+                          setShowRejectModal(true);
+                          setRejectReason('');
+                        }}
                         disabled={isProcessing}
                         className="px-4 py-2.5 bg-white border border-red-100 text-red-600 font-black text-xs uppercase tracking-widest rounded-xl hover:bg-red-50 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
                       >
@@ -412,15 +554,17 @@ export const ExpertApprovals: React.FC = () => {
                     <div className="space-y-4">
                       <div className="flex flex-col">
                         <span className="text-[10px] font-bold text-gray-400 uppercase">Số điện thoại</span>
-                        <span className="font-bold text-gray-900">{selectedApp.phone}</span>
+                        <span className="font-bold text-gray-900">{selectedApp.phone || '—'}</span>
                       </div>
                       <div className="flex flex-col border-t border-gray-100 pt-3">
                         <span className="text-[10px] font-bold text-gray-400 uppercase">Đơn vị công tác</span>
-                        <span className="font-bold text-gray-900">{selectedApp.workplace}</span>
+                        <span className="font-bold text-gray-900">{selectedApp.workplace || '—'}</span>
                       </div>
                       <div className="flex flex-col border-t border-gray-100 pt-3">
                         <span className="text-[10px] font-bold text-gray-400 uppercase">Thời gian gửi hồ sơ</span>
-                        <span className="font-bold text-gray-900">{new Date(selectedApp.createdAt).toLocaleString('vi-VN')}</span>
+                        <span className="font-bold text-gray-900">
+                          {selectedApp.createdAt ? new Date(selectedApp.createdAt).toLocaleString('vi-VN') : '—'}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -438,7 +582,12 @@ export const ExpertApprovals: React.FC = () => {
                           className="group relative aspect-[4/3] bg-gray-50 rounded-2xl overflow-hidden border border-gray-100 cursor-zoom-in shadow-sm hover:shadow-md transition-all"
                           onClick={() => setPreviewImage(img)}
                         >
-                          <img src={img} alt="Proof" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" loading="lazy" />
+                          <img
+                            src={img}
+                            alt="Proof"
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                            loading="lazy"
+                          />
                           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
                             <div className="bg-white/90 p-2 rounded-full transform translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 shadow-xl">
                               <ZoomIn size={20} className="text-blue-600" />
@@ -469,23 +618,37 @@ export const ExpertApprovals: React.FC = () => {
 
       {/* Lightbox Modal */}
       {previewImage && (
-        <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center animate-fade-in p-4" onClick={() => setPreviewImage(null)}>
+        <div
+          className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center animate-fade-in p-4"
+          onClick={() => setPreviewImage(null)}
+        >
           <div className="absolute top-6 right-6 flex gap-4">
-            <a href={previewImage} target="_blank" rel="noreferrer" className="text-white/60 hover:text-white transition-colors" onClick={e => e.stopPropagation()}>
+            <a
+              href={previewImage}
+              target="_blank"
+              rel="noreferrer"
+              className="text-white/60 hover:text-white transition-colors"
+              onClick={e => e.stopPropagation()}
+            >
               <ExternalLink size={24} />
             </a>
             <button className="text-white/60 hover:text-white transition-colors">
               <X size={28} />
             </button>
           </div>
-          <img src={previewImage} className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl animate-pop-in" onClick={(e) => e.stopPropagation()} />
+          <img
+            src={previewImage}
+            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl animate-pop-in"
+            onClick={e => e.stopPropagation()}
+            alt="Preview"
+          />
           <p className="text-white/40 text-xs font-bold uppercase tracking-widest mt-6">Nhấp vào vùng trống để thoát</p>
         </div>
       )}
 
       {/* Rejection Modal */}
       {showRejectModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md px-4 p-safe-bottom">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-md px-4 p-safe-bottom">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md p-8 animate-pop-in border border-gray-100">
             <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center text-red-500 mb-6 border border-red-100">
               <UserX size={32} />
@@ -502,7 +665,10 @@ export const ExpertApprovals: React.FC = () => {
               autoFocus
             />
             <div className="flex gap-4">
-              <button onClick={() => setShowRejectModal(false)} className="flex-1 py-3.5 text-gray-500 font-black text-xs uppercase tracking-widest hover:bg-gray-100 rounded-2xl transition-all">
+              <button
+                onClick={() => setShowRejectModal(false)}
+                className="flex-1 py-3.5 text-gray-500 font-black text-xs uppercase tracking-widest hover:bg-gray-100 rounded-2xl transition-all"
+              >
                 Quay lại
               </button>
               <button
@@ -511,6 +677,152 @@ export const ExpertApprovals: React.FC = () => {
                 className="flex-[2] py-3.5 bg-red-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-red-700 shadow-xl shadow-red-100 disabled:opacity-50 active:scale-95 transition-all"
               >
                 {isProcessing ? <Loader2 size={16} className="animate-spin mx-auto" /> : 'Xác nhận từ chối'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ Manual Create Expert Modal */}
+      {showManualModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-md px-4 p-safe-bottom">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl p-8 animate-pop-in border border-gray-100">
+            <div className="flex items-start justify-between gap-4 mb-6">
+              <div>
+                <h3 className="text-2xl font-black text-gray-900">Tạo chuyên gia thủ công</h3>
+                <p className="text-sm text-gray-500 font-medium mt-1">
+                  Dành cho user đăng nhập Google / Email&Password (đều có uid trong users).
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowManualModal(false);
+                  resetManualModal();
+                }}
+                className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Search user */}
+            <div className="bg-gray-50 rounded-2xl border border-gray-100 p-4 mb-6">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3">
+                Tìm user (theo tên/email)
+              </p>
+
+              <div className="flex gap-2">
+                <input
+                  value={userQuery}
+                  onChange={(e) => setUserQuery(e.target.value)}
+                  placeholder="Nhập tên hoặc email..."
+                  className="flex-1 px-4 py-3 rounded-xl border border-gray-200 bg-white outline-none focus:ring-4 focus:ring-blue-100 font-bold text-gray-900"
+                />
+                <button
+                  onClick={handleSearchUsers}
+                  disabled={!userQuery.trim() || userSearching}
+                  className="px-5 rounded-xl bg-blue-600 text-white font-black disabled:opacity-50 active:scale-95"
+                >
+                  {userSearching ? <Loader2 size={16} className="animate-spin" /> : 'Tìm'}
+                </button>
+              </div>
+
+              {userResults.length > 0 && (
+                <div className="mt-4 grid sm:grid-cols-2 gap-2">
+                  {userResults.map(u => (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => setSelectedUser(u)}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        selectedUser?.id === u.id ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="font-black text-sm text-gray-900">{u.name || '(Chưa đặt tên)'}</div>
+                      <div className="text-xs text-gray-500 font-medium">
+                        {(u as any)?.email || '—'} • UID: {u.id.slice(0, 8)}…
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {selectedUser && (
+                <div className="mt-4 p-4 rounded-2xl bg-white border border-blue-100">
+                  <p className="text-xs font-black uppercase tracking-wider text-blue-700 mb-1">User đã chọn</p>
+                  <p className="font-black text-gray-900">{selectedUser.name || '—'}</p>
+                  <p className="text-xs text-gray-500 font-medium">{(selectedUser as any)?.email || '—'} • {selectedUser.id}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Expert fields */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-xs font-black uppercase tracking-widest text-gray-400 mb-2">
+                  Chuyên môn (bắt buộc)
+                </label>
+                <input
+                  value={manualSpecialty}
+                  onChange={(e) => setManualSpecialty(e.target.value)}
+                  placeholder="Ví dụ: Bác sĩ Nhi khoa"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white outline-none focus:ring-4 focus:ring-blue-100 font-bold text-gray-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-gray-400 mb-2">
+                  SĐT (tuỳ chọn)
+                </label>
+                <input
+                  value={manualPhone}
+                  onChange={(e) => setManualPhone(e.target.value)}
+                  placeholder="0912xxxxxx"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white outline-none focus:ring-4 focus:ring-blue-100 font-bold text-gray-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-gray-400 mb-2">
+                  Đơn vị công tác (tuỳ chọn)
+                </label>
+                <input
+                  value={manualWorkplace}
+                  onChange={(e) => setManualWorkplace(e.target.value)}
+                  placeholder="Bệnh viện / Trường / Phòng khám..."
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white outline-none focus:ring-4 focus:ring-blue-100 font-bold text-gray-900"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-black uppercase tracking-widest text-gray-400 mb-2">
+                  Bio (tuỳ chọn)
+                </label>
+                <textarea
+                  value={manualBio}
+                  onChange={(e) => setManualBio(e.target.value)}
+                  placeholder="Giới thiệu ngắn về chuyên gia..."
+                  className="w-full h-28 px-4 py-3 rounded-xl border border-gray-200 bg-white outline-none focus:ring-4 focus:ring-blue-100 font-medium text-gray-900 resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => {
+                  setShowManualModal(false);
+                  resetManualModal();
+                }}
+                className="flex-1 py-3.5 text-gray-500 font-black text-xs uppercase tracking-widest hover:bg-gray-100 rounded-2xl transition-all"
+              >
+                Huỷ
+              </button>
+              <button
+                onClick={handleCreateExpertManual}
+                disabled={!selectedUser || !manualSpecialty.trim() || isProcessing}
+                className="flex-[2] py-3.5 bg-green-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-green-700 shadow-xl shadow-green-100 disabled:opacity-50 active:scale-95 transition-all"
+              >
+                {isProcessing ? <Loader2 size={16} className="animate-spin mx-auto" /> : 'Tạo chuyên gia'}
               </button>
             </div>
           </div>
