@@ -34,7 +34,7 @@ const mapUser = (fbUser: firebaseAuth.User, dbUser?: any): User => {
     followers: Array.isArray(dbUser?.followers) ? dbUser.followers : [],
     following: Array.isArray(dbUser?.following) ? dbUser.following : [],
 
-    // ✅ cực quan trọng để UI nút Lưu + đồng bộ F5
+    // ✅ Cực quan trọng để UI nút Lưu + đồng bộ F5
     savedQuestions: Array.isArray(dbUser?.savedQuestions) ? dbUser.savedQuestions : [],
 
     // ⚠️ Giữ cơ chế của bạn: đăng nhập rồi => không phải guest
@@ -43,73 +43,75 @@ const mapUser = (fbUser: firebaseAuth.User, dbUser?: any): User => {
 };
 
 /* =========================
-   Internal: Ensure user doc exists (an toàn, không overwrite dữ liệu cũ)
-   - Dùng merge:true
-   - Preserve createdAt/joinedAt nếu đã có
+   Internal: Ensure user doc exists (ĐÃ FIX LỖI PERMISSION)
+   - Tách biệt logic Create và Update để tránh vi phạm Rules
 ========================= */
 const ensureUserDoc = async (fbUser: firebaseAuth.User, partialData: any = {}) => {
   const userDocRef = doc(db, 'users', fbUser.uid);
+  const now = new Date().toISOString();
 
-  let existing: any = {};
+  // 1. Kiểm tra xem doc đã tồn tại chưa
+  let existing: any = undefined;
   try {
     const snap = await getDoc(userDocRef);
     if (snap.exists()) existing = snap.data();
-  } catch {
-    // ignore
+  } catch (e) {
+    // Bỏ qua lỗi nếu chưa có quyền đọc hoặc mạng lỗi, giả định là chưa có để xử lý tiếp
   }
 
-  const createdAt = existing?.createdAt || partialData?.createdAt || new Date().toISOString();
-  const joinedAt = existing?.joinedAt || partialData?.joinedAt || createdAt;
+  // 2. Chuẩn bị dữ liệu an toàn (đây là các field Rules cho phép update)
+  // Logic: Nếu partialData có thì dùng, nếu không thì dùng existing, nếu không nữa thì lấy từ fbUser
+  const safeBaseData = {
+    name:
+      partialData?.name ||
+      existing?.name ||
+      fbUser.displayName ||
+      (fbUser.isAnonymous ? 'Khách ẩn danh' : 'Người dùng'),
+    avatar:
+      partialData?.avatar ||
+      existing?.avatar ||
+      fbUser.photoURL ||
+      'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
+    email: existing?.email ?? partialData?.email ?? fbUser.email ?? null,
+    isAnonymous: existing?.isAnonymous ?? partialData?.isAnonymous ?? fbUser.isAnonymous ?? false,
+    
+    // Arrays: Merge an toàn, ưu tiên cái có dữ liệu
+    savedQuestions: existing?.savedQuestions || partialData?.savedQuestions || [],
+    followers: existing?.followers || partialData?.followers || [],
+    following: existing?.following || partialData?.following || [],
 
-  const savedQuestions = Array.isArray(existing?.savedQuestions)
-    ? existing.savedQuestions
-    : Array.isArray(partialData?.savedQuestions)
-      ? partialData.savedQuestions
-      : [];
+    // Luôn update thời gian active
+    lastActiveAt: now,
+    updatedAt: now,
+  };
 
-  const followers = Array.isArray(existing?.followers)
-    ? existing.followers
-    : Array.isArray(partialData?.followers)
-      ? partialData.followers
-      : [];
-
-  const following = Array.isArray(existing?.following)
-    ? existing.following
-    : Array.isArray(partialData?.following)
-      ? partialData.following
-      : [];
-
-  await setDoc(
-    userDocRef,
-    {
-      name:
-        existing?.name ||
-        partialData?.name ||
-        fbUser.displayName ||
-        (fbUser.isAnonymous ? 'Khách ẩn danh' : 'Người dùng'),
-      avatar:
-        existing?.avatar ||
-        partialData?.avatar ||
-        fbUser.photoURL ||
-        'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
-      email: existing?.email ?? partialData?.email ?? fbUser.email ?? null,
-
-      createdAt,
-      joinedAt,
-
-      isExpert: existing?.isExpert ?? partialData?.isExpert ?? false,
-      expertStatus: existing?.expertStatus ?? partialData?.expertStatus ?? 'none',
-      isAdmin: existing?.isAdmin ?? partialData?.isAdmin ?? false,
-      points: existing?.points ?? partialData?.points ?? 0,
-      isAnonymous: existing?.isAnonymous ?? partialData?.isAnonymous ?? fbUser.isAnonymous ?? false,
-
-      // ✅ để toggleSaveQuestion arrayUnion/arrayRemove không lỗi
-      savedQuestions,
-      followers,
-      following,
-    },
-    { merge: true }
-  );
+  if (!existing) {
+    // === TRƯỜNG HỢP 1: TẠO MỚI (CREATE) ===
+    // Rules cho phép set isAdmin/isExpert = false khi tạo mới
+    await setDoc(userDocRef, {
+      ...safeBaseData,
+      createdAt: now,
+      joinedAt: now,
+      
+      // Các field nhạy cảm chỉ được set khi tạo mới
+      isAdmin: false, 
+      isExpert: false,
+      expertStatus: 'none',
+      points: partialData?.points ?? (fbUser.isAnonymous ? 0 : 10),
+      
+      username: null,
+      bio: '',
+      specialty: '',
+      workplace: '',
+    });
+  } else {
+    // === TRƯỜNG HỢP 2: CẬP NHẬT (UPDATE) ===
+    // ⚠️ QUAN TRỌNG: KHÔNG gửi isAdmin, isExpert, points, createdAt
+    // Firestore Rules update chặn các field này.
+    
+    // Chỉ ghi đè các field có trong safeBaseData
+    await setDoc(userDocRef, safeBaseData, { merge: true });
+  }
 };
 
 /* =========================
@@ -122,37 +124,16 @@ export const loginAnonymously = async (): Promise<User> => {
     const result = await firebaseAuth.signInAnonymously(auth);
     const fbUser = result.user;
 
-    const userDocRef = doc(db, 'users', fbUser.uid);
-    const userDoc = await getDoc(userDocRef);
-
-    if (!userDoc.exists()) {
-      await ensureUserDoc(fbUser, {
-        name: 'Khách ẩn danh',
-        avatar: 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
-        createdAt: new Date().toISOString(),
-        joinedAt: new Date().toISOString(),
-        isExpert: false,
-        expertStatus: 'none',
-        isAdmin: false,
-        points: 0,
+    // ensureUserDoc đã được viết lại để xử lý logic check tồn tại bên trong
+    await ensureUserDoc(fbUser, {
         isAnonymous: true,
-        savedQuestions: [],
-        followers: [],
-        following: [],
-      });
+        points: 0
+    });
 
-      const freshSnap = await getDoc(userDocRef);
-      return mapUser(fbUser, freshSnap.exists() ? freshSnap.data() : undefined);
-    }
+    const userDocRef = doc(db, 'users', fbUser.uid);
+    const freshSnap = await getDoc(userDocRef);
+    return mapUser(fbUser, freshSnap.exists() ? freshSnap.data() : undefined);
 
-    // đảm bảo savedQuestions tồn tại
-    const data: any = userDoc.data() || {};
-    if (!Array.isArray(data.savedQuestions)) {
-      await setDoc(userDocRef, { savedQuestions: [] }, { merge: true });
-      return mapUser(fbUser, { ...data, savedQuestions: [] });
-    }
-
-    return mapUser(fbUser, data);
   } catch (error: any) {
     console.warn('Anonymous login failed:', error?.code);
     if (
@@ -174,57 +155,20 @@ export const loginWithGoogle = async (): Promise<User> => {
   const result = await firebaseAuth.signInWithPopup(auth, googleProvider);
   const fbUser = result.user;
 
-  const userDocRef = doc(db, 'users', fbUser.uid);
-  const userDoc = await getDoc(userDocRef);
-
-  // ✅ Ảnh Google HD
+  // Xử lý ảnh HD
   let avatarUrl = fbUser.photoURL || '';
   if (avatarUrl && avatarUrl.includes('=s96-c')) {
     avatarUrl = avatarUrl.replace('=s96-c', '=s400-c');
   }
 
-  if (userDoc.exists()) {
-    const currentData: any = userDoc.data() || {};
-
-    // ✅ đảm bảo savedQuestions tồn tại
-    if (!Array.isArray(currentData.savedQuestions)) {
-      await setDoc(userDocRef, { savedQuestions: [] }, { merge: true });
-      currentData.savedQuestions = [];
-    }
-
-    // ✅ nếu avatar mới khác avatar cũ thì update
-    if (avatarUrl && currentData.avatar !== avatarUrl) {
-      await updateDoc(userDocRef, {
-        avatar: avatarUrl,
-        name: fbUser.displayName || currentData.name,
-      });
-
-      return mapUser(fbUser, {
-        ...currentData,
-        avatar: avatarUrl,
-        name: fbUser.displayName || currentData.name,
-      });
-    }
-
-    return mapUser(fbUser, currentData);
-  }
-
-  // doc chưa tồn tại -> tạo
+  // Gọi ensureUserDoc để đồng bộ (nó tự xử lý create hoặc update avatar nếu cần)
   await ensureUserDoc(fbUser, {
-    name: fbUser.displayName || 'Người dùng mới',
-    email: fbUser.email,
-    avatar: avatarUrl || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
-    createdAt: new Date().toISOString(),
-    joinedAt: new Date().toISOString(),
-    isExpert: false,
-    expertStatus: 'none',
-    isAdmin: false,
-    points: 10,
-    savedQuestions: [],
-    followers: [],
-    following: [],
+    avatar: avatarUrl,
+    name: fbUser.displayName,
+    email: fbUser.email
   });
 
+  const userDocRef = doc(db, 'users', fbUser.uid);
   const freshSnap = await getDoc(userDocRef);
   return mapUser(fbUser, freshSnap.exists() ? freshSnap.data() : undefined);
 };
@@ -244,23 +188,13 @@ export const registerWithEmail = async (
 
   await firebaseAuth.updateProfile(fbUser, { displayName: name });
 
-  const userDocRef = doc(db, 'users', fbUser.uid);
-
   await ensureUserDoc(fbUser, {
     name,
     email,
-    avatar: 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
-    createdAt: new Date().toISOString(),
-    joinedAt: new Date().toISOString(),
-    isExpert: false,
-    expertStatus: 'none',
-    isAdmin: false,
     points: 10,
-    savedQuestions: [],
-    followers: [],
-    following: [],
   });
 
+  const userDocRef = doc(db, 'users', fbUser.uid);
   const freshSnap = await getDoc(userDocRef);
   return mapUser(fbUser, freshSnap.exists() ? freshSnap.data() : undefined);
 };
@@ -274,36 +208,14 @@ export const loginWithEmail = async (email: string, pass: string): Promise<User>
   const result = await firebaseAuth.signInWithEmailAndPassword(auth, email, pass);
   const fbUser = result.user;
 
+  // Ensure doc tồn tại và cập nhật lastActiveAt
+  await ensureUserDoc(fbUser, {
+      email: fbUser.email || email
+  });
+
   const userDocRef = doc(db, 'users', fbUser.uid);
   const userDoc = await getDoc(userDocRef);
-
-  // ✅ nếu thiếu doc -> tạo để các chức năng sau không lỗi
-  if (!userDoc.exists()) {
-    await ensureUserDoc(fbUser, {
-      name: fbUser.displayName || 'Người dùng',
-      email: fbUser.email || email,
-      avatar: fbUser.photoURL || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
-      createdAt: new Date().toISOString(),
-      joinedAt: new Date().toISOString(),
-      points: 10,
-      savedQuestions: [],
-      followers: [],
-      following: [],
-    });
-
-    const fresh = await getDoc(userDocRef);
-    return mapUser(fbUser, fresh.exists() ? fresh.data() : undefined);
-  }
-
-  const data: any = userDoc.data() || {};
-
-  // ✅ đảm bảo savedQuestions là array
-  if (!Array.isArray(data.savedQuestions)) {
-    await setDoc(userDocRef, { savedQuestions: [] }, { merge: true });
-    return mapUser(fbUser, { ...data, savedQuestions: [] });
-  }
-
-  return mapUser(fbUser, data);
+  return mapUser(fbUser, userDoc.exists() ? userDoc.data() : undefined);
 };
 
 /* =========================
@@ -315,9 +227,7 @@ export const logoutUser = async () => {
 };
 
 /* =========================
-   Subscribe Auth Changes (FIX TRIỆT ĐỂ SPAM LỖI)
-   - Cleanup đúng chuẩn
-   - Nếu permission-denied => unsubscribe để dừng retry spam
+   Subscribe Auth Changes
 ========================= */
 export const subscribeToAuthChanges = (callback: (user: User | null) => void) => {
   if (!auth) return () => {};
@@ -326,7 +236,7 @@ export const subscribeToAuthChanges = (callback: (user: User | null) => void) =>
   let stoppedDueToPermission = false;
 
   const unsubAuth = firebaseAuth.onAuthStateChanged(auth, (fbUser) => {
-    // ✅ huỷ listener cũ mỗi khi auth thay đổi
+    // cleanup listener cũ
     if (unsubUserDoc) {
       unsubUserDoc();
       unsubUserDoc = null;
@@ -343,77 +253,59 @@ export const subscribeToAuthChanges = (callback: (user: User | null) => void) =>
     unsubUserDoc = onSnapshot(
       userDocRef,
       (docSnap) => {
-        // nếu trước đó đã permission-denied thì thôi (đỡ loop)
         if (stoppedDueToPermission) return;
 
         void (async () => {
           try {
             if (docSnap.exists()) {
               const data: any = docSnap.data() || {};
-
-              // đảm bảo savedQuestions
+              
+              // Kiểm tra mảng savedQuestions để tránh lỗi UI
               if (!Array.isArray(data.savedQuestions)) {
-                await setDoc(userDocRef, { savedQuestions: [] }, { merge: true });
-                callback(mapUser(fbUser, { ...data, savedQuestions: [] }));
-                return;
+                 // Update nhỏ, không đụng vào admin/isExpert nên an toàn
+                 await updateDoc(userDocRef, { savedQuestions: [] });
+                 data.savedQuestions = [];
               }
-
+              
               callback(mapUser(fbUser, data));
-              return;
+            } else {
+              // Nếu doc chưa tồn tại (lỗi mạng hoặc delay tạo), thử tạo lại
+              await ensureUserDoc(fbUser);
+              const fresh = await getDoc(userDocRef);
+              callback(mapUser(fbUser, fresh.exists() ? fresh.data() : undefined));
             }
-
-            // doc chưa có -> tạo
-            await ensureUserDoc(fbUser, {
-              name: fbUser.displayName || (fbUser.isAnonymous ? 'Khách ẩn danh' : 'Người dùng'),
-              avatar: fbUser.photoURL || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
-              createdAt: new Date().toISOString(),
-              joinedAt: new Date().toISOString(),
-              points: fbUser.isAnonymous ? 0 : 10,
-              savedQuestions: [],
-              followers: [],
-              following: [],
-              isAnonymous: fbUser.isAnonymous,
-            });
-
-            const fresh = await getDoc(userDocRef);
-            callback(mapUser(fbUser, fresh.exists() ? fresh.data() : undefined));
           } catch (err: any) {
-            // nếu bị permission-denied trong quá trình ensureUserDoc/getDoc
             if (err?.code === 'permission-denied') {
               stoppedDueToPermission = true;
               if (unsubUserDoc) {
                 unsubUserDoc();
                 unsubUserDoc = null;
               }
-              // fallback không phá UI
+              // Vẫn trả về user từ auth để UI không bị crash
               callback(mapUser(fbUser, docSnap.exists() ? docSnap.data() : undefined));
               return;
             }
-
             console.error('Auth snapshot handler error:', err);
             callback(mapUser(fbUser, docSnap.exists() ? docSnap.data() : undefined));
           }
         })();
       },
       (error: any) => {
-        // ✅ CHỐT: permission-denied => dừng retry spam
         if (error?.code === 'permission-denied') {
           stoppedDueToPermission = true;
           if (unsubUserDoc) {
-            unsubUserDoc();
-            unsubUserDoc = null;
+             unsubUserDoc();
+             unsubUserDoc = null;
           }
           callback(mapUser(fbUser));
           return;
         }
-
         console.error('Firestore user sync error:', error);
         callback(mapUser(fbUser));
       }
     );
   });
 
-  // ✅ cleanup chuẩn
   return () => {
     if (unsubUserDoc) unsubUserDoc();
     unsubAuth();
