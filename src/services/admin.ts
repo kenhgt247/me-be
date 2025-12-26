@@ -24,7 +24,6 @@ import { User, Question, ExpertApplication, Report, Category, toSlug, CATEGORIES
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, updateProfile, signOut } from 'firebase/auth';
 
-
 /* ============================================================
    SYSTEM STATS (Tối ưu cho Dashboard)
    ============================================================ */
@@ -207,6 +206,76 @@ export const processExpertApplication = async (
 };
 
 /* ============================================================
+   ✅ EXPERT ADMIN ACTIONS (FIX BUILD for ExpertApprovals.tsx)
+   ============================================================ */
+
+/**
+ * Xoá đơn đăng ký chuyên gia
+ * - Dùng khi admin muốn xoá hồ sơ application (không đụng tới user)
+ */
+export const deleteExpertApplication = async (appId: string) => {
+  if (!db) return;
+  try {
+    await deleteDoc(doc(db, 'expert_applications', appId));
+  } catch (error) {
+    console.error('Error deleting expert application:', error);
+    throw error;
+  }
+};
+
+/**
+ * Thu hồi quyền chuyên gia (admin)
+ * - Set isExpert=false + expertStatus='revoked'
+ * - Có thể lưu revokeReason / revokedAt để audit
+ */
+export const revokeExpertByAdmin = async (userId: string, reason?: string) => {
+  if (!db) return;
+  try {
+    const now = new Date().toISOString();
+    const userRef = doc(db, 'users', userId);
+
+    // dùng setDoc merge để tránh crash nếu doc user chưa tồn tại (an toàn hơn updateDoc)
+    await setDoc(
+      userRef,
+      {
+        isExpert: false,
+        expertStatus: 'revoked',
+        specialty: '',
+        revokedAt: now,
+        revokeReason: reason || null,
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.error('Error revoking expert by admin:', error);
+    throw error;
+  }
+};
+
+/**
+ * Cập nhật chuyên môn chuyên gia (từ app/admin)
+ */
+export const updateExpertSpecialtyFromApp = async (userId: string, specialty: string) => {
+  if (!db) return;
+  try {
+    const now = new Date().toISOString();
+    const userRef = doc(db, 'users', userId);
+    await setDoc(
+      userRef,
+      {
+        specialty: specialty || '',
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.error('Error updating expert specialty:', error);
+    throw error;
+  }
+};
+
+/* ============================================================
    QUESTIONS MANAGEMENT (Phân trang & Bulk)
    ============================================================ */
 export const fetchQuestionsAdminPaginated = async (
@@ -352,7 +421,7 @@ export const addCategory = async (name: string, style?: { icon: string; color: s
     await addDoc(collection(db, 'categories'), {
       name,
       slug: toSlug(name),
-      ...(style || {}), // ✅ tránh crash khi style undefined
+      ...(style || {}),
     });
   } catch (error) {
     console.error('Error adding category:', error);
@@ -366,7 +435,7 @@ export const updateCategory = async (id: string, name: string, style?: { icon: s
     await updateDoc(doc(db, 'categories', id), {
       name,
       slug: toSlug(name),
-      ...(style || {}), // ✅ tránh crash khi style undefined
+      ...(style || {}),
     });
   } catch (error) {
     console.error('Error updating category:', error);
@@ -439,17 +508,16 @@ export const fetchAllDocuments = async () => {
     return [];
   }
 };
+
 /* ============================================================
    ADMIN: CREATE USER (Auth + Firestore) - KHÔNG LOGOUT ADMIN
    ============================================================ */
 let __secondaryAppInited = false;
 
 const getSecondaryAuth = () => {
-  // dùng options của default app để init secondary app
   const defaultApp = getApp();
   const secondaryName = 'admin-secondary';
 
-  // tránh init nhiều lần
   const exists = getApps().some((a) => a.name === secondaryName);
 
   if (!exists && !__secondaryAppInited) {
@@ -457,7 +525,6 @@ const getSecondaryAuth = () => {
     __secondaryAppInited = true;
   }
 
-  // lấy app secondary
   const secondaryApp = getApps().find((a) => a.name === secondaryName)!;
   return getAuth(secondaryApp);
 };
@@ -488,10 +555,10 @@ export const createUserByAdmin = async (
       photoURL: extra?.avatar || undefined,
     });
   } catch {
-    // ignore (không ảnh hưởng create)
+    // ignore
   }
 
-  // 2) Tạo user doc Firestore (payload "safe" để không dính rules)
+  // 2) Tạo user doc Firestore
   const now = new Date().toISOString();
   const userRef = doc(db, 'users', cred.user.uid);
 
@@ -510,7 +577,6 @@ export const createUserByAdmin = async (
       joinedAt: now,
       updatedAt: now,
 
-      // mặc định an toàn
       points: typeof extra?.points === 'number' ? extra.points : 10,
       isAnonymous: false,
       expertStatus: 'none',
@@ -522,7 +588,7 @@ export const createUserByAdmin = async (
     { merge: true }
   );
 
-  // 3) cleanup secondary auth session (để không “dính” user mới ở secondary)
+  // 3) cleanup secondary auth session
   try {
     await signOut(secondaryAuth);
   } catch {
