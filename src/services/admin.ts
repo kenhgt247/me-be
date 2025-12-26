@@ -3,6 +3,7 @@ import {
   collection,
   getDocs,
   doc,
+  setDoc,
   updateDoc,
   query,
   orderBy,
@@ -20,6 +21,9 @@ import {
 
 import { db } from '../firebaseConfig';
 import { User, Question, ExpertApplication, Report, Category, toSlug, CATEGORIES } from '../types';
+import { initializeApp, getApp, getApps } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, updateProfile, signOut } from 'firebase/auth';
+
 
 /* ============================================================
    SYSTEM STATS (Tối ưu cho Dashboard)
@@ -434,4 +438,113 @@ export const fetchAllDocuments = async () => {
     console.error('Error fetching docs:', error);
     return [];
   }
+};
+/* ============================================================
+   ADMIN: CREATE USER (Auth + Firestore) - KHÔNG LOGOUT ADMIN
+   ============================================================ */
+let __secondaryAppInited = false;
+
+const getSecondaryAuth = () => {
+  // dùng options của default app để init secondary app
+  const defaultApp = getApp();
+  const secondaryName = 'admin-secondary';
+
+  // tránh init nhiều lần
+  const exists = getApps().some((a) => a.name === secondaryName);
+
+  if (!exists && !__secondaryAppInited) {
+    initializeApp(defaultApp.options, secondaryName);
+    __secondaryAppInited = true;
+  }
+
+  // lấy app secondary
+  const secondaryApp = getApps().find((a) => a.name === secondaryName)!;
+  return getAuth(secondaryApp);
+};
+
+export const createUserByAdmin = async (
+  email: string,
+  password: string,
+  name: string,
+  extra?: {
+    avatar?: string;
+    bio?: string;
+    specialty?: string;
+    workplace?: string;
+    points?: number;
+  }
+): Promise<User> => {
+  if (!db) throw new Error('Firebase chưa được cấu hình (db null).');
+
+  const secondaryAuth = getSecondaryAuth();
+
+  // 1) Tạo tài khoản Auth bằng secondary auth (không ảnh hưởng admin đang login)
+  const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+
+  // set displayName / photoURL cho Auth profile
+  try {
+    await updateProfile(cred.user, {
+      displayName: name,
+      photoURL: extra?.avatar || undefined,
+    });
+  } catch {
+    // ignore (không ảnh hưởng create)
+  }
+
+  // 2) Tạo user doc Firestore (payload "safe" để không dính rules)
+  const now = new Date().toISOString();
+  const userRef = doc(db, 'users', cred.user.uid);
+
+  await setDoc(
+    userRef,
+    {
+      name: name || 'Người dùng',
+      email: email || null,
+      avatar: extra?.avatar || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
+
+      bio: extra?.bio || '',
+      specialty: extra?.specialty || '',
+      workplace: extra?.workplace || '',
+
+      createdAt: now,
+      joinedAt: now,
+      updatedAt: now,
+
+      // mặc định an toàn
+      points: typeof extra?.points === 'number' ? extra.points : 10,
+      isAnonymous: false,
+      expertStatus: 'none',
+
+      savedQuestions: [],
+      followers: [],
+      following: [],
+    },
+    { merge: true }
+  );
+
+  // 3) cleanup secondary auth session (để không “dính” user mới ở secondary)
+  try {
+    await signOut(secondaryAuth);
+  } catch {
+    // ignore
+  }
+
+  // 4) trả về object theo User type của app
+  return {
+    id: cred.user.uid,
+    name,
+    avatar: extra?.avatar || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
+    bio: extra?.bio || '',
+    specialty: extra?.specialty || '',
+    workplace: extra?.workplace || '',
+    points: typeof extra?.points === 'number' ? extra.points : 10,
+    joinedAt: now,
+    isGuest: false,
+    isAdmin: false,
+    isExpert: false,
+    expertStatus: 'none',
+    savedQuestions: [],
+    followers: [],
+    following: [],
+  } as User;
 };
