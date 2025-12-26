@@ -151,7 +151,36 @@ export const deleteUser = async (userId: string) => {
     throw error;
   }
 };
+export const searchUsersForAdmin = async (keyword: string, maxResults: number = 12): Promise<User[]> => {
+  if (!db) return [];
+  const k = (keyword || '').trim().toLowerCase();
+  if (!k) return [];
 
+  try {
+    // ✅ Cách đơn giản & chắc chạy: lấy 200 user gần nhất (có thể tăng nếu bạn muốn)
+    const snap = await getDocs(query(collection(db, "users"), limit(200)));
+    const users = snap.docs.map((d) => ({ id: d.id, ...d.data() } as User));
+
+    const filtered = users.filter((u: any) => {
+      const name = (u?.name || '').toLowerCase();
+      const email = (u?.email || '').toLowerCase();
+      const username = (u?.username || '').toLowerCase();
+      return name.includes(k) || email.includes(k) || username.includes(k) || (u?.id || '').includes(k);
+    });
+
+    // ưu tiên user có email/name lên đầu
+    filtered.sort((a: any, b: any) => {
+      const sa = ((a?.email ? 1 : 0) + (a?.name ? 1 : 0));
+      const sb = ((b?.email ? 1 : 0) + (b?.name ? 1 : 0));
+      return sb - sa;
+    });
+
+    return filtered.slice(0, maxResults);
+  } catch (error) {
+    console.error("Error searchUsersForAdmin:", error);
+    return [];
+  }
+};
 /* ============================================================
    EXPERT APPLICATIONS
    ============================================================ */
