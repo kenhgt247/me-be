@@ -1,70 +1,90 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import * as admin from 'firebase-admin';
 
-// 1. Khởi tạo Firebase Admin (Singleton)
-if (!admin.apps.length) {
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY
-    ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
-    : undefined;
+// Hàm init an toàn
+function initAdmin() {
+  if (admin.apps.length) return;
 
-  if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !privateKey) {
-    console.error("❌ Thiếu biến môi trường FIREBASE_ADMIN SDK");
-  } else {
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: privateKey,
-      }),
-    });
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
+
+  if (!projectId || !clientEmail || !privateKeyRaw) {
+    throw new Error("❌ Thiếu biến môi trường: Kiểm tra file .env.local");
   }
+
+  // Sửa lỗi xuống dòng trong Private Key
+  const privateKey = privateKeyRaw.replace(/\\n/g, '\n');
+
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId,
+      clientEmail,
+      privateKey,
+    }),
+  });
+  console.log("✅ Firebase Admin Initialized successfully");
 }
 
-const db = admin.firestore();
-const auth = admin.auth();
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Chỉ chấp nhận POST
+  // 1. Chỉ cho phép POST
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method not allowed' });
   }
 
   try {
-    // 0. Kiểm tra Header và Body cơ bản
-    if (!req.body) {
-      return res.status(400).json({ message: "Request body is missing. Check Content-Type header." });
+    // 2. Init Admin SDK
+    try {
+      initAdmin();
+    } catch (e: any) {
+      console.error("🔥 Init Error:", e.message);
+      return res.status(500).json({ message: "Server Config Error: " + e.message });
     }
 
-    // --- BƯỚC 1: XÁC THỰC QUYỀN ADMIN ---
+    const db = admin.firestore();
+    const auth = admin.auth();
+
+    // 3. Log để debug dữ liệu nhận được
+    console.log("📥 API Received Body:", req.body);
+    console.log("🔑 Auth Header:", req.headers.authorization ? "Present" : "Missing");
+
+    // Check Body
+    if (!req.body) {
+      return res.status(400).json({ message: "Lỗi: Không nhận được dữ liệu (Body is empty). Frontend chưa gửi Content-Type?" });
+    }
+
+    const { email, password, name } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Thiếu email hoặc mật khẩu.' });
+    }
+
+    // 4. Verify Admin Token
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ message: 'Missing Authorization header' });
+      return res.status(401).json({ message: 'Chưa đăng nhập (Thiếu Token)' });
     }
 
     const token = authHeader.split('Bearer ')[1];
-    
-    // Verify token
-    const decodedToken = await auth.verifyIdToken(token);
-    const requesterUid = decodedToken.uid;
+    let decodedToken;
+    try {
+      decodedToken = await auth.verifyIdToken(token);
+    } catch (e) {
+      return res.status(401).json({ message: 'Token không hợp lệ hoặc đã hết hạn.' });
+    }
 
-    // Kiểm tra trong DB xem người gọi có phải là Admin thật không
-    const adminDoc = await db.collection('users').doc(requesterUid).get();
+    // 5. Check quyền Admin trong Firestore
+    const adminDoc = await db.collection('users').doc(decodedToken.uid).get();
     if (!adminDoc.exists || !adminDoc.data()?.isAdmin) {
-      return res.status(403).json({ message: 'Forbidden: Bạn không có quyền Admin' });
+      return res.status(403).json({ message: 'Bạn không có quyền Admin.' });
     }
 
-    // --- BƯỚC 2: VALIDATE DỮ LIỆU ---
-    // Sử dụng fallback || {} đề phòng req.body bị null (dù đã check ở trên)
-    const { email, password, name } = req.body || {};
+    // 6. Xử lý dữ liệu đầu vào
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanName = name ? String(name).trim() : 'Thành viên mới';
 
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Vui lòng nhập Email và Mật khẩu' });
-    }
-
-    const cleanEmail = email.toString().trim().toLowerCase();
-    const cleanName = name ? name.toString().trim() : 'Thành viên mới';
-
-    // --- BƯỚC 3: TẠO USER TRONG AUTHENTICATION ---
+    // 7. Tạo User bên Auth
+    console.log("⚙️ Creating Auth User:", cleanEmail);
     const userRecord = await auth.createUser({
       email: cleanEmail,
       password: password,
@@ -72,8 +92,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       photoURL: 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
     });
 
-    // --- BƯỚC 4: TẠO USER DOCUMENT TRONG FIRESTORE (Quan trọng) ---
-    // Dùng Admin SDK để ghi đè mọi Rules
+    // 8. Tạo User bên Firestore (Bypass Rules)
+    console.log("💾 Saving to Firestore:", userRecord.uid);
     const now = new Date().toISOString();
     
     await db.collection('users').doc(userRecord.uid).set({
@@ -82,10 +102,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       email: cleanEmail,
       avatar: 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
       
-      isAdmin: false,       // Mặc định tạo ra là user thường
+      isAdmin: false,
       isExpert: false,
       expertStatus: 'none',
-      points: 10,           // Tặng 10 điểm khởi tạo
+      points: 10,
       
       createdAt: now,
       joinedAt: now,
@@ -96,21 +116,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       savedQuestions: [],
       followers: [],
       following: [],
-      
       bio: '',
       specialty: '',
       workplace: ''
     });
 
-    return res.status(200).json({ ok: true, uid: userRecord.uid, message: 'Tạo thành công!' });
+    console.log("✅ Success!");
+    return res.status(200).json({ ok: true, uid: userRecord.uid });
 
   } catch (error: any) {
-    console.error('API Error:', error);
+    console.error('❌ API CRITICAL ERROR:', error);
     
     if (error.code === 'auth/email-already-exists') {
-      return res.status(400).json({ message: 'Email này đã được sử dụng.' });
+      return res.status(400).json({ message: 'Email này đã tồn tại.' });
     }
     
-    return res.status(500).json({ message: error.message || 'Lỗi Server Internal' });
+    return res.status(500).json({ message: error.message || 'Lỗi Server nội bộ' });
   }
 }
