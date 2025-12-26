@@ -334,3 +334,82 @@ export const resolveReport = async (reportId: string, action: "resolved" | "dism
     throw error;
   }
 };
+/* ============================================================
+   EXPERT MANAGEMENT ADD-ONS (Sửa lỗi Import)
+   ============================================================ */
+
+// Xoá hồ sơ ứng tuyển
+export const deleteExpertApplication = async (appId: string) => {
+  if (!db) return;
+  try {
+    await deleteDoc(doc(db, "expert_applications", appId));
+  } catch (error) {
+    console.error("Error deleting expert application:", error);
+    throw error;
+  }
+};
+
+// Gỡ quyền chuyên gia
+export const revokeExpertByAdmin = async (payload: {
+  userId: string;
+  appId?: string;
+  reason?: string;
+}) => {
+  if (!db) return;
+  const { userId, appId, reason } = payload;
+  try {
+    const batch = writeBatch(db);
+    const now = new Date().toISOString();
+
+    batch.update(doc(db, "users", userId), {
+      isExpert: false,
+      expertStatus: "rejected",
+      specialty: "",
+      expertApprovedAt: null,
+      expertRejectedAt: now,
+      expertRejectionReason: reason || "Admin gỡ quyền chuyên gia",
+      updatedAt: now,
+    });
+
+    if (appId) {
+      batch.update(doc(db, "expert_applications", appId), {
+        status: "rejected",
+        rejectionReason: reason || "Admin gỡ quyền chuyên gia",
+        reviewedAt: now,
+      });
+    }
+    await batch.commit();
+  } catch (error) {
+    console.error("Error revokeExpertByAdmin:", error);
+    throw error;
+  }
+};
+
+// Cập nhật chuyên môn từ hồ sơ
+export const updateExpertSpecialtyFromApp = async (payload: {
+  appId: string;
+  userId: string;
+  specialty: string;
+}) => {
+  if (!db) return;
+  const { appId, userId, specialty } = payload;
+  try {
+    const batch = writeBatch(db);
+    const now = new Date().toISOString();
+
+    batch.update(doc(db, "expert_applications", appId), {
+      approvedSpecialty: specialty,
+      updatedAt: now,
+    });
+
+    batch.update(doc(db, "users", userId), {
+      specialty,
+      updatedAt: now,
+    });
+
+    await batch.commit();
+  } catch (error) {
+    console.error("Error updateExpertSpecialtyFromApp:", error);
+    throw error;
+  }
+};
