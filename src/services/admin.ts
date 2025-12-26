@@ -67,16 +67,25 @@ export const fetchUsersAdminPaginated = async (
   pageSize: number = 20
 ) => {
   if (!db) return { users: [], lastDoc: null, hasMore: false };
+  
   try {
-    // THAY ĐỔI: Không dùng orderBy mặc định để đảm bảo hiện cả user cũ thiếu trường
+    // 1. Tạo query cơ bản (Bỏ orderBy để không bị lọc mất user cũ thiếu field)
     let q = query(collection(db, "users"), limit(pageSize));
     
-    if (lastVisible) q = query(q, startAfter(lastVisible));
+    // 2. Nếu có phân trang, thêm startAfter
+    if (lastVisible) {
+      q = query(q, startAfter(lastVisible));
+    }
 
     const snapshot = await getDocs(q);
-    const users = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as User));
+    
+    // 3. Map dữ liệu
+    const users = snapshot.docs.map((d) => ({ 
+      id: d.id, 
+      ...d.data() 
+    } as User));
 
-    // Sắp xếp thủ công ở Client để đảm bảo tính đồng nhất
+    // 4. Sắp xếp thủ công ở Client để đảm bảo tính đồng nhất giữa user cũ và mới
     users.sort((a: any, b: any) => {
       const dateA = new Date(a.joinedAt || a.createdAt || a.created_at || 0).getTime();
       const dateB = new Date(b.joinedAt || b.createdAt || b.created_at || 0).getTime();
