@@ -1,5 +1,5 @@
 import * as firebaseAuth from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebaseConfig';
 import { User } from '../types';
 
@@ -16,7 +16,7 @@ const mapUser = (fbUser: firebaseAuth.User, dbUser?: any): User => {
     isAdmin: dbUser?.isAdmin || false,
     bio: dbUser?.bio || '',
     points: dbUser?.points || 0,
-    joinedAt: dbUser?.joinedAt || new Date().toISOString(),
+    joinedAt: dbUser?.joinedAt || dbUser?.createdAt || new Date().toISOString(),
     specialty: dbUser?.specialty,
     workplace: dbUser?.workplace,
     username: dbUser?.username || null,
@@ -29,102 +29,88 @@ const mapUser = (fbUser: firebaseAuth.User, dbUser?: any): User => {
 };
 
 /* =========================
-   HÀM GHI DỮ LIỆU USER (QUAN TRỌNG)
+   HÀM GHI DỮ LIỆU CỐT LÕI (FORCE WRITE)
 ========================= */
-const createUserDocument = async (user: firebaseAuth.User, extraData: any = {}) => {
-  if (!db) return;
+const forceCreateUserDoc = async (user: firebaseAuth.User, extraName?: string) => {
   const userRef = doc(db, 'users', user.uid);
-  
+  const now = new Date().toISOString();
+
+  // Kiểm tra xem đã có chưa để tránh ghi đè data cũ
+  const snap = await getDoc(userRef);
+  if (snap.exists()) {
+    await updateDoc(userRef, { lastActiveAt: now });
+    return;
+  }
+
+  // Dữ liệu chuẩn (Đơn giản hóa để tránh Rules chặn)
+  const userData = {
+    uid: user.uid, // Lưu thêm uid vào trong doc để dễ query
+    email: user.email,
+    name: extraName || user.displayName || 'Người dùng',
+    avatar: user.photoURL || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
+    createdAt: now,
+    joinedAt: now,
+    lastActiveAt: now,
+    updatedAt: now,
+    
+    isAdmin: false,
+    isExpert: false,
+    expertStatus: 'none',
+    points: 10,
+    isAnonymous: user.isAnonymous,
+    
+    // Các mảng khởi tạo rỗng
+    savedQuestions: [],
+    followers: [],
+    following: []
+  };
+
+  console.log("🔥 BẮT ĐẦU GHI FIRESTORE CHO:", user.email);
   try {
-    // Kiểm tra xem đã có chưa
-    const snap = await getDoc(userRef);
-    if (snap.exists()) {
-      // Nếu có rồi thì thôi, chỉ update lastActive
-      await setDoc(userRef, { lastActiveAt: new Date().toISOString() }, { merge: true });
-      return;
-    }
-
-    // Chuẩn bị data (Loại bỏ undefined)
-    const now = new Date().toISOString();
-    const userData = {
-      uid: user.uid,
-      email: user.email || '',
-      name: extraData.name || user.displayName || 'Người dùng',
-      avatar: extraData.avatar || user.photoURL || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
-      createdAt: now,
-      joinedAt: now,
-      lastActiveAt: now,
-      updatedAt: now,
-      isAdmin: false,
-      isExpert: false,
-      expertStatus: 'none',
-      points: 10,
-      isAnonymous: user.isAnonymous,
-      savedQuestions: [],
-      followers: [],
-      following: []
-    };
-
-    console.log("🔥 Đang ghi Firestore cho:", user.email);
     await setDoc(userRef, userData);
-    console.log("✅ Ghi Firestore THÀNH CÔNG!");
-
-  } catch (error) {
+    console.log("✅ GHI FIRESTORE THÀNH CÔNG!");
+  } catch (error: any) {
     console.error("❌ LỖI GHI FIRESTORE:", error);
-    // Không ném lỗi để app không crash, nhưng đã log ra console
+    alert("LỖI GHI DỮ LIỆU: " + error.message); // Hiện thông báo cho bạn thấy
+    throw error;
   }
 };
 
 /* =========================
-   CÁC HÀM AUTH
+   AUTH FUNCTIONS
 ========================= */
 
-// 1. Đăng ký Email
+// 1. Đăng ký (Sửa mạnh tay)
 export const registerWithEmail = async (email: string, pass: string, name: string): Promise<User> => {
   // Tạo Auth
   const result = await firebaseAuth.createUserWithEmailAndPassword(auth, email, pass);
   
-  // Cập nhật tên
+  // Cập nhật Profile Auth
   await firebaseAuth.updateProfile(result.user, { displayName: name });
   
-  // Reload để lấy token mới nhất (tránh lỗi permission)
+  // Reload Token
   await result.user.reload();
 
-  // Ghi Data
-  await createUserDocument(result.user, { name, email });
+  // Ghi Data (Gọi hàm force ở trên)
+  await forceCreateUserDoc(result.user, name);
 
-  // Trả về kết quả
+  // Trả về data mới nhất
   const snap = await getDoc(doc(db, 'users', result.user.uid));
   return mapUser(result.user, snap.data());
 };
 
-// 2. Đăng nhập Google
+// 2. Login Google
 export const loginWithGoogle = async (): Promise<User> => {
   const result = await firebaseAuth.signInWithPopup(auth, googleProvider);
-  
-  let avatarUrl = result.user.photoURL || '';
-  if (avatarUrl.includes('=s96-c')) avatarUrl = avatarUrl.replace('=s96-c', '=s400-c');
-
-  await createUserDocument(result.user, { avatar: avatarUrl });
-  
+  await forceCreateUserDoc(result.user);
   const snap = await getDoc(doc(db, 'users', result.user.uid));
   return mapUser(result.user, snap.data());
 };
 
-// 3. Đăng nhập Email
+// 3. Login Email
 export const loginWithEmail = async (email: string, pass: string): Promise<User> => {
   const result = await firebaseAuth.signInWithEmailAndPassword(auth, email, pass);
-  // Login thì không cần tạo mới, hàm này tự check if exists
-  await createUserDocument(result.user);
-  
-  const snap = await getDoc(doc(db, 'users', result.user.uid));
-  return mapUser(result.user, snap.data());
-};
-
-// 4. Đăng nhập Ẩn danh
-export const loginAnonymously = async (): Promise<User> => {
-  const result = await firebaseAuth.signInAnonymously(auth);
-  await createUserDocument(result.user, { isAnonymous: true, points: 0 });
+  await forceCreateUserDoc(result.user); // Đảm bảo login cũng check/tạo doc nếu thiếu
   const snap = await getDoc(doc(db, 'users', result.user.uid));
   return mapUser(result.user, snap.data());
 };
@@ -133,7 +119,7 @@ export const logoutUser = async () => {
   await firebaseAuth.signOut(auth);
 };
 
-// 5. Listener (Chỉ đọc, không ghi để tránh loop)
+// 4. Listener (Chỉ đọc)
 export const subscribeToAuthChanges = (callback: (user: User | null) => void) => {
   if (!auth) return () => {};
   let unsub: (() => void) | null = null;
@@ -146,20 +132,19 @@ export const subscribeToAuthChanges = (callback: (user: User | null) => void) =>
       return;
     }
 
-    // Lắng nghe thay đổi data user
     const ref = doc(db, 'users', fbUser.uid);
     unsub = onSnapshot(ref, 
       (snap) => {
         if (snap.exists()) {
           callback(mapUser(fbUser, snap.data()));
         } else {
-          // Fallback: Nếu data chưa kịp tạo, hiển thị thông tin từ Auth
+          // Nếu chưa có data, fallback về Auth info
           callback(mapUser(fbUser));
         }
       },
       (err) => {
-        // Bỏ qua lỗi permission khi logout
         if (err.code !== 'permission-denied') console.error(err);
+        // Không callback(null) để tránh UI bị flash logout
       }
     );
   });
