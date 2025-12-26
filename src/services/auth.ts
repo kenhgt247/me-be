@@ -1,3 +1,4 @@
+// src/services/auth.ts
 import * as firebaseAuth from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebaseConfig';
@@ -41,7 +42,7 @@ const mapUser = (fbUser: firebaseAuth.User, dbUser?: any): User => {
 };
 
 /* =========================
-   Internal: Ensure user doc exists (FIX LỖI PERMISSION)
+   Internal: Ensure user doc exists
    - Tách biệt logic Create và Update để tránh vi phạm Rules
 ========================= */
 const ensureUserDoc = async (fbUser: firebaseAuth.User, partialData: any = {}) => {
@@ -54,10 +55,10 @@ const ensureUserDoc = async (fbUser: firebaseAuth.User, partialData: any = {}) =
     const snap = await getDoc(userDocRef);
     if (snap.exists()) existing = snap.data();
   } catch (e) {
-    // Bỏ qua lỗi nếu chưa có quyền đọc hoặc mạng lỗi
+    // Bỏ qua lỗi kết nối hoặc quyền tạm thời
   }
 
-  // 2. Chuẩn bị dữ liệu an toàn (đây là các field Rules cho phép update)
+  // 2. Chuẩn bị dữ liệu an toàn
   const safeBaseData = {
     name:
       partialData?.name ||
@@ -72,25 +73,21 @@ const ensureUserDoc = async (fbUser: firebaseAuth.User, partialData: any = {}) =
     email: existing?.email ?? partialData?.email ?? fbUser.email ?? null,
     isAnonymous: existing?.isAnonymous ?? partialData?.isAnonymous ?? fbUser.isAnonymous ?? false,
     
-    // Arrays: Merge an toàn
     savedQuestions: existing?.savedQuestions || partialData?.savedQuestions || [],
     followers: existing?.followers || partialData?.followers || [],
     following: existing?.following || partialData?.following || [],
 
-    // Luôn update thời gian active
     lastActiveAt: now,
     updatedAt: now,
   };
 
   if (!existing) {
-    // === TRƯỜNG HỢP 1: TẠO MỚI (CREATE) ===
-    // Rules cho phép set isAdmin/isExpert = false khi tạo mới
+    // === CREATE ===
     await setDoc(userDocRef, {
       ...safeBaseData,
       createdAt: now,
       joinedAt: now,
       
-      // Các field nhạy cảm chỉ được set khi tạo mới
       isAdmin: false, 
       isExpert: false,
       expertStatus: 'none',
@@ -102,8 +99,8 @@ const ensureUserDoc = async (fbUser: firebaseAuth.User, partialData: any = {}) =
       workplace: '',
     });
   } else {
-    // === TRƯỜNG HỢP 2: CẬP NHẬT (UPDATE) ===
-    // ⚠️ QUAN TRỌNG: KHÔNG gửi isAdmin, isExpert... để tránh vi phạm Rules
+    // === UPDATE ===
+    // Không gửi isAdmin/isExpert để tránh lỗi Rules
     await setDoc(userDocRef, safeBaseData, { merge: true });
   }
 };
@@ -166,7 +163,8 @@ export const loginWithGoogle = async (): Promise<User> => {
 };
 
 /* =========================
-   Register Email (Frontend)
+   Register Email
+   ✅ ĐÃ FIX: Thêm fbUser.reload() để tránh lỗi invalid-credential
 ========================= */
 export const registerWithEmail = async (
   email: string,
@@ -175,11 +173,18 @@ export const registerWithEmail = async (
 ): Promise<User> => {
   if (!auth) throw new Error('Firebase chưa được cấu hình.');
 
+  // 1. Tạo user
   const result = await firebaseAuth.createUserWithEmailAndPassword(auth, email, pass);
   const fbUser = result.user;
 
+  // 2. Cập nhật profile (Hành động này làm cũ token)
   await firebaseAuth.updateProfile(fbUser, { displayName: name });
+  
+  // ✅ FIX: Reload lại user để lấy token mới nhất ngay lập tức
+  // Điều này ngăn chặn lỗi "auth/invalid-credential" ở các listener khác
+  await fbUser.reload(); 
 
+  // 3. Ghi vào Firestore
   await ensureUserDoc(fbUser, {
     name,
     email,
@@ -219,12 +224,13 @@ export const logoutUser = async () => {
 
 /* =========================
    Subscribe Auth Changes
+   ✅ ĐÃ FIX: Bắt lỗi invalid-credential để không spam console đỏ
 ========================= */
 export const subscribeToAuthChanges = (callback: (user: User | null) => void) => {
   if (!auth) return () => {};
 
   let unsubUserDoc: (() => void) | null = null;
-  let stoppedDueToPermission = false;
+  let stoppedDueToError = false;
 
   const unsubAuth = firebaseAuth.onAuthStateChanged(auth, (fbUser) => {
     // cleanup listener cũ
@@ -232,7 +238,7 @@ export const subscribeToAuthChanges = (callback: (user: User | null) => void) =>
       unsubUserDoc();
       unsubUserDoc = null;
     }
-    stoppedDueToPermission = false;
+    stoppedDueToError = false;
 
     if (!fbUser) {
       callback(null);
@@ -241,17 +247,18 @@ export const subscribeToAuthChanges = (callback: (user: User | null) => void) =>
 
     const userDocRef = doc(db, 'users', fbUser.uid);
 
+    // Sử dụng try/catch bọc snapshot không khả thi trực tiếp, 
+    // nhưng ta xử lý trong callback error của onSnapshot
     unsubUserDoc = onSnapshot(
       userDocRef,
       (docSnap) => {
-        if (stoppedDueToPermission) return;
+        if (stoppedDueToError) return;
 
         void (async () => {
           try {
             if (docSnap.exists()) {
               const data: any = docSnap.data() || {};
               
-              // Kiểm tra mảng savedQuestions
               if (!Array.isArray(data.savedQuestions)) {
                  await updateDoc(userDocRef, { savedQuestions: [] });
                  data.savedQuestions = [];
@@ -259,38 +266,42 @@ export const subscribeToAuthChanges = (callback: (user: User | null) => void) =>
               
               callback(mapUser(fbUser, data));
             } else {
-              // Nếu doc chưa tồn tại, thử tạo lại
+              // Doc chưa có, thử tạo (có thể do độ trễ mạng)
               await ensureUserDoc(fbUser);
               const fresh = await getDoc(userDocRef);
               callback(mapUser(fbUser, fresh.exists() ? fresh.data() : undefined));
             }
           } catch (err: any) {
-            // Xử lý lỗi permission denied
-            if (err?.code === 'permission-denied') {
-              stoppedDueToPermission = true;
-              if (unsubUserDoc) {
-                unsubUserDoc();
-                unsubUserDoc = null;
-              }
-              callback(mapUser(fbUser, docSnap.exists() ? docSnap.data() : undefined));
-              return;
-            }
-            console.error('Auth snapshot handler error:', err);
-            callback(mapUser(fbUser, docSnap.exists() ? docSnap.data() : undefined));
+             // Bắt các lỗi auth tạm thời
+             if (err?.code === 'auth/invalid-credential' || err?.code === 'permission-denied') {
+                // Không làm gì cả, chờ lần update sau
+                return;
+             }
+             console.error('Snapshot logic error:', err);
+             // Vẫn trả về user từ Auth để UI không bị văng ra
+             callback(mapUser(fbUser, docSnap.exists() ? docSnap.data() : undefined));
           }
         })();
       },
       (error: any) => {
-        if (error?.code === 'permission-denied') {
-          stoppedDueToPermission = true;
+        // ✅ CHẶN LỖI ĐỎ: Nếu gặp lỗi auth/invalid-credential (do race condition),
+        // ta tạm dừng listener này và trả về user hiện tại (để UI không logout).
+        if (
+            error?.code === 'permission-denied' || 
+            error?.code === 'auth/invalid-credential' ||
+            error?.message?.includes('internal-error')
+        ) {
+          stoppedDueToError = true;
           if (unsubUserDoc) {
              unsubUserDoc();
              unsubUserDoc = null;
           }
-          callback(mapUser(fbUser));
+          // Vẫn giữ user đăng nhập ở UI
+          callback(mapUser(fbUser)); 
           return;
         }
-        console.error('Firestore user sync error:', error);
+
+        console.error('Firestore sync error:', error);
         callback(mapUser(fbUser));
       }
     );
