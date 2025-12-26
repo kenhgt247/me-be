@@ -30,7 +30,6 @@ const mapUser = (fbUser: firebaseAuth.User, dbUser?: any): User => {
 
 /* =========================
    Ensure User Doc (Safe)
-   - Tách biệt logic Create và Update để tránh vi phạm Rules
 ========================= */
 const ensureUserDoc = async (fbUser: firebaseAuth.User, partialData: any = {}) => {
   const userDocRef = doc(db, 'users', fbUser.uid);
@@ -40,12 +39,9 @@ const ensureUserDoc = async (fbUser: firebaseAuth.User, partialData: any = {}) =
   try {
     const snap = await getDoc(userDocRef);
     if (snap.exists()) existing = snap.data();
-  } catch (e) {
-    // Bỏ qua lỗi kết nối hoặc quyền tạm thời, giả định chưa có doc
-  }
+  } catch (e) { /* Ignore */ }
 
-  // Chuẩn bị dữ liệu an toàn (đây là các field Rules cho phép update)
-  const safeBaseData = {
+  const baseData = {
     name: partialData?.name || existing?.name || fbUser.displayName || 'Người dùng',
     avatar: partialData?.avatar || existing?.avatar || fbUser.photoURL || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
     email: existing?.email ?? partialData?.email ?? fbUser.email ?? null,
@@ -57,22 +53,20 @@ const ensureUserDoc = async (fbUser: firebaseAuth.User, partialData: any = {}) =
   };
 
   if (!existing) {
-    // === CREATE ===
-    // Rules cho phép set isAdmin/isExpert = false khi tạo mới
+    // CREATE: Set các field mặc định
     await setDoc(userDocRef, {
-      ...safeBaseData,
+      ...baseData,
       createdAt: now,
       joinedAt: now,
       isAdmin: false, 
       isExpert: false,
       expertStatus: 'none',
-      points: partialData?.points ?? 10,
+      points: 10,
       username: null, bio: '', specialty: '', workplace: '',
     });
   } else {
-    // === UPDATE ===
-    // ⚠️ QUAN TRỌNG: KHÔNG gửi isAdmin, isExpert để tránh lỗi Rules chặn
-    await setDoc(userDocRef, safeBaseData, { merge: true });
+    // UPDATE: Không set isAdmin/isExpert
+    await setDoc(userDocRef, baseData, { merge: true });
   }
 };
 
@@ -107,97 +101,58 @@ export const logoutUser = async () => {
   await firebaseAuth.signOut(auth);
 };
 
-// ✅ FIX LỖI "invalid-credential" KHI ĐĂNG KÝ
+// ✅ FIX CHÍNH: Register
 export const registerWithEmail = async (email: string, pass: string, name: string): Promise<User> => {
+  // 1. Tạo Auth
   const result = await firebaseAuth.createUserWithEmailAndPassword(auth, email, pass);
   
-  // Update profile sẽ làm token cũ bị vô hiệu hóa
+  // 2. Update Profile
   await firebaseAuth.updateProfile(result.user, { displayName: name });
   
-  // ⚡ QUAN TRỌNG: Làm mới user ngay lập tức để lấy token hợp lệ
+  // 3. Reload Token (Quan trọng để không bị lỗi permission)
   await result.user.reload(); 
 
+  // 4. Tạo Doc (Firestore Rules phải cho phép create nếu là owner)
   await ensureUserDoc(result.user, { name, email, points: 10 });
+  
   const snap = await getDoc(doc(db, 'users', result.user.uid));
   return mapUser(result.user, snap.data());
 };
 
-// ✅ FIX LỖI SPAM CONSOLE ĐỎ
 export const subscribeToAuthChanges = (callback: (user: User | null) => void) => {
   if (!auth) return () => {};
   let unsubUserDoc: (() => void) | null = null;
-  let stoppedDueToError = false;
+  let stopped = false;
 
   const unsubAuth = firebaseAuth.onAuthStateChanged(auth, (fbUser) => {
-    // cleanup listener cũ
-    if (unsubUserDoc) {
-      unsubUserDoc();
-      unsubUserDoc = null;
-    }
-    stoppedDueToError = false;
+    if (unsubUserDoc) { unsubUserDoc(); unsubUserDoc = null; }
+    stopped = false;
 
     if (!fbUser) {
       callback(null);
       return;
     }
 
-    const userDocRef = doc(db, 'users', fbUser.uid);
-
-    // Sử dụng try/catch bọc snapshot không khả thi trực tiếp, 
-    // nhưng ta xử lý trong callback error của onSnapshot
-    unsubUserDoc = onSnapshot(
-      userDocRef,
+    const userRef = doc(db, 'users', fbUser.uid);
+    unsubUserDoc = onSnapshot(userRef, 
       (docSnap) => {
-        if (stoppedDueToError) return;
-
-        void (async () => {
-          try {
-            if (docSnap.exists()) {
-              const data: any = docSnap.data() || {};
-              
-              // Kiểm tra mảng savedQuestions để tránh lỗi UI
-              if (!Array.isArray(data.savedQuestions)) {
-                 await updateDoc(userDocRef, { savedQuestions: [] });
-                 data.savedQuestions = [];
-              }
-              
-              callback(mapUser(fbUser, data));
-            } else {
-              // Doc chưa có (có thể do độ trễ mạng hoặc vừa tạo), thử tạo lại
-              await ensureUserDoc(fbUser);
-              const fresh = await getDoc(userDocRef);
-              callback(mapUser(fbUser, fresh.exists() ? fresh.data() : undefined));
-            }
-          } catch (err: any) {
-             // Bắt các lỗi auth tạm thời
-             if (err?.code === 'auth/invalid-credential' || err?.code === 'permission-denied') {
-                return;
-             }
-             console.error('Snapshot logic error:', err);
-             // Vẫn trả về user từ Auth để UI không bị văng ra
-             callback(mapUser(fbUser, docSnap.exists() ? docSnap.data() : undefined));
-          }
-        })();
+        if (stopped) return;
+        if (docSnap.exists()) {
+           callback(mapUser(fbUser, docSnap.data()));
+        } else {
+           // Fallback nếu doc chưa tạo kịp
+           callback(mapUser(fbUser));
+        }
       },
-      (error: any) => {
-        // ✅ CHẶN LỖI ĐỎ: Nếu gặp lỗi auth/invalid-credential hoặc permission denied
-        if (
-            error?.code === 'permission-denied' || 
-            error?.code === 'auth/invalid-credential' ||
-            error?.message?.includes('internal-error')
-        ) {
-          stoppedDueToError = true;
-          if (unsubUserDoc) {
-             unsubUserDoc();
-             unsubUserDoc = null;
-          }
-          // Vẫn giữ user đăng nhập ở UI bằng thông tin từ Auth (dù chưa có Data Firestore)
+      (error) => {
+        // Chặn lỗi đỏ console
+        if (error.code === 'permission-denied' || error.code === 'auth/invalid-credential') {
+          stopped = true;
+          if (unsubUserDoc) { unsubUserDoc(); unsubUserDoc = null; }
           callback(mapUser(fbUser)); 
           return;
         }
-
-        console.error('Firestore sync error:', error);
-        callback(mapUser(fbUser));
+        console.error("Auth Listener Error:", error);
       }
     );
   });
