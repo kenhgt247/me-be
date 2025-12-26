@@ -15,16 +15,30 @@ root.render(
   </React.StrictMode>
 );
 
-// --- ĐOẠN MÃ THÊM VÀO ĐỂ FIX LỖI PWA ---
+// register service worker
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    // Đảm bảo file service-worker.js nằm trong thư mục public/
-    navigator.serviceWorker.register('/service-worker.js')
-      .then((reg) => {
-        console.log('✅ Asking.vn: Service Worker đã đăng ký thành công!', reg.scope);
-      })
-      .catch((err) => {
-        console.error('❌ Asking.vn: Đăng ký Service Worker thất bại:', err);
+  window.addEventListener('load', async () => {
+    try {
+      const reg = await navigator.serviceWorker.register('/service-worker.js');
+      console.log('✅ Asking.vn: SW registered:', reg.scope);
+
+      // chủ động check update
+      reg.update();
+
+      // nếu có SW mới -> reload 1 lần để tránh dùng cache/chunk cũ
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        if (!nw) return;
+
+        nw.addEventListener('statechange', () => {
+          if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+            window.location.reload();
+          }
+        });
       });
+    } catch (err) {
+      console.error('❌ Asking.vn: SW register failed:', err);
+    }
   });
 }
+
