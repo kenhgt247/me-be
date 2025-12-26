@@ -354,7 +354,10 @@ export const Ask: React.FC<AskProps> = ({
     const arr = raw ? JSON.parse(raw) : [];
     return Array.isArray(arr) ? arr.filter((c: string) => allCategories.includes(c)) : [];
   }, [allCategories]);
-
+// CHÈN VÀO ĐÂY NÈ:
+  const canTogglePreview = useMemo(() => {
+    return title.trim().length > 0 || content.trim().length > 0 || attachments.length > 0;
+  }, [title, content, attachments]);
   return (
     <div className="min-h-screen bg-[#F7F7F5] dark:bg-dark-bg flex flex-col animate-fade-in relative transition-colors duration-300">
       <ToastContainer toasts={toasts} />
