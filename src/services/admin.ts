@@ -1,441 +1,423 @@
-// src/services/auth.ts
-import * as firebaseAuth from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
-import { auth, googleProvider, db } from '../firebaseConfig';
-import { User } from '../types';
+// src/services/admin.ts
+import {
+  collection,
+  getDocs,
+  doc,
+  updateDoc,
+  query,
+  orderBy,
+  where,
+  deleteDoc,
+  getDoc,
+  writeBatch,
+  addDoc,
+  limit,
+  startAfter,
+  QueryDocumentSnapshot,
+  DocumentData,
+  getCountFromServer,
+} from 'firebase/firestore';
 
-/* =========================
-   Helper: Map Firebase User + Firestore Data to App User Type
-========================= */
-const mapUser = (fbUser: firebaseAuth.User, dbUser?: any): User => {
-  return {
-    id: fbUser.uid,
-    name:
-      dbUser?.name ||
-      fbUser.displayName ||
-      (fbUser.isAnonymous ? 'Khách ẩn danh' : 'Người dùng'),
-    avatar:
-      dbUser?.avatar ||
-      fbUser.photoURL ||
-      'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
+import { db } from '../firebaseConfig';
+import { User, Question, ExpertApplication, Report, Category, toSlug, CATEGORIES } from '../types';
 
-    isExpert: dbUser?.isExpert || false,
-    expertStatus: dbUser?.expertStatus || 'none',
-    isAdmin: dbUser?.isAdmin || false,
-    bio: dbUser?.bio || '',
-    points: dbUser?.points || 0,
+/* ============================================================
+   SYSTEM STATS (Dashboard)
+   ============================================================ */
+export const getSystemStats = async () => {
+  if (!db) return { totalUsers: 0, totalQuestions: 0, totalBlogs: 0, totalDocuments: 0 };
 
-    joinedAt: dbUser?.joinedAt || dbUser?.createdAt || new Date().toISOString(),
-    specialty: dbUser?.specialty,
-    workplace: dbUser?.workplace,
-    username: dbUser?.username || null,
-    coverUrl: dbUser?.coverUrl || null,
-
-    followers: Array.isArray(dbUser?.followers) ? dbUser.followers : [],
-    following: Array.isArray(dbUser?.following) ? dbUser.following : [],
-
-    // ✅ cực quan trọng để UI nút Lưu + đồng bộ F5
-    savedQuestions: Array.isArray(dbUser?.savedQuestions) ? dbUser.savedQuestions : [],
-
-    // ⚠️ Giữ cơ chế của bạn: đăng nhập rồi => không phải guest
-    isGuest: false,
-  } as User;
-};
-
-/* =========================
-   Internal: Ensure user doc exists (SAFE & NO-PERMISSION BUG)
-   ✅ FIX CHÍNH:
-   - ÉP token mới sau đăng nhập/đăng ký ở các flow bên dưới
-   - Payload "safe": KHÔNG set isAdmin/isExpert từ client (tránh rules chặn)
-   - merge:true để không overwrite dữ liệu cũ
-========================= */
-const ensureUserDoc = async (fbUser: firebaseAuth.User, partialData: any = {}) => {
-  const userDocRef = doc(db, 'users', fbUser.uid);
-
-  let existing: any = {};
   try {
-    const snap = await getDoc(userDocRef);
-    if (snap.exists()) existing = snap.data();
-  } catch {
-    // ignore
+    const usersCol = collection(db, 'users');
+    const questionsCol = collection(db, 'questions');
+    const blogsCol = collection(db, 'blogPosts');
+    const docsCol = collection(db, 'documents');
+
+    const [usersSnap, questionsSnap, blogsSnap, docsSnap] = await Promise.all([
+      getCountFromServer(usersCol),
+      getCountFromServer(questionsCol),
+      getCountFromServer(blogsCol),
+      getCountFromServer(docsCol),
+    ]);
+
+    return {
+      totalUsers: usersSnap.data().count,
+      totalQuestions: questionsSnap.data().count,
+      totalBlogs: blogsSnap.data().count,
+      totalDocuments: docsSnap.data().count,
+    };
+  } catch (error) {
+    console.error('Error getting stats:', error);
+    return { totalUsers: 0, totalQuestions: 0, totalBlogs: 0, totalDocuments: 0 };
   }
-
-  const now = new Date().toISOString();
-  const createdAt = existing?.createdAt || partialData?.createdAt || now;
-  const joinedAt = existing?.joinedAt || partialData?.joinedAt || createdAt;
-
-  const savedQuestions = Array.isArray(existing?.savedQuestions)
-    ? existing.savedQuestions
-    : Array.isArray(partialData?.savedQuestions)
-      ? partialData.savedQuestions
-      : [];
-
-  const followers = Array.isArray(existing?.followers)
-    ? existing.followers
-    : Array.isArray(partialData?.followers)
-      ? partialData.followers
-      : [];
-
-  const following = Array.isArray(existing?.following)
-    ? existing.following
-    : Array.isArray(partialData?.following)
-      ? partialData.following
-      : [];
-
-  // ✅ Payload an toàn: KHÔNG gửi isAdmin/isExpert từ client
-  const safePayload: any = {
-    name:
-      existing?.name ||
-      partialData?.name ||
-      fbUser.displayName ||
-      (fbUser.isAnonymous ? 'Khách ẩn danh' : 'Người dùng'),
-
-    avatar:
-      existing?.avatar ||
-      partialData?.avatar ||
-      fbUser.photoURL ||
-      'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
-
-    email: existing?.email ?? partialData?.email ?? fbUser.email ?? null,
-
-    createdAt,
-    joinedAt,
-
-    // expertStatus phục vụ UI
-    expertStatus: existing?.expertStatus ?? partialData?.expertStatus ?? 'none',
-
-    points: existing?.points ?? partialData?.points ?? (fbUser.isAnonymous ? 0 : 10),
-    isAnonymous: existing?.isAnonymous ?? partialData?.isAnonymous ?? fbUser.isAnonymous ?? false,
-
-    savedQuestions,
-    followers,
-    following,
-
-    updatedAt: now,
-  };
-
-  await setDoc(userDocRef, safePayload, { merge: true });
 };
 
-/* =========================
-   Anonymous Login
-   ✅ FIX: ép token trước khi ghi Firestore
-========================= */
-export const loginAnonymously = async (): Promise<User> => {
-  if (!auth) throw new Error('Firebase chưa được cấu hình.');
+/* ============================================================
+   USERS MANAGEMENT
+   ============================================================ */
+export const fetchUsersAdminPaginated = async (
+  lastVisible: QueryDocumentSnapshot<DocumentData> | null = null,
+  pageSize: number = 20
+) => {
+  if (!db) return { users: [], lastDoc: null, hasMore: false };
 
   try {
-    const result = await firebaseAuth.signInAnonymously(auth);
-    const fbUser = result.user;
+    let q = query(collection(db, 'users'), orderBy('joinedAt', 'desc'), limit(pageSize));
 
-    // ✅ FIX RACE TOKEN
-    await fbUser.getIdToken(true);
-
-    const userDocRef = doc(db, 'users', fbUser.uid);
-    const userDoc = await getDoc(userDocRef);
-
-    if (!userDoc.exists()) {
-      await ensureUserDoc(fbUser, {
-        name: 'Khách ẩn danh',
-        avatar: 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
-        createdAt: new Date().toISOString(),
-        joinedAt: new Date().toISOString(),
-        points: 0,
-        isAnonymous: true,
-        expertStatus: 'none',
-        savedQuestions: [],
-        followers: [],
-        following: [],
-      });
-
-      const freshSnap = await getDoc(userDocRef);
-      return mapUser(fbUser, freshSnap.exists() ? freshSnap.data() : undefined);
+    if (lastVisible) {
+      q = query(q, startAfter(lastVisible));
     }
 
-    const data: any = userDoc.data() || {};
+    const snapshot = await getDocs(q);
 
-    // đảm bảo savedQuestions tồn tại
-    if (!Array.isArray(data.savedQuestions)) {
-      await setDoc(userDocRef, { savedQuestions: [] }, { merge: true });
-      return mapUser(fbUser, { ...data, savedQuestions: [] });
+    // Fallback nếu joinedAt thiếu / index lỗi / snapshot rỗng trang đầu
+    if (snapshot.empty && !lastVisible) {
+      const fallbackSnap = await getDocs(query(collection(db, 'users'), limit(pageSize)));
+      const users = fallbackSnap.docs.map((d) => ({ id: d.id, ...d.data() } as User));
+      return {
+        users,
+        lastDoc: fallbackSnap.docs[fallbackSnap.docs.length - 1] || null,
+        hasMore: fallbackSnap.docs.length === pageSize,
+      };
     }
 
-    return mapUser(fbUser, data);
-  } catch (error: any) {
-    console.warn('Anonymous login failed:', error?.code);
-    if (
-      error?.code === 'auth/admin-restricted-operation' ||
-      error?.code === 'auth/operation-not-allowed'
-    ) {
-      throw new Error('ANONYMOUS_DISABLED');
-    }
+    const users = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as User));
+    return {
+      users,
+      lastDoc: snapshot.docs[snapshot.docs.length - 1] || null,
+      hasMore: snapshot.docs.length === pageSize,
+    };
+  } catch (error) {
+    console.error('Error fetching users:', error);
+
+    // Fallback cuối cùng: vẫn hiện user dù lỗi sort/index
+    const fallbackSnap = await getDocs(query(collection(db, 'users'), limit(pageSize)));
+    return {
+      users: fallbackSnap.docs.map((d) => ({ id: d.id, ...d.data() } as User)),
+      lastDoc: fallbackSnap.docs[fallbackSnap.docs.length - 1] || null,
+      hasMore: false,
+    };
+  }
+};
+
+export const updateUserInfo = async (
+  userId: string,
+  data: { name?: string; bio?: string; specialty?: string; workplace?: string; coverUrl?: string; avatar?: string }
+) => {
+  if (!db) return false;
+  try {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, data);
+    return true;
+  } catch (error) {
+    console.error('Error updating user info:', error);
     throw error;
   }
 };
 
-/* =========================
-   Google Login
-   ✅ FIX: ép token trước khi ghi Firestore
-========================= */
-export const loginWithGoogle = async (): Promise<User> => {
-  if (!auth) throw new Error('Firebase chưa được cấu hình.');
-
-  const result = await firebaseAuth.signInWithPopup(auth, googleProvider);
-  const fbUser = result.user;
-
-  // ✅ FIX RACE TOKEN
-  await fbUser.getIdToken(true);
-
-  const userDocRef = doc(db, 'users', fbUser.uid);
-  const userDoc = await getDoc(userDocRef);
-
-  // ✅ Ảnh Google HD
-  let avatarUrl = fbUser.photoURL || '';
-  if (avatarUrl && avatarUrl.includes('=s96-c')) {
-    avatarUrl = avatarUrl.replace('=s96-c', '=s400-c');
+export const updateUserRole = async (
+  userId: string,
+  updates: { isExpert?: boolean; isAdmin?: boolean; isBanned?: boolean; expertStatus?: string }
+) => {
+  if (!db) return;
+  try {
+    const ref = doc(db, 'users', userId);
+    await updateDoc(ref, updates);
+  } catch (error) {
+    console.error('Error updating user role:', error);
+    throw error;
   }
-
-  if (userDoc.exists()) {
-    const currentData: any = userDoc.data() || {};
-
-    // ✅ đảm bảo savedQuestions tồn tại
-    if (!Array.isArray(currentData.savedQuestions)) {
-      await setDoc(userDocRef, { savedQuestions: [] }, { merge: true });
-      currentData.savedQuestions = [];
-    }
-
-    // ✅ nếu avatar mới khác avatar cũ thì update
-    if (avatarUrl && currentData.avatar !== avatarUrl) {
-      await updateDoc(userDocRef, {
-        avatar: avatarUrl,
-        name: fbUser.displayName || currentData.name,
-        updatedAt: new Date().toISOString(),
-      });
-
-      return mapUser(fbUser, {
-        ...currentData,
-        avatar: avatarUrl,
-        name: fbUser.displayName || currentData.name,
-      });
-    }
-
-    return mapUser(fbUser, currentData);
-  }
-
-  // doc chưa tồn tại -> tạo
-  await ensureUserDoc(fbUser, {
-    name: fbUser.displayName || 'Người dùng mới',
-    email: fbUser.email,
-    avatar: avatarUrl || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
-    createdAt: new Date().toISOString(),
-    joinedAt: new Date().toISOString(),
-    points: 10,
-    isAnonymous: false,
-    expertStatus: 'none',
-    savedQuestions: [],
-    followers: [],
-    following: [],
-  });
-
-  const freshSnap = await getDoc(userDocRef);
-  return mapUser(fbUser, freshSnap.exists() ? freshSnap.data() : undefined);
 };
 
-/* =========================
-   Register Email
-   ✅ FIX: ép token mới trước khi setDoc users/{uid}
-========================= */
-export const registerWithEmail = async (
-  email: string,
-  pass: string,
-  name: string
-): Promise<User> => {
-  if (!auth) throw new Error('Firebase chưa được cấu hình.');
-
-  const result = await firebaseAuth.createUserWithEmailAndPassword(auth, email, pass);
-  const fbUser = result.user;
-
-  await firebaseAuth.updateProfile(fbUser, { displayName: name });
-
-  // ✅ FIX RACE TOKEN (quan trọng nhất)
-  await fbUser.getIdToken(true);
-
-  const userDocRef = doc(db, 'users', fbUser.uid);
-
-  await ensureUserDoc(fbUser, {
-    name,
-    email,
-    avatar: 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
-    createdAt: new Date().toISOString(),
-    joinedAt: new Date().toISOString(),
-    points: 10,
-    isAnonymous: false,
-    expertStatus: 'none',
-    savedQuestions: [],
-    followers: [],
-    following: [],
-  });
-
-  const freshSnap = await getDoc(userDocRef);
-  return mapUser(fbUser, freshSnap.exists() ? freshSnap.data() : undefined);
+export const fetchAllUsers = async (): Promise<User[]> => {
+  if (!db) return [];
+  try {
+    const snapshot = await getDocs(collection(db, 'users'));
+    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as User));
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    return [];
+  }
 };
 
-/* =========================
-   Login Email
-   ✅ FIX: ép token trước khi đọc/ghi Firestore
-========================= */
-export const loginWithEmail = async (email: string, pass: string): Promise<User> => {
-  if (!auth) throw new Error('Firebase chưa được cấu hình.');
+export const deleteUser = async (userId: string) => {
+  if (!db) return;
+  try {
+    await deleteDoc(doc(db, 'users', userId));
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    throw error;
+  }
+};
 
-  const result = await firebaseAuth.signInWithEmailAndPassword(auth, email, pass);
-  const fbUser = result.user;
+/* ============================================================
+   EXPERT APPLICATIONS
+   ============================================================ */
+export const fetchExpertApplications = async (): Promise<ExpertApplication[]> => {
+  if (!db) return [];
+  try {
+    const q = query(collection(db, 'expert_applications'), orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as ExpertApplication));
+  } catch (error) {
+    console.error('Error fetching expert apps:', error);
+    return [];
+  }
+};
 
-  // ✅ FIX RACE TOKEN
-  await fbUser.getIdToken(true);
+export const processExpertApplication = async (
+  appId: string,
+  userId: string,
+  status: 'approved' | 'rejected',
+  reason?: string,
+  specialty?: string
+) => {
+  if (!db) return;
+  try {
+    const batch = writeBatch(db);
+    const appRef = doc(db, 'expert_applications', appId);
 
-  const userDocRef = doc(db, 'users', fbUser.uid);
-  const userDoc = await getDoc(userDocRef);
-
-  // ✅ nếu thiếu doc -> tạo để các chức năng sau không lỗi
-  if (!userDoc.exists()) {
-    await ensureUserDoc(fbUser, {
-      name: fbUser.displayName || 'Người dùng',
-      email: fbUser.email || email,
-      avatar: fbUser.photoURL || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
-      createdAt: new Date().toISOString(),
-      joinedAt: new Date().toISOString(),
-      points: 10,
-      isAnonymous: fbUser.isAnonymous,
-      expertStatus: 'none',
-      savedQuestions: [],
-      followers: [],
-      following: [],
+    batch.update(appRef, {
+      status,
+      rejectionReason: reason || null,
+      reviewedAt: new Date().toISOString(),
     });
 
-    const fresh = await getDoc(userDocRef);
-    return mapUser(fbUser, fresh.exists() ? fresh.data() : undefined);
-  }
-
-  const data: any = userDoc.data() || {};
-
-  // ✅ đảm bảo savedQuestions là array
-  if (!Array.isArray(data.savedQuestions)) {
-    await setDoc(userDocRef, { savedQuestions: [] }, { merge: true });
-    return mapUser(fbUser, { ...data, savedQuestions: [] });
-  }
-
-  return mapUser(fbUser, data);
-};
-
-/* =========================
-   Logout
-========================= */
-export const logoutUser = async () => {
-  if (!auth) return;
-  await firebaseAuth.signOut(auth);
-};
-
-/* =========================
-   Subscribe Auth Changes (FIX TRIỆT ĐỂ SPAM LỖI)
-   - Cleanup đúng chuẩn
-   - Nếu permission-denied => unsubscribe để dừng retry spam
-========================= */
-export const subscribeToAuthChanges = (callback: (user: User | null) => void) => {
-  if (!auth) return () => {};
-
-  let unsubUserDoc: (() => void) | null = null;
-  let stoppedDueToPermission = false;
-
-  const unsubAuth = firebaseAuth.onAuthStateChanged(auth, (fbUser) => {
-    // ✅ huỷ listener cũ mỗi khi auth thay đổi
-    if (unsubUserDoc) {
-      unsubUserDoc();
-      unsubUserDoc = null;
-    }
-    stoppedDueToPermission = false;
-
-    if (!fbUser) {
-      callback(null);
-      return;
+    const userRef = doc(db, 'users', userId);
+    if (status === 'approved') {
+      batch.update(userRef, {
+        isExpert: true,
+        expertStatus: 'approved',
+        specialty: specialty || '',
+      });
+    } else {
+      batch.update(userRef, { expertStatus: 'rejected' });
     }
 
-    const userDocRef = doc(db, 'users', fbUser.uid);
+    await batch.commit();
+  } catch (error) {
+    console.error('Error processing expert app:', error);
+    throw error;
+  }
+};
 
-    unsubUserDoc = onSnapshot(
-      userDocRef,
-      (docSnap) => {
-        if (stoppedDueToPermission) return;
+/* ============================================================
+   QUESTIONS MANAGEMENT (Paginated + Bulk)
+   ============================================================ */
+export const fetchQuestionsAdminPaginated = async (
+  lastVisible: QueryDocumentSnapshot<DocumentData> | null = null,
+  pageSize: number = 15,
+  filters?: { category?: string; isHidden?: boolean; searchTerm?: string }
+) => {
+  if (!db) return { questions: [], lastDoc: null, hasMore: false };
 
-        void (async () => {
-          try {
-            if (docSnap.exists()) {
-              const data: any = docSnap.data() || {};
+  try {
+    let qBase = query(collection(db, 'questions'), orderBy('createdAt', 'desc'));
 
-              // đảm bảo savedQuestions
-              if (!Array.isArray(data.savedQuestions)) {
-                await setDoc(userDocRef, { savedQuestions: [] }, { merge: true });
-                callback(mapUser(fbUser, { ...data, savedQuestions: [] }));
-                return;
-              }
+    if (filters?.category && filters.category !== 'Tất cả') {
+      qBase = query(qBase, where('category', '==', filters.category));
+    }
+    if (filters?.isHidden !== undefined) {
+      qBase = query(qBase, where('isHidden', '==', filters.isHidden));
+    }
 
-              callback(mapUser(fbUser, data));
-              return;
-            }
+    const qFinal = lastVisible
+      ? query(qBase, startAfter(lastVisible), limit(pageSize))
+      : query(qBase, limit(pageSize));
 
-            // doc chưa có -> tạo
-            // ✅ FIX RACE TOKEN trước khi ensure (tăng độ chắc)
-            await fbUser.getIdToken(true);
+    const snapshot = await getDocs(qFinal);
 
-            await ensureUserDoc(fbUser, {
-              name: fbUser.displayName || (fbUser.isAnonymous ? 'Khách ẩn danh' : 'Người dùng'),
-              avatar: fbUser.photoURL || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
-              createdAt: new Date().toISOString(),
-              joinedAt: new Date().toISOString(),
-              points: fbUser.isAnonymous ? 0 : 10,
-              savedQuestions: [],
-              followers: [],
-              following: [],
-              isAnonymous: fbUser.isAnonymous,
-              expertStatus: 'none',
-            });
+    let questions = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Question));
 
-            const fresh = await getDoc(userDocRef);
-            callback(mapUser(fbUser, fresh.exists() ? fresh.data() : undefined));
-          } catch (err: any) {
-            if (err?.code === 'permission-denied') {
-              stoppedDueToPermission = true;
-              if (unsubUserDoc) {
-                unsubUserDoc();
-                unsubUserDoc = null;
-              }
-              callback(mapUser(fbUser, docSnap.exists() ? docSnap.data() : undefined));
-              return;
-            }
+    if (filters?.searchTerm) {
+      const term = filters.searchTerm.toLowerCase();
+      questions = questions.filter((qq) => (qq.title || '').toLowerCase().includes(term));
+    }
 
-            console.error('Auth snapshot handler error:', err);
-            callback(mapUser(fbUser, docSnap.exists() ? docSnap.data() : undefined));
-          }
-        })();
-      },
-      (error: any) => {
-        if (error?.code === 'permission-denied') {
-          stoppedDueToPermission = true;
-          if (unsubUserDoc) {
-            unsubUserDoc();
-            unsubUserDoc = null;
-          }
-          callback(mapUser(fbUser));
-          return;
-        }
+    return {
+      questions,
+      lastDoc: snapshot.docs[snapshot.docs.length - 1] || null,
+      hasMore: snapshot.docs.length === pageSize,
+    };
+  } catch (error) {
+    console.error('Error fetching questions paginated:', error);
+    return { questions: [], lastDoc: null, hasMore: false };
+  }
+};
 
-        console.error('Firestore user sync error:', error);
-        callback(mapUser(fbUser));
+export const fetchQuestionById = async (id: string): Promise<Question | null> => {
+  if (!db) return null;
+  const snap = await getDoc(doc(db, 'questions', id));
+  if (snap.exists()) return { id: snap.id, ...snap.data() } as Question;
+  return null;
+};
+
+export const bulkUpdateQuestions = async (ids: string[], updates: { isHidden?: boolean }) => {
+  if (!db) return;
+  try {
+    const batch = writeBatch(db);
+    ids.forEach((id) => batch.update(doc(db, 'questions', id), updates));
+    await batch.commit();
+  } catch (error) {
+    console.error('Error bulk updating questions:', error);
+    throw error;
+  }
+};
+
+export const bulkDeleteQuestions = async (ids: string[]) => {
+  if (!db) return;
+  try {
+    const batch = writeBatch(db);
+    ids.forEach((id) => batch.delete(doc(db, 'questions', id)));
+    await batch.commit();
+  } catch (error) {
+    console.error('Error bulk deleting questions:', error);
+    throw error;
+  }
+};
+
+/* ============================================================
+   REPORTS MANAGEMENT
+   ============================================================ */
+export const fetchReports = async (): Promise<Report[]> => {
+  if (!db) return [];
+  try {
+    const q = query(collection(db, 'reports'), orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Report));
+  } catch (error) {
+    console.error('Error fetching reports:', error);
+    return [];
+  }
+};
+
+export const resolveReport = async (reportId: string, action: 'resolved' | 'dismissed') => {
+  if (!db) return;
+  try {
+    const ref = doc(db, 'reports', reportId);
+    await updateDoc(ref, { status: action, resolvedAt: new Date().toISOString() });
+  } catch (error) {
+    console.error('Error resolving report:', error);
+    throw error;
+  }
+};
+
+export const deleteReportedContent = async (report: Report) => {
+  if (!db) return;
+  try {
+    const batch = writeBatch(db);
+    const reportRef = doc(db, 'reports', report.id);
+    batch.update(reportRef, { status: 'resolved', resolvedAt: new Date().toISOString() });
+
+    if (report.targetType === 'question') {
+      batch.delete(doc(db, 'questions', report.targetId));
+    } else if (report.targetType === 'answer') {
+      batch.delete(doc(db, 'answers', report.targetId));
+    }
+
+    await batch.commit();
+  } catch (error) {
+    console.error('Error deleting reported content:', error);
+    throw error;
+  }
+};
+
+/* ============================================================
+   CATEGORIES MANAGEMENT
+   ============================================================ */
+export const fetchCategories = async (): Promise<Category[]> => {
+  if (!db) return [];
+  try {
+    const snapshot = await getDocs(collection(db, 'categories'));
+    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Category));
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    return [];
+  }
+};
+
+export const addCategory = async (name: string, style?: { icon: string; color: string; bg: string }) => {
+  if (!db) return;
+  try {
+    await addDoc(collection(db, 'categories'), { name, slug: toSlug(name), ...(style || {}) });
+  } catch (error) {
+    console.error('Error adding category:', error);
+    throw error;
+  }
+};
+
+export const updateCategory = async (id: string, name: string, style?: { icon: string; color: string; bg: string }) => {
+  if (!db) return;
+  try {
+    await updateDoc(doc(db, 'categories', id), { name, slug: toSlug(name), ...(style || {}) });
+  } catch (error) {
+    console.error('Error updating category:', error);
+    throw error;
+  }
+};
+
+export const deleteCategory = async (id: string) => {
+  if (!db) return;
+  try {
+    await deleteDoc(doc(db, 'categories', id));
+  } catch (error) {
+    console.error('Error deleting category:', error);
+    throw error;
+  }
+};
+
+export const syncCategoriesFromCode = async () => {
+  if (!db) return 0;
+
+  try {
+    const batch = writeBatch(db);
+    const existing = await fetchCategories();
+    const existingNames = existing.map((c) => c.name);
+    let count = 0;
+
+    CATEGORIES.forEach((catName) => {
+      if (!existingNames.includes(catName)) {
+        const docRef = doc(collection(db, 'categories'));
+        batch.set(docRef, {
+          name: catName,
+          slug: toSlug(catName),
+          icon: 'Tag',
+          color: 'text-gray-600',
+          bg: 'bg-gray-100',
+        });
+        count++;
       }
-    );
-  });
+    });
 
-  return () => {
-    if (unsubUserDoc) unsubUserDoc();
-    unsubAuth();
-  };
+    if (count > 0) await batch.commit();
+    return count;
+  } catch (error) {
+    console.error('Error syncing categories:', error);
+    return 0;
+  }
+};
+
+/* ============================================================
+   BLOGS & DOCUMENTS (Admin lists)
+   ============================================================ */
+export const fetchAllBlogs = async () => {
+  if (!db) return [];
+  try {
+    const snapshot = await getDocs(collection(db, 'blogPosts'));
+    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+  } catch (error) {
+    console.error('Error fetching blogs:', error);
+    return [];
+  }
+};
+
+export const fetchAllDocuments = async () => {
+  if (!db) return [];
+  try {
+    const snapshot = await getDocs(collection(db, 'documents'));
+    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+  } catch (error) {
+    console.error('Error fetching docs:', error);
+    return [];
+  }
 };
