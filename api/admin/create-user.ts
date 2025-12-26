@@ -1,8 +1,7 @@
-// pages/api/admin/create-user.ts
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as admin from 'firebase-admin';
 
-// Hàm init an toàn
+// Hàm init Firebase Admin
 function initAdmin() {
   if (admin.apps.length) return;
 
@@ -11,10 +10,9 @@ function initAdmin() {
   const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
 
   if (!projectId || !clientEmail || !privateKeyRaw) {
-    throw new Error("❌ Thiếu biến môi trường: Kiểm tra file .env.local");
+    throw new Error("❌ Thiếu biến môi trường: Kiểm tra file .env");
   }
 
-  // Sửa lỗi xuống dòng trong Private Key
   const privateKey = privateKeyRaw.replace(/\\n/g, '\n');
 
   admin.initializeApp({
@@ -24,69 +22,71 @@ function initAdmin() {
       privateKey,
     }),
   });
-  console.log("✅ Firebase Admin Initialized successfully");
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // 1. Chỉ cho phép POST
+// Handler chuẩn cho Vercel (Không dùng Next.js types)
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // 1. Xử lý CORS (Quan trọng để Frontend gọi được Backend)
+  res.setHeader('Access-Control-Allow-Credentials', "true");
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
+  );
+
+  // Xử lý preflight request
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method not allowed' });
   }
 
   try {
-    // 2. Init Admin SDK
-    try {
-      initAdmin();
-    } catch (e: any) {
-      console.error("🔥 Init Error:", e.message);
-      return res.status(500).json({ message: "Server Config Error: " + e.message });
-    }
-
+    initAdmin();
     const db = admin.firestore();
     const auth = admin.auth();
 
-    // 3. Log để debug dữ liệu nhận được
-    console.log("📥 API Received Body:", req.body);
-    console.log("🔑 Auth Header:", req.headers.authorization ? "Present" : "Missing");
+    // 2. Lấy dữ liệu từ Body (Vercel tự parse JSON nếu có header Content-Type)
+    const body = req.body || {};
+    const { email, password, name } = body;
 
-    // Check Body
-    if (!req.body) {
-      return res.status(400).json({ message: "Lỗi: Không nhận được dữ liệu (Body is empty). Frontend chưa gửi Content-Type?" });
-    }
-
-    // Sử dụng fallback để tránh lỗi destructuring nếu body là null (dù đã check ở trên)
-    const { email, password, name } = req.body || {};
+    console.log("📥 API Body:", body); // Debug log
 
     if (!email || !password) {
       return res.status(400).json({ message: 'Thiếu email hoặc mật khẩu.' });
     }
 
-    // 4. Verify Admin Token
-    const authHeader = req.headers.authorization;
+    // 3. Xác thực Token Admin
+    const authHeader = req.headers['authorization'];
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ message: 'Chưa đăng nhập (Thiếu Token)' });
     }
 
     const token = authHeader.split('Bearer ')[1];
+    
+    // Verify token
     let decodedToken;
     try {
       decodedToken = await auth.verifyIdToken(token);
     } catch (e) {
-      return res.status(401).json({ message: 'Token không hợp lệ hoặc đã hết hạn.' });
+      return res.status(401).json({ message: 'Token không hợp lệ.' });
     }
 
-    // 5. Check quyền Admin trong Firestore
+    // Check quyền Admin trong Firestore
     const adminDoc = await db.collection('users').doc(decodedToken.uid).get();
     if (!adminDoc.exists || !adminDoc.data()?.isAdmin) {
       return res.status(403).json({ message: 'Bạn không có quyền Admin.' });
     }
 
-    // 6. Xử lý dữ liệu đầu vào
+    // 4. Logic tạo User
     const cleanEmail = String(email).trim().toLowerCase();
     const cleanName = name ? String(name).trim() : 'Thành viên mới';
 
-    // 7. Tạo User bên Auth
-    console.log("⚙️ Creating Auth User:", cleanEmail);
+    // Tạo Auth
     const userRecord = await auth.createUser({
       email: cleanEmail,
       password: password,
@@ -94,46 +94,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       photoURL: 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
     });
 
-    // 8. Tạo User bên Firestore (Bypass Rules vì dùng Admin SDK)
-    console.log("💾 Saving to Firestore:", userRecord.uid);
+    // Lưu Firestore (Bypass Rules)
     const now = new Date().toISOString();
-    
     await db.collection('users').doc(userRecord.uid).set({
       uid: userRecord.uid,
       name: cleanName,
       email: cleanEmail,
       avatar: 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
-      
-      isAdmin: false,       // Mặc định tạo ra là user thường
+      isAdmin: false,
       isExpert: false,
       expertStatus: 'none',
-      points: 10,           // Tặng 10 điểm khởi tạo
-      
+      points: 10,
       createdAt: now,
       joinedAt: now,
       updatedAt: now,
       lastActiveAt: now,
-      
       isAnonymous: false,
       savedQuestions: [],
       followers: [],
       following: [],
-      
       bio: '',
       specialty: '',
       workplace: ''
     });
 
-    console.log("✅ Success!");
     return res.status(200).json({ ok: true, uid: userRecord.uid, message: 'Tạo thành công!' });
 
   } catch (error: any) {
-    console.error('❌ API CRITICAL ERROR:', error);
-    
+    console.error('API Error:', error);
     if (error.code === 'auth/email-already-exists') {
       return res.status(400).json({ message: 'Email này đã tồn tại.' });
     }
-    
-    return res.status(500).json({ message: error.message || 'Lỗi Server nội bộ' });
+    return res.status(500).json({ message: error.message || 'Lỗi Server' });
   }
 }
