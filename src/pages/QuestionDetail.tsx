@@ -291,14 +291,14 @@ export default function QuestionDetail({
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // --- DEBUG LOG UID (KHÔNG GIẢ ĐỊNH users doc id) ---
+  // --- DEBUG LOG UID ---
   useEffect(() => {
     const auth = getAuth();
     console.log('auth.uid =', auth.currentUser?.uid ?? null);
     console.log('currentUser.id =', currentUser?.id ?? null);
   }, [currentUser?.id]);
 
-  // --- 1. FETCH DATA (TỔNG HỢP) ---
+  // --- 1. FETCH DATA ---
   useEffect(() => {
     const fetchData = async () => {
       if (!slug) return;
@@ -310,7 +310,6 @@ export default function QuestionDetail({
         if (qData) {
           setQuestion(qData);
 
-          // Load 5 câu trả lời đầu tiên bằng phân trang
           const ansResult = await fetchAnswersPaginated(qId, null, 5);
           setAnswers(ansResult.answers);
           setLastAnsDoc(ansResult.lastDoc);
@@ -332,16 +331,15 @@ export default function QuestionDetail({
     fetchData();
   }, [slug]);
 
-  // --- 2. SỬA LỖI MẤT TRẠNG THÁI LƯU KHI F5 ---
+  // --- 2. ĐỒNG BỘ TRẠNG THÁI LƯU ---
   useEffect(() => {
     if (currentUser && question) {
-      // Đồng bộ isSaved trực tiếp từ mảng savedQuestions của currentUser
-      const savedList = currentUser.savedQuestions || [];
-      setIsSaved(savedList.includes(question.id));
+      const savedList = (currentUser as any).savedQuestions || [];
+      setIsSaved(Array.isArray(savedList) ? savedList.includes(question.id) : false);
     }
   }, [currentUser, question]);
 
-  // --- HANDLER LOAD MORE ANSWERS ---
+  // --- LOAD MORE ANSWERS ---
   const loadMoreAnswers = async () => {
     if (!question || isLoadingAnswers || !hasMoreAnswers) return;
     setIsLoadingAnswers(true);
@@ -452,7 +450,7 @@ export default function QuestionDetail({
     } catch { /* ignore */ }
   }, [question, ensureAuth]);
 
-  // --- 3. SỬA LỖI LOGIC NÚT LƯU (KHÔNG LỒNG HOOK) ---
+  // --- NÚT LƯU: UID an toàn + rollback nếu lỗi ---
   const handleSave = useCallback(async () => {
     if (!question) return;
 
@@ -465,11 +463,9 @@ export default function QuestionDetail({
     const nextStatus = !previousStatus;
 
     try {
-      // Optimistic UI
       setIsSaved(nextStatus);
 
-      // Dùng UID thật của Firebase Auth (nếu users doc id = UID)
-      const authUid = getAuth().currentUser?.uid;
+      const authUid = getAuth().currentUser?.uid || currentUser.id;
       if (!authUid) {
         setIsSaved(previousStatus);
         onOpenAuth();
@@ -983,7 +979,6 @@ export default function QuestionDetail({
                   );
                 })}
 
-                {/* --- BUTTON XEM THÊM THẢO LUẬN --- */}
                 {hasMoreAnswers && (
                   <div className="flex justify-center pt-4 animate-fade-in">
                     <button
@@ -1037,7 +1032,7 @@ export default function QuestionDetail({
                             {q.title}
                           </h4>
                           <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-1">
-                            <span>{q.answerCount || q.answers?.length || 0} trả lời</span>
+                            <span>{q.answerCount || (q as any).answers?.length || 0} trả lời</span>
                             <span>•</span>
                             <span>{q.views} xem</span>
                           </div>
