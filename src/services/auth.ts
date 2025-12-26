@@ -18,56 +18,106 @@ const mapUser = (fbUser: firebaseAuth.User, dbUser?: any): User => {
       dbUser?.avatar ||
       fbUser.photoURL ||
       'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
+
     isExpert: dbUser?.isExpert || false,
     expertStatus: dbUser?.expertStatus || 'none',
     isAdmin: dbUser?.isAdmin || false,
     bio: dbUser?.bio || '',
     points: dbUser?.points || 0,
-    joinedAt: dbUser?.joinedAt || new Date().toISOString(),
+
+    joinedAt: dbUser?.joinedAt || dbUser?.createdAt || new Date().toISOString(),
     specialty: dbUser?.specialty,
     workplace: dbUser?.workplace,
     username: dbUser?.username || null,
     coverUrl: dbUser?.coverUrl || null,
-    followers: dbUser?.followers || [],
-    following: dbUser?.following || [],
+
+    followers: Array.isArray(dbUser?.followers) ? dbUser.followers : [],
+    following: Array.isArray(dbUser?.following) ? dbUser.following : [],
+
+    // ✅ cực quan trọng để UI nút Lưu + đồng bộ F5
+    savedQuestions: Array.isArray(dbUser?.savedQuestions) ? dbUser.savedQuestions : [],
+
     // ⚠️ Giữ cơ chế của bạn: đăng nhập rồi => không phải guest
     isGuest: false,
-  };
+  } as User;
 };
 
 /* =========================
-   Internal: Ensure user doc exists
-   - Không phá dữ liệu cũ vì dùng merge:true
+   Internal: Ensure user doc exists (an toàn, không overwrite dữ liệu cũ)
+   - Dùng merge:true
+   - Preserve createdAt/joinedAt nếu đã có
 ========================= */
-const ensureUserDoc = async (fbUser: firebaseAuth.User, partialData: any = {}) => {
+const ensureUserDoc = async (
+  fbUser: firebaseAuth.User,
+  partialData: any = {}
+) => {
   const userDocRef = doc(db, 'users', fbUser.uid);
+
+  let existing: any = {};
+  try {
+    const snap = await getDoc(userDocRef);
+    if (snap.exists()) existing = snap.data();
+  } catch {
+    // ignore
+  }
+
+  const createdAt =
+    existing?.createdAt ||
+    partialData?.createdAt ||
+    new Date().toISOString();
+
+  const joinedAt =
+    existing?.joinedAt ||
+    partialData?.joinedAt ||
+    createdAt;
+
+  const savedQuestions = Array.isArray(existing?.savedQuestions)
+    ? existing.savedQuestions
+    : Array.isArray(partialData?.savedQuestions)
+      ? partialData.savedQuestions
+      : [];
+
+  const followers = Array.isArray(existing?.followers)
+    ? existing.followers
+    : Array.isArray(partialData?.followers)
+      ? partialData.followers
+      : [];
+
+  const following = Array.isArray(existing?.following)
+    ? existing.following
+    : Array.isArray(partialData?.following)
+      ? partialData.following
+      : [];
+
   await setDoc(
     userDocRef,
     {
-      // các field cơ bản, dùng merge để không overwrite
       name:
+        existing?.name ||
         partialData?.name ||
         fbUser.displayName ||
         (fbUser.isAnonymous ? 'Khách ẩn danh' : 'Người dùng'),
       avatar:
+        existing?.avatar ||
         partialData?.avatar ||
         fbUser.photoURL ||
         'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
-      email: partialData?.email ?? fbUser.email ?? null,
-      createdAt: partialData?.createdAt || new Date().toISOString(),
-      joinedAt: partialData?.joinedAt || partialData?.createdAt || new Date().toISOString(),
-      isExpert: partialData?.isExpert ?? false,
-      expertStatus: partialData?.expertStatus ?? 'none',
-      isAdmin: partialData?.isAdmin ?? false,
-      points: partialData?.points ?? 0,
-      isAnonymous: partialData?.isAnonymous ?? fbUser.isAnonymous ?? false,
+      email: existing?.email ?? partialData?.email ?? fbUser.email ?? null,
 
-      // ✅ cực kỳ quan trọng để nút Lưu không lỗi khi arrayUnion/arrayRemove
-      savedQuestions: partialData?.savedQuestions ?? [],
+      createdAt,
+      joinedAt,
 
-      // giữ các mảng social nếu chưa có
-      followers: partialData?.followers ?? [],
-      following: partialData?.following ?? [],
+      isExpert: existing?.isExpert ?? partialData?.isExpert ?? false,
+      expertStatus: existing?.expertStatus ?? partialData?.expertStatus ?? 'none',
+      isAdmin: existing?.isAdmin ?? partialData?.isAdmin ?? false,
+      points: existing?.points ?? partialData?.points ?? 0,
+      isAnonymous: existing?.isAnonymous ?? partialData?.isAnonymous ?? fbUser.isAnonymous ?? false,
+
+      // ✅ để toggleSaveQuestion arrayUnion/arrayRemove không lỗi
+      savedQuestions,
+
+      followers,
+      following,
     },
     { merge: true }
   );
@@ -87,7 +137,7 @@ export const loginAnonymously = async (): Promise<User> => {
     const userDoc = await getDoc(userDocRef);
 
     if (!userDoc.exists()) {
-      const newUser = {
+      await ensureUserDoc(fbUser, {
         name: 'Khách ẩn danh',
         avatar: 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
         createdAt: new Date().toISOString(),
@@ -100,15 +150,20 @@ export const loginAnonymously = async (): Promise<User> => {
         savedQuestions: [],
         followers: [],
         following: [],
-      };
+      });
 
-      await ensureUserDoc(fbUser, newUser);
       const freshSnap = await getDoc(userDocRef);
-      return mapUser(fbUser, freshSnap.exists() ? freshSnap.data() : newUser);
+      return mapUser(fbUser, freshSnap.exists() ? freshSnap.data() : undefined);
     }
 
-    // nếu doc đã có
-    return mapUser(fbUser, userDoc.data());
+    // đảm bảo savedQuestions tồn tại
+    const data: any = userDoc.data() || {};
+    if (!Array.isArray(data.savedQuestions)) {
+      await setDoc(userDocRef, { savedQuestions: [] }, { merge: true });
+      return mapUser(fbUser, { ...data, savedQuestions: [] });
+    }
+
+    return mapUser(fbUser, data);
   } catch (error: any) {
     console.warn('Anonymous login failed:', error?.code);
     if (
@@ -142,7 +197,13 @@ export const loginWithGoogle = async (): Promise<User> => {
   if (userDoc.exists()) {
     const currentData: any = userDoc.data() || {};
 
-    // nếu avatar mới khác avatar cũ thì update (doc chắc chắn tồn tại => updateDoc ok)
+    // ✅ đảm bảo savedQuestions tồn tại
+    if (!Array.isArray(currentData.savedQuestions)) {
+      await setDoc(userDocRef, { savedQuestions: [] }, { merge: true });
+      currentData.savedQuestions = [];
+    }
+
+    // ✅ nếu avatar mới khác avatar cũ thì update
     if (avatarUrl && currentData.avatar !== avatarUrl) {
       await updateDoc(userDocRef, {
         avatar: avatarUrl,
@@ -156,33 +217,27 @@ export const loginWithGoogle = async (): Promise<User> => {
       });
     }
 
-    // đảm bảo có savedQuestions để nút Lưu không lỗi
-    if (!Array.isArray(currentData.savedQuestions)) {
-      await setDoc(userDocRef, { savedQuestions: [] }, { merge: true });
-      return mapUser(fbUser, { ...currentData, savedQuestions: [] });
-    }
-
     return mapUser(fbUser, currentData);
-  } else {
-    const newUser = {
-      name: fbUser.displayName || 'Người dùng mới',
-      email: fbUser.email,
-      avatar: avatarUrl || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
-      createdAt: new Date().toISOString(),
-      joinedAt: new Date().toISOString(),
-      isExpert: false,
-      expertStatus: 'none',
-      isAdmin: false,
-      points: 10,
-      savedQuestions: [],
-      followers: [],
-      following: [],
-    };
-
-    await ensureUserDoc(fbUser, newUser);
-    const freshSnap = await getDoc(userDocRef);
-    return mapUser(fbUser, freshSnap.exists() ? freshSnap.data() : newUser);
   }
+
+  // doc chưa tồn tại -> tạo
+  await ensureUserDoc(fbUser, {
+    name: fbUser.displayName || 'Người dùng mới',
+    email: fbUser.email,
+    avatar: avatarUrl || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
+    createdAt: new Date().toISOString(),
+    joinedAt: new Date().toISOString(),
+    isExpert: false,
+    expertStatus: 'none',
+    isAdmin: false,
+    points: 10,
+    savedQuestions: [],
+    followers: [],
+    following: [],
+  });
+
+  const freshSnap = await getDoc(userDocRef);
+  return mapUser(fbUser, freshSnap.exists() ? freshSnap.data() : undefined);
 };
 
 /* =========================
@@ -202,9 +257,9 @@ export const registerWithEmail = async (
 
   const userDocRef = doc(db, 'users', fbUser.uid);
 
-  const newUser = {
-    name: name,
-    email: email,
+  await ensureUserDoc(fbUser, {
+    name,
+    email,
     avatar: 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
     createdAt: new Date().toISOString(),
     joinedAt: new Date().toISOString(),
@@ -215,11 +270,10 @@ export const registerWithEmail = async (
     savedQuestions: [],
     followers: [],
     following: [],
-  };
+  });
 
-  await ensureUserDoc(fbUser, newUser);
   const freshSnap = await getDoc(userDocRef);
-  return mapUser(fbUser, freshSnap.exists() ? freshSnap.data() : newUser);
+  return mapUser(fbUser, freshSnap.exists() ? freshSnap.data() : undefined);
 };
 
 /* =========================
@@ -234,7 +288,7 @@ export const loginWithEmail = async (email: string, pass: string): Promise<User>
   const userDocRef = doc(db, 'users', fbUser.uid);
   const userDoc = await getDoc(userDocRef);
 
-  // ✅ nếu thiếu doc (trường hợp dữ liệu cũ), tự tạo doc để không lỗi các chức năng sau
+  // ✅ nếu thiếu doc -> tạo để các chức năng sau không lỗi
   if (!userDoc.exists()) {
     await ensureUserDoc(fbUser, {
       name: fbUser.displayName || 'Người dùng',
@@ -247,13 +301,15 @@ export const loginWithEmail = async (email: string, pass: string): Promise<User>
       followers: [],
       following: [],
     });
+
     const fresh = await getDoc(userDocRef);
     return mapUser(fbUser, fresh.exists() ? fresh.data() : undefined);
   }
 
-  const data = userDoc.data();
-  // đảm bảo savedQuestions là array
-  if (data && !Array.isArray((data as any).savedQuestions)) {
+  const data: any = userDoc.data() || {};
+
+  // ✅ đảm bảo savedQuestions là array
+  if (!Array.isArray(data.savedQuestions)) {
     await setDoc(userDocRef, { savedQuestions: [] }, { merge: true });
     return mapUser(fbUser, { ...data, savedQuestions: [] });
   }
@@ -270,14 +326,23 @@ export const logoutUser = async () => {
 };
 
 /* =========================
-   Subscribe Auth Changes
-   - Giữ cơ chế UI hiện tại
-   - Nếu doc chưa có: tự tạo doc (merge) để tránh lỗi về sau
+   Subscribe Auth Changes (FIX TRIỆT ĐỂ 1000 LỖI)
+   - Không leak listener
+   - Cleanup đúng chuẩn
+   - Nếu doc chưa có -> tự tạo (merge) để tránh lỗi về sau
 ========================= */
 export const subscribeToAuthChanges = (callback: (user: User | null) => void) => {
   if (!auth) return () => {};
 
-  return firebaseAuth.onAuthStateChanged(auth, (fbUser) => {
+  let unsubUserDoc: (() => void) | null = null;
+
+  const unsubAuth = firebaseAuth.onAuthStateChanged(auth, (fbUser) => {
+    // ✅ huỷ listener cũ mỗi khi auth thay đổi
+    if (unsubUserDoc) {
+      unsubUserDoc();
+      unsubUserDoc = null;
+    }
+
     if (!fbUser) {
       callback(null);
       return;
@@ -285,44 +350,57 @@ export const subscribeToAuthChanges = (callback: (user: User | null) => void) =>
 
     const userDocRef = doc(db, 'users', fbUser.uid);
 
-    const unsubFirestore = onSnapshot(
+    unsubUserDoc = onSnapshot(
       userDocRef,
-      async (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
+      (docSnap) => {
+        void (async () => {
+          try {
+            if (docSnap.exists()) {
+              const data: any = docSnap.data() || {};
 
-          // đảm bảo savedQuestions
-          if (data && !Array.isArray((data as any).savedQuestions)) {
-            await setDoc(userDocRef, { savedQuestions: [] }, { merge: true });
-            callback(mapUser(fbUser, { ...data, savedQuestions: [] }));
-            return;
+              // đảm bảo savedQuestions
+              if (!Array.isArray(data.savedQuestions)) {
+                await setDoc(userDocRef, { savedQuestions: [] }, { merge: true });
+                callback(mapUser(fbUser, { ...data, savedQuestions: [] }));
+                return;
+              }
+
+              callback(mapUser(fbUser, data));
+              return;
+            }
+
+            // doc chưa có -> tạo
+            await ensureUserDoc(fbUser, {
+              name: fbUser.displayName || (fbUser.isAnonymous ? 'Khách ẩn danh' : 'Người dùng'),
+              avatar: fbUser.photoURL || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
+              createdAt: new Date().toISOString(),
+              joinedAt: new Date().toISOString(),
+              points: fbUser.isAnonymous ? 0 : 10,
+              savedQuestions: [],
+              followers: [],
+              following: [],
+              isAnonymous: fbUser.isAnonymous,
+            });
+
+            const fresh = await getDoc(userDocRef);
+            callback(mapUser(fbUser, fresh.exists() ? fresh.data() : undefined));
+          } catch (err) {
+            console.error('Auth snapshot handler error:', err);
+            // fallback không phá UI
+            callback(mapUser(fbUser, docSnap.exists() ? docSnap.data() : undefined));
           }
-
-          callback(mapUser(fbUser, data));
-        } else {
-          // ✅ tự tạo doc khi chưa tồn tại (quan trọng)
-          await ensureUserDoc(fbUser, {
-            name: fbUser.displayName || (fbUser.isAnonymous ? 'Khách ẩn danh' : 'Người dùng'),
-            avatar:
-              fbUser.photoURL || 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
-            createdAt: new Date().toISOString(),
-            joinedAt: new Date().toISOString(),
-            points: fbUser.isAnonymous ? 0 : 10,
-            savedQuestions: [],
-            followers: [],
-            following: [],
-          });
-
-          const fresh = await getDoc(userDocRef);
-          callback(mapUser(fbUser, fresh.exists() ? fresh.data() : undefined));
-        }
+        })();
       },
       (error) => {
         console.error('Firestore user sync error:', error);
         callback(mapUser(fbUser));
       }
     );
-
-    return () => unsubFirestore();
   });
+
+  // ✅ cleanup chuẩn
+  return () => {
+    if (unsubUserDoc) unsubUserDoc();
+    unsubAuth();
+  };
 };
