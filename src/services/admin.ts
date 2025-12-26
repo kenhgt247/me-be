@@ -68,21 +68,31 @@ export const fetchUsersAdminPaginated = async (
 ) => {
   if (!db) return { users: [], lastDoc: null, hasMore: false };
   try {
-    let q = query(collection(db, "users"), orderBy("joinedAt", "desc"), limit(pageSize));
+    // THAY ĐỔI: Không dùng orderBy mặc định để đảm bảo hiện cả user cũ thiếu trường
+    let q = query(collection(db, "users"), limit(pageSize));
+    
     if (lastVisible) q = query(q, startAfter(lastVisible));
 
     const snapshot = await getDocs(q);
+    const users = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as User));
 
-    // Fallback nếu thiếu joinedAt hoặc orderBy gây empty ở trang đầu
-    if (snapshot.empty && !lastVisible) {
-      const fallbackSnap = await getDocs(query(collection(db, "users"), limit(pageSize)));
-      const users = fallbackSnap.docs.map((d) => ({ id: d.id, ...d.data() } as User));
-      return {
-        users,
-        lastDoc: fallbackSnap.docs[fallbackSnap.docs.length - 1] || null,
-        hasMore: fallbackSnap.docs.length === pageSize,
-      };
-    }
+    // Sắp xếp thủ công ở Client để đảm bảo tính đồng nhất
+    users.sort((a: any, b: any) => {
+      const dateA = new Date(a.joinedAt || a.createdAt || a.created_at || 0).getTime();
+      const dateB = new Date(b.joinedAt || b.createdAt || b.created_at || 0).getTime();
+      return dateB - dateA;
+    });
+
+    return {
+      users,
+      lastDoc: snapshot.docs[snapshot.docs.length - 1] || null,
+      hasMore: snapshot.docs.length === pageSize,
+    };
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    return { users: [], lastDoc: null, hasMore: false };
+  }
+};
 
     const users = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as User));
     return {
