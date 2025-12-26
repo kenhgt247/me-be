@@ -29,7 +29,7 @@ import { suggestTitles, generateQuestionContent } from '../services/gemini';
 import { AuthModal } from '../components/AuthModal';
 import { uploadFile } from '../services/storage';
 import { loginAnonymously } from '../services/auth';
-import { fetchCategories, addCategory } from '../services/categories';
+import { fetchCategories, addCategory } from '../services/admin';
 
 // =========================
 // CONFIGURATION & CONSTANTS
