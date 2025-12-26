@@ -1,607 +1,833 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { User } from '../types';
-import { db } from '../firebaseConfig';
-import {
-  collection,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  where,
-} from 'firebase/firestore';
+import type { ExpertApplication, User } from '../../types';
 
 import {
-  ShieldCheck,
-  UploadCloud,
-  FileText,
-  CheckCircle,
-  Clock,
-  ChevronRight,
-  Heart,
-  Stethoscope,
-  Baby,
-  Brain,
-  BookOpen,
-  X,
-  AlertTriangle,
-  RefreshCw,
-  Loader2,
+  fetchExpertApplications,
+  processExpertApplication,
+  deleteExpertApplication,
+  revokeExpertByAdmin,
+  updateExpertSpecialtyFromApp,
+  // ✅ thêm 2 hàm này trong services/admin.ts
+  addExpertManually,
+  searchUsersForAdmin,
+} from '../../services/admin';
+
+import {
+  Check, X, FileText, Clock, ExternalLink, Filter,
+  ZoomIn, AlertTriangle, RefreshCw, Loader2, UserCheck, UserX,
+  Trash2, Pencil, Save, Plus,
 } from 'lucide-react';
 
-interface ExpertRegistrationProps {
-  currentUser: User;
-  onSubmitApplication: (data: any) => Promise<void>;
-}
+type FilterStatus = 'all' | 'pending' | 'approved' | 'rejected';
 
-type AppStatus = 'pending' | 'approved' | 'rejected';
+export const ExpertApprovals: React.FC = () => {
+  const [apps, setApps] = useState<ExpertApplication[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedApp, setSelectedApp] = useState<ExpertApplication | null>(null);
+  const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
 
-type LatestExpertApplication = {
-  id: string;
-  userId: string;
-  fullName?: string;
-  phone?: string;
-  workplace?: string;
-  specialty?: string;
-  status: AppStatus;
-  rejectionReason?: string | null;
-  createdAt: string; // ISO string
-  proofImages?: string[];
-  approvedSpecialty?: string | null;
-};
+  // Modal & Action States
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
 
-const SPECIALTIES = [
-  { id: 'pediatrics', label: 'Bác sĩ Nhi khoa', icon: <Stethoscope size={20} /> },
-  { id: 'nutrition', label: 'Chuyên gia Dinh dưỡng', icon: <Heart size={20} /> },
-  { id: 'psychology', label: 'Tâm lý trẻ em', icon: <Brain size={20} /> },
-  { id: 'education', label: 'Giáo dục sớm', icon: <BookOpen size={20} /> },
-  { id: 'obgyn', label: 'Sản phụ khoa', icon: <Baby size={20} /> },
-  { id: 'other', label: 'Khác', icon: <FileText size={20} /> },
-];
+  // Edit specialty
+  const [isEditing, setIsEditing] = useState(false);
+  const [editSpecialty, setEditSpecialty] = useState('');
 
-const MAX_FILE_MB = 5;
-const MAX_FILES = 6;
+  // ✅ Manual create expert modal
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [userQuery, setUserQuery] = useState('');
+  const [userResults, setUserResults] = useState<User[]>([]);
+  const [userSearching, setUserSearching] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
-export const ExpertRegistration: React.FC<ExpertRegistrationProps> = ({
-  currentUser,
-  onSubmitApplication,
-}) => {
-  const [latestApp, setLatestApp] = useState<LatestExpertApplication | null>(null);
-  const [loadingApp, setLoadingApp] = useState(true);
-
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string>('');
-
-  const initialForm = useMemo(
-    () => ({
-      fullName: currentUser?.name || '',
-      phone: (currentUser as any)?.phone || '',
-      workplace: (currentUser as any)?.workplace || '',
-      specialty: (currentUser as any)?.specialty || '',
-      files: [] as File[],
-    }),
-    [currentUser]
-  );
-
-  const [formData, setFormData] = useState(initialForm);
-
-  // -----------------------------
-  // Load latest application (1 user -> latest doc)
-  // -----------------------------
-  const loadLatestApplication = async () => {
-    if (!db || !currentUser?.id) {
-      setLatestApp(null);
-      setLoadingApp(false);
-      return;
-    }
-
-    setLoadingApp(true);
-    try {
-      const q = query(
-        collection(db, 'expert_applications'),
-        where('userId', '==', currentUser.id),
-        orderBy('createdAt', 'desc'),
-        limit(1)
-      );
-
-      const snap = await getDocs(q);
-      if (snap.empty) {
-        setLatestApp(null);
-      } else {
-        const d = snap.docs[0];
-        setLatestApp({ id: d.id, ...(d.data() as any) } as LatestExpertApplication);
-      }
-    } catch (e) {
-      // Nếu user chưa có index cho orderBy/where, hoặc lỗi permission, fallback “không có hồ sơ”
-      console.error('loadLatestApplication error:', e);
-      setLatestApp(null);
-    } finally {
-      setLoadingApp(false);
-    }
-  };
+  const [manualSpecialty, setManualSpecialty] = useState('');
+  const [manualWorkplace, setManualWorkplace] = useState('');
+  const [manualBio, setManualBio] = useState('');
+  const [manualPhone, setManualPhone] = useState('');
 
   useEffect(() => {
-    loadLatestApplication();
+    loadApps();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id]);
+  }, []);
 
-  // -----------------------------
-  // Effective status (UI decision)
-  // -----------------------------
-  const effectiveStatus: AppStatus | null = useMemo(() => {
-    if (currentUser?.isExpert || currentUser?.expertStatus === 'approved') return 'approved';
-
-    // ưu tiên hồ sơ mới nhất từ expert_applications
-    if (latestApp?.status) return latestApp.status;
-
-    // fallback nếu app chưa load / không tồn tại
-    if (currentUser?.expertStatus === 'pending') return 'pending';
-    if (currentUser?.expertStatus === 'rejected') return 'rejected';
-
-    return null;
-  }, [currentUser?.isExpert, currentUser?.expertStatus, latestApp?.status]);
-
-  const rejectionReason = useMemo(() => {
-    const fromApp = latestApp?.rejectionReason;
-    const fromUser = (currentUser as any)?.expertRejectionReason;
-    return (fromApp || fromUser || '').trim();
-  }, [latestApp?.rejectionReason, currentUser]);
-
-  // -----------------------------
-  // Actions
-  // -----------------------------
-  const resetToResubmit = () => {
-    setFormError('');
-    setFormData({
-      ...initialForm,
-      // giữ lại 1 chút thông tin cũ cho user đỡ nhập lại (có thể xoá nếu bạn muốn)
-      specialty: latestApp?.approvedSpecialty || latestApp?.specialty || initialForm.specialty || '',
-      workplace: latestApp?.workplace || initialForm.workplace || '',
-      phone: latestApp?.phone || initialForm.phone || '',
-      files: [],
-    });
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormError('');
-    const files = e.target.files ? Array.from(e.target.files) : [];
-    if (!files.length) return;
-
-    if (files.length > MAX_FILES) {
-      setFormError(`Bạn chỉ có thể tải tối đa ${MAX_FILES} tệp.`);
-      return;
-    }
-
-    for (const f of files) {
-      const sizeMb = f.size / (1024 * 1024);
-      if (sizeMb > MAX_FILE_MB) {
-        setFormError(`Tệp "${f.name}" vượt quá ${MAX_FILE_MB}MB. Vui lòng chọn tệp nhỏ hơn.`);
-        return;
-      }
-    }
-
-    setFormData({ ...formData, files });
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isSubmitting) return;
-
-    setFormError('');
-    if (!formData.specialty) {
-      setFormError('Vui lòng chọn lĩnh vực chuyên môn.');
-      return;
-    }
-    if (!formData.files.length) {
-      setFormError('Vui lòng tải lên ít nhất 1 minh chứng chuyên môn.');
-      return;
-    }
-
-    setIsSubmitting(true);
+  const loadApps = async () => {
+    setLoading(true);
     try {
-      // ✅ gửi thêm previousApplicationId để backend/admin tiện trace (không bắt buộc)
-      await onSubmitApplication({
-        ...formData,
-        previousApplicationId: latestApp?.id || null,
-        resubmittedAt: new Date().toISOString(),
+      const data = await fetchExpertApplications();
+      setApps(data);
+
+      // auto-select first visible if none selected
+      if (!selectedApp && data.length) setSelectedApp(data[0]);
+    } catch (e) {
+      console.error('Failed to load apps', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredApps = useMemo(() => {
+    return apps.filter(app => (filterStatus === 'all' ? true : app.status === filterStatus));
+  }, [apps, filterStatus]);
+
+  const counts = useMemo(() => {
+    return {
+      all: apps.length,
+      pending: apps.filter(a => a.status === 'pending').length,
+      approved: apps.filter(a => a.status === 'approved').length,
+      rejected: apps.filter(a => a.status === 'rejected').length,
+    };
+  }, [apps]);
+
+  const safeSelected = (app: ExpertApplication | null) => {
+    setSelectedApp(app);
+    setIsEditing(false);
+    setEditSpecialty('');
+    setShowRejectModal(false);
+    setRejectReason('');
+  };
+
+  // ===========================
+  // Actions: Approve / Reject
+  // ===========================
+  const handleApprove = async () => {
+    if (!selectedApp || isProcessing) return;
+    if (!confirm(`Bạn xác nhận DUYỆT hồ sơ của ${selectedApp.fullName}?`)) return;
+
+    setIsProcessing(true);
+    try {
+      await processExpertApplication(
+        selectedApp.id,
+        selectedApp.userId,
+        'approved',
+        undefined,
+        // ưu tiên approvedSpecialty nếu có (admin đã sửa)
+        ((selectedApp as any)?.approvedSpecialty || selectedApp.specialty) as any
+      );
+
+      setApps(prev => prev.map(a => (a.id === selectedApp.id ? { ...a, status: 'approved' } : a)));
+      setSelectedApp(prev => (prev ? { ...prev, status: 'approved' } : prev));
+    } catch (e) {
+      console.error(e);
+      alert('Lỗi khi duyệt hồ sơ!');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleRejectSubmit = async () => {
+    if (!selectedApp || isProcessing) return;
+    if (!rejectReason.trim()) return alert('Vui lòng nhập lý do từ chối.');
+
+    setIsProcessing(true);
+    try {
+      await processExpertApplication(selectedApp.id, selectedApp.userId, 'rejected', rejectReason.trim());
+
+      setApps(prev =>
+        prev.map(a =>
+          a.id === selectedApp.id ? ({ ...a, status: 'rejected', rejectionReason: rejectReason.trim() } as any) : a
+        )
+      );
+      setSelectedApp(prev =>
+        prev ? ({ ...prev, status: 'rejected', rejectionReason: rejectReason.trim() } as any) : prev
+      );
+
+      setShowRejectModal(false);
+      setRejectReason('');
+    } catch (e) {
+      console.error(e);
+      alert('Lỗi khi từ chối hồ sơ!');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // ===========================
+  // Actions: Delete app / Revoke
+  // ===========================
+  const handleDeleteApp = async () => {
+    if (!selectedApp || isProcessing) return;
+    if (!confirm(`Xoá hồ sơ ứng tuyển của ${selectedApp.fullName}? Thao tác này không thể hoàn tác.`)) return;
+
+    setIsProcessing(true);
+    try {
+      await deleteExpertApplication(selectedApp.id);
+
+      // UI sync
+      setApps(prev => prev.filter(a => a.id !== selectedApp.id));
+      safeSelected(null);
+    } catch (e) {
+      console.error(e);
+      alert('Không xoá được hồ sơ! (Kiểm tra Firestore Rules: expert_applications cần allow delete cho admin)');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleRevokeExpert = async () => {
+    if (!selectedApp || isProcessing) return;
+    if (!confirm(`GỠ QUYỀN chuyên gia của ${selectedApp.fullName}? (User sẽ mất isExpert)`)) return;
+
+    setIsProcessing(true);
+    try {
+      const reason = 'Admin gỡ quyền chuyên gia';
+      await revokeExpertByAdmin({
+        userId: selectedApp.userId,
+        appId: selectedApp.id,
+        reason,
       });
 
-      // ✅ Optimistic UI: chuyển sang pending ngay (kể cả nếu user doc chưa update)
-      setLatestApp((prev) => ({
-        id: prev?.id || 'local_pending',
-        userId: currentUser.id,
-        fullName: formData.fullName,
-        phone: formData.phone,
-        workplace: formData.workplace,
-        specialty: formData.specialty,
-        status: 'pending',
-        rejectionReason: null,
-        createdAt: new Date().toISOString(),
-      }));
-
-      // clear files in UI (tuỳ bạn)
-      setFormData((s) => ({ ...s, files: [] }));
-    } catch (err: any) {
-      console.error(err);
-      setFormError(err?.message || 'Gửi hồ sơ thất bại. Vui lòng thử lại.');
-      setIsSubmitting(false);
+      // UI sync -> rejected để nhìn đúng trạng thái
+      setApps(prev =>
+        prev.map(a => (a.id === selectedApp.id ? ({ ...a, status: 'rejected', rejectionReason: reason } as any) : a))
+      );
+      setSelectedApp(prev => (prev ? ({ ...prev, status: 'rejected', rejectionReason: reason } as any) : prev));
+    } catch (e) {
+      console.error(e);
+      alert('Không gỡ quyền được!');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  // -----------------------------
-  // Views
-  // -----------------------------
-  if (loadingApp) {
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-14 animate-fade-in">
-        <div className="bg-white dark:bg-dark-card rounded-[2rem] shadow-lg p-10 text-center border border-gray-100 dark:border-dark-border">
-          <Loader2 className="mx-auto animate-spin text-blue-500 mb-3" />
-          <p className="text-sm text-textGray dark:text-gray-400 font-medium">Đang tải trạng thái hồ sơ...</p>
+  // ===========================
+  // Edit specialty (sync app+user)
+  // ===========================
+  const handleStartEdit = () => {
+    if (!selectedApp) return;
+    setIsEditing(true);
+    setEditSpecialty(((selectedApp as any)?.approvedSpecialty || selectedApp.specialty || '') as any);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedApp || isProcessing) return;
+    if (!editSpecialty.trim()) return alert('Chuyên môn không được để trống.');
+
+    setIsProcessing(true);
+    try {
+      await updateExpertSpecialtyFromApp({
+        appId: selectedApp.id,
+        userId: selectedApp.userId,
+        specialty: editSpecialty.trim(),
+      });
+
+      setApps(prev =>
+        prev.map(a =>
+          a.id === selectedApp.id
+            ? ({ ...a, specialty: editSpecialty.trim(), approvedSpecialty: editSpecialty.trim() } as any)
+            : a
+        )
+      );
+      setSelectedApp(prev =>
+        prev ? ({ ...prev, specialty: editSpecialty.trim(), approvedSpecialty: editSpecialty.trim() } as any) : prev
+      );
+
+      setIsEditing(false);
+    } catch (e) {
+      console.error(e);
+      alert('Không lưu được chỉnh sửa!');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // ===========================
+  // Manual create expert (search user + approve)
+  // ===========================
+  const resetManualModal = () => {
+    setSelectedUser(null);
+    setUserQuery('');
+    setUserResults([]);
+    setManualSpecialty('');
+    setManualWorkplace('');
+    setManualBio('');
+    setManualPhone('');
+  };
+
+  const handleSearchUsers = async () => {
+    const k = userQuery.trim();
+    if (!k) return;
+
+    setUserSearching(true);
+    try {
+      const res = await searchUsersForAdmin(k, 12);
+      setUserResults(res);
+    } catch (e) {
+      console.error(e);
+      alert('Không tìm được user.');
+    } finally {
+      setUserSearching(false);
+    }
+  };
+
+  const handleCreateExpertManual = async () => {
+    if (!selectedUser) return alert('Bạn chưa chọn user.');
+    if (!manualSpecialty.trim()) return alert('Vui lòng nhập chuyên môn.');
+
+    setIsProcessing(true);
+    try {
+      await addExpertManually({
+        userId: selectedUser.id,
+        specialty: manualSpecialty.trim(),
+        name: selectedUser.name,
+        phone: manualPhone.trim() || undefined,
+        workplace: manualWorkplace.trim() || undefined,
+        bio: manualBio.trim() || undefined,
+      });
+
+      alert('Đã tạo chuyên gia thủ công!');
+      setShowManualModal(false);
+      resetManualModal();
+
+      // Refresh approvals list (không bắt buộc nhưng cho sạch UI)
+      await loadApps();
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message === 'USER_NOT_FOUND' ? 'User không tồn tại.' : 'Tạo chuyên gia thất bại.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // ===========================
+  // Render
+  // ===========================
+  return (
+    <div className="flex flex-col h-[calc(100vh-100px)] animate-fade-in">
+      {/* Toolbar */}
+      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-4 flex gap-2 overflow-x-auto shrink-0 items-center">
+        <button
+          onClick={loadApps}
+          disabled={loading}
+          className="mr-2 p-2 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 active:scale-95 transition-all disabled:opacity-50"
+          title="Làm mới dữ liệu"
+        >
+          <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+        </button>
+
+        <div className="flex items-center gap-2 mr-4 text-gray-400 font-bold text-xs uppercase tracking-widest">
+          <Filter size={14} /> Bộ lọc
         </div>
-      </div>
-    );
-  }
 
-  // Status View: APPROVED
-  if (effectiveStatus === 'approved') {
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-12 animate-fade-in">
-        <div className="bg-gradient-to-br from-blue-500 to-teal-500 rounded-[2rem] shadow-xl p-8 md:p-12 text-center text-white relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10" />
-          <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-md text-blue-500">
-            <ShieldCheck size={48} />
-          </div>
-          <h2 className="text-3xl font-bold mb-4">Chào mừng Chuyên gia!</h2>
-          <p className="mb-8 text-blue-50">
-            Hồ sơ của bạn đã được duyệt. Giờ đây bạn có thể chia sẻ kiến thức chuyên môn và giúp đỡ cộng đồng với danh hiệu được xác thực.
-          </p>
-
-          <Link
-            to="/"
-            className="relative z-10 inline-flex items-center gap-2 bg-white text-blue-600 font-bold px-8 py-3 rounded-full shadow-lg hover:bg-gray-50 transition-colors"
-          >
-            Bắt đầu chia sẻ <ChevronRight size={20} />
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  // Status View: PENDING
-  if (effectiveStatus === 'pending') {
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-12 animate-fade-in">
-        <div className="bg-white dark:bg-dark-card rounded-[2rem] shadow-lg p-8 md:p-12 text-center border border-gray-100 dark:border-dark-border transition-colors">
-          <div className="w-24 h-24 bg-blue-50 dark:bg-blue-900/20 rounded-full flex items-center justify-center mx-auto mb-6 relative">
-            <Clock size={48} className="text-blue-500" />
-            <span className="absolute top-0 right-0 flex h-6 w-6">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-6 w-6 bg-blue-500"></span>
-            </span>
-          </div>
-
-          <h2 className="text-2xl font-bold text-textDark dark:text-white mb-4">
-            Hồ sơ đang được xét duyệt
-          </h2>
-
-          <p className="text-textGray dark:text-gray-400 mb-8 leading-relaxed">
-            Cảm ơn bạn đã gửi hồ sơ đăng ký trở thành Chuyên gia.
-            Đội ngũ admin đang kiểm tra thông tin (dự kiến 1–2 ngày làm việc).
-            Chúng tôi sẽ thông báo kết quả qua email và thông báo trên ứng dụng.
-          </p>
-
-          <div className="bg-gray-50 dark:bg-slate-800 rounded-xl p-6 text-left max-w-md mx-auto">
-            <h4 className="font-bold text-sm text-textGray dark:text-gray-400 uppercase mb-4 tracking-wider">
-              Tiến trình
-            </h4>
-            <TimelineItem status="completed" title="Gửi hồ sơ đăng ký" date="Đã gửi" />
-            <TimelineItem status="active" title="Admin kiểm tra bằng cấp" date="Đang xử lý..." />
-            <TimelineItem status="pending" title="Kích hoạt danh hiệu Chuyên gia" date="--" />
-          </div>
-
+        {(['all', 'pending', 'approved', 'rejected'] as const).map(status => (
           <button
-            onClick={loadLatestApplication}
-            className="mt-8 inline-flex items-center gap-2 text-sm font-bold text-blue-600 hover:text-blue-700"
+            key={status}
+            onClick={() => {
+              setFilterStatus(status);
+              safeSelected(null);
+            }}
+            className={`px-4 py-2 rounded-lg text-sm font-bold capitalize transition-all flex items-center gap-2 ${
+              filterStatus === status
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-100'
+                : 'bg-white border border-gray-100 text-gray-500 hover:bg-gray-50'
+            }`}
           >
-            <RefreshCw size={16} /> Làm mới trạng thái
+            {status === 'all'
+              ? 'Tất cả'
+              : status === 'pending'
+              ? 'Chờ duyệt'
+              : status === 'approved'
+              ? 'Đã duyệt'
+              : 'Đã từ chối'}
+            <span
+              className={`px-1.5 py-0.5 rounded-md text-[10px] ${
+                filterStatus === status ? 'bg-white/20' : 'bg-gray-100'
+              }`}
+            >
+              {(counts as any)[status]}
+            </span>
           </button>
-        </div>
+        ))}
+
+        {/* ✅ Admin tạo chuyên gia thủ công */}
+        <button
+          onClick={() => {
+            setShowManualModal(true);
+            resetManualModal();
+          }}
+          className="ml-auto px-4 py-2 rounded-lg text-sm font-black bg-blue-600 text-white shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all flex items-center gap-2 active:scale-95"
+          title="Tạo chuyên gia thủ công"
+        >
+          <Plus size={16} /> Tạo chuyên gia
+        </button>
       </div>
-    );
-  }
 
-  // Status View: REJECTED / REVOKED
-  // - Hiển thị lý do (nếu có)
-  // - Cho nộp lại hồ sơ: tạo doc mới
-  if (effectiveStatus === 'rejected' && (latestApp || currentUser?.expertStatus === 'rejected')) {
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-12 animate-fade-in">
-        <div className="bg-white dark:bg-dark-card rounded-[2rem] shadow-lg p-8 md:p-12 border border-gray-100 dark:border-dark-border transition-colors text-center">
-          <div className="w-24 h-24 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-6">
-            <X size={44} className="text-red-500" />
-          </div>
-
-          <h2 className="text-2xl font-bold text-textDark dark:text-white mb-2">Hồ sơ chưa được duyệt</h2>
-          <p className="text-textGray dark:text-gray-400 mb-6 leading-relaxed">
-            Bạn có thể chỉnh sửa thông tin và <strong>nộp lại hồ sơ mới</strong>.
-            Nếu cần hỗ trợ, vui lòng liên hệ admin.
-          </p>
-
-          {rejectionReason ? (
-            <div className="bg-red-50/60 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-2xl p-5 text-left max-w-xl mx-auto mb-6">
-              <div className="flex items-start gap-3">
-                <AlertTriangle size={18} className="text-red-500 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-xs font-black uppercase tracking-wider text-red-600 dark:text-red-300 mb-1">
-                    Lý do từ chối
-                  </p>
-                  <p className="text-sm font-medium text-red-700 dark:text-red-200 leading-relaxed">
-                    {rejectionReason}
-                  </p>
-                </div>
+      <div className="grid lg:grid-cols-3 gap-6 flex-1 min-h-0">
+        {/* List Column */}
+        <div className="lg:col-span-1 bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-10 gap-2">
+                <Loader2 className="animate-spin text-blue-500" />
+                <span className="text-sm text-gray-400">Đang tìm hồ sơ...</span>
               </div>
-            </div>
-          ) : (
-            <div className="bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-2xl p-5 text-left max-w-xl mx-auto mb-6">
-              <p className="text-sm text-textGray dark:text-gray-400">
-                Admin chưa ghi lý do cụ thể. Bạn vẫn có thể nộp lại hồ sơ với minh chứng rõ hơn.
-              </p>
-            </div>
-          )}
-
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <button
-              onClick={() => {
-                resetToResubmit();
-                // chuyển xuống form ở dưới (scroll nhẹ)
-                const el = document.getElementById('expert-reg-form');
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }}
-              className="inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-bold px-8 py-3 rounded-full shadow-lg hover:bg-blue-700 transition-colors"
-            >
-              Nộp lại hồ sơ mới <ChevronRight size={18} />
-            </button>
-
-            <button
-              onClick={loadLatestApplication}
-              className="inline-flex items-center justify-center gap-2 bg-white border border-gray-200 text-gray-700 font-bold px-8 py-3 rounded-full hover:bg-gray-50 transition-colors"
-            >
-              <RefreshCw size={18} /> Làm mới
-            </button>
-          </div>
-        </div>
-
-        {/* Form luôn hiển thị bên dưới để user nộp lại ngay */}
-        <div id="expert-reg-form" className="mt-10">
-          {renderForm()}
-        </div>
-      </div>
-    );
-  }
-
-  // Default: Form (chưa nộp lần nào)
-  return renderForm();
-
-  // -----------------------------
-  // Form renderer (giữ UI như bạn đang có)
-  // -----------------------------
-  function renderForm() {
-    return (
-      <div className="max-w-4xl mx-auto px-4 py-8 animate-fade-in">
-        {/* Hero */}
-        <div className="text-center mb-10">
-          <h1 className="text-3xl md:text-4xl font-bold text-textDark dark:text-white mb-4">
-            Đăng ký đối tác <span className="text-blue-600 dark:text-blue-400">Chuyên gia</span>
-          </h1>
-          <p className="text-textGray dark:text-gray-400 max-w-2xl mx-auto">
-            Tham gia đội ngũ chuyên gia uy tín tại Asking.vn để xây dựng thương hiệu cá nhân và lan tỏa giá trị tích cực đến cộng đồng.
-          </p>
-        </div>
-
-        <div className="grid md:grid-cols-3 gap-8">
-          {/* Sidebar Info */}
-          <div className="md:col-span-1 space-y-4">
-            <div className="bg-white dark:bg-dark-card p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-dark-border transition-colors">
-              <h3 className="font-bold text-textDark dark:text-white mb-4 flex items-center gap-2">
-                <ShieldCheck className="text-blue-500" size={20} /> Quyền lợi
-              </h3>
-              <ul className="space-y-3 text-sm text-textGray dark:text-gray-400">
-                <li className="flex gap-3">
-                  <CheckCircle className="text-green-500 shrink-0" size={16} />
-                  <span>Dấu tích xanh xác thực uy tín</span>
-                </li>
-                <li className="flex gap-3">
-                  <CheckCircle className="text-green-500 shrink-0" size={16} />
-                  <span>Nổi bật câu trả lời chuyên môn</span>
-                </li>
-                <li className="flex gap-3">
-                  <CheckCircle className="text-green-500 shrink-0" size={16} />
-                  <span>Tiếp cận 10,000+ phụ huynh</span>
-                </li>
-                <li className="flex gap-3">
-                  <CheckCircle className="text-green-500 shrink-0" size={16} />
-                  <span>Được quyền Viết Blog và chia sẻ tài liệu của riêng mình</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-2xl border border-blue-100 dark:border-blue-900/30">
-              <h3 className="font-bold text-blue-800 dark:text-blue-300 mb-2 text-sm">Tại sao cần xác thực?</h3>
-              <p className="text-xs text-blue-600 dark:text-blue-400 leading-relaxed">
-                Để đảm bảo thông tin sức khỏe và giáo dục trên Asking.vn luôn chính xác và an toàn,
-                chúng tôi yêu cầu xác minh bằng cấp chuyên môn của tất cả chuyên gia.
-              </p>
-            </div>
-
-            {!!formError && (
-              <div className="bg-red-50 dark:bg-red-900/20 p-5 rounded-2xl border border-red-100 dark:border-red-900/30 text-left">
-                <p className="text-sm font-bold text-red-700 dark:text-red-200">{formError}</p>
+            ) : filteredApps.length === 0 ? (
+              <div className="text-center py-20 bg-gray-50 rounded-xl border border-dashed border-gray-200 mx-2">
+                <p className="text-gray-400 text-sm font-medium">Không có hồ sơ nào</p>
               </div>
+            ) : (
+              filteredApps.map(app => (
+                <button
+                  key={app.id}
+                  onClick={() => safeSelected(app)}
+                  className={`w-full text-left p-4 rounded-xl border transition-all relative group ${
+                    selectedApp?.id === app.id ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-transparent hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex justify-between items-start mb-1">
+                    <span
+                      className={`font-bold text-sm ${
+                        selectedApp?.id === app.id ? 'text-blue-700' : 'text-gray-900'
+                      }`}
+                    >
+                      {app.fullName}
+                    </span>
+
+                    <div className="flex items-center gap-2">
+                      {app.status === 'pending' && (
+                        <span className="flex h-2 w-2 relative mt-1.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
+                        </span>
+                      )}
+                      {app.status === 'approved' && <Check size={14} className="text-green-500 shrink-0" />}
+                      {app.status === 'rejected' && <X size={14} className="text-red-500 shrink-0" />}
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-blue-600 font-bold mb-2 uppercase tracking-tight">
+                    {(app as any)?.approvedSpecialty || app.specialty}
+                  </p>
+
+                  <p className="text-[10px] text-gray-400 flex items-center gap-1 font-medium">
+                    <Clock size={10} /> Gửi ngày {new Date(app.createdAt).toLocaleDateString('vi-VN')}
+                  </p>
+                </button>
+              ))
             )}
           </div>
+        </div>
 
-          {/* Form Area */}
-          <div className="md:col-span-2">
-            <form
-              onSubmit={handleSubmit}
-              className="bg-white dark:bg-dark-card rounded-[2rem] shadow-lg border border-gray-100 dark:border-dark-border overflow-hidden transition-colors"
-            >
-              <div className="p-8">
-                <h3 className="text-xl font-bold text-textDark dark:text-white mb-6">Thông tin đăng ký</h3>
-
-                <div className="space-y-6">
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-bold text-textDark dark:text-gray-300 mb-2">Họ và tên</label>
-                      <input
-                        type="text"
-                        value={formData.fullName}
-                        onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                        className="w-full p-3 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-textDark dark:text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/30 outline-none transition-all"
-                        placeholder="Nguyễn Văn A"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-bold text-textDark dark:text-gray-300 mb-2">Số điện thoại</label>
-                      <input
-                        type="tel"
-                        value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        className="w-full p-3 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-textDark dark:text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/30 outline-none transition-all"
-                        placeholder="0912 xxx xxx"
-                        required
-                      />
-                    </div>
+        {/* Detail Column */}
+        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6 overflow-y-auto relative custom-scrollbar">
+          {selectedApp ? (
+            <div className="space-y-8 animate-fade-in">
+              {/* Header Detail */}
+              <div className="flex flex-col md:flex-row justify-between items-start gap-4 pb-6 border-b border-gray-100">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 font-black text-2xl border border-blue-100">
+                    {selectedApp.fullName?.charAt(0) || 'E'}
                   </div>
-
                   <div>
-                    <label className="block text-sm font-bold text-textDark dark:text-gray-300 mb-2">Lĩnh vực chuyên môn</label>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      {SPECIALTIES.map((spec) => (
-                        <button
-                          key={spec.id}
-                          type="button"
-                          onClick={() => setFormData({ ...formData, specialty: spec.label })}
-                          className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-2 transition-all ${
-                            formData.specialty === spec.label
-                              ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-500 text-blue-600 dark:text-blue-400'
-                              : 'border-gray-100 dark:border-slate-700 hover:border-blue-200 dark:hover:border-slate-600 text-textGray dark:text-gray-400 bg-white dark:bg-slate-800'
-                          }`}
-                        >
-                          {spec.icon}
-                          <span className="text-xs font-medium">{spec.label}</span>
-                        </button>
-                      ))}
+                    <div className="flex items-center gap-3 mb-1">
+                      <h2 className="text-2xl font-black text-gray-900 tracking-tight">{selectedApp.fullName}</h2>
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${
+                          selectedApp.status === 'pending'
+                            ? 'bg-yellow-50 text-yellow-600 border-yellow-200'
+                            : selectedApp.status === 'approved'
+                            ? 'bg-green-50 text-green-600 border-green-200'
+                            : 'bg-red-50 text-red-600 border-red-200'
+                        }`}
+                      >
+                        {selectedApp.status === 'pending'
+                          ? 'Chờ duyệt'
+                          : selectedApp.status === 'approved'
+                          ? 'Đã duyệt'
+                          : 'Đã từ chối'}
+                      </span>
                     </div>
+
+                    <p className="text-gray-500 text-sm font-medium">
+                      Chuyên môn:&nbsp;
+                      <strong className="text-blue-600 font-bold">
+                        {(selectedApp as any)?.approvedSpecialty || selectedApp.specialty}
+                      </strong>
+                    </p>
                   </div>
+                </div>
 
-                  <div>
-                    <label className="block text-sm font-bold text-textDark dark:text-gray-300 mb-2">Đơn vị công tác hiện tại</label>
-                    <input
-                      type="text"
-                      value={formData.workplace}
-                      onChange={(e) => setFormData({ ...formData, workplace: e.target.value })}
-                      className="w-full p-3 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-textDark dark:text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/30 outline-none transition-all"
-                      placeholder="Ví dụ: Bệnh viện Nhi Đồng 1, Trường Mầm non Hoa Hồng..."
-                      required
-                    />
-                  </div>
+                {/* Actions */}
+                <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                  {/* Xoá hồ sơ */}
+                  <button
+                    onClick={handleDeleteApp}
+                    disabled={isProcessing}
+                    className="px-4 py-2.5 bg-white border border-gray-200 text-gray-700 font-black text-xs uppercase tracking-widest rounded-xl hover:bg-gray-50 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+                    title="Xoá hồ sơ"
+                  >
+                    <Trash2 size={16} /> Xoá hồ sơ
+                  </button>
 
-                  <div>
-                    <label className="block text-sm font-bold text-textDark dark:text-gray-300 mb-2">Minh chứng chuyên môn</label>
-                    <div className="border-2 border-dashed border-gray-200 dark:border-slate-600 rounded-2xl p-6 text-center hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors relative">
-                      <input
-                        type="file"
-                        multiple
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        onChange={handleFileChange}
-                        accept=".jpg,.jpeg,.png,.pdf"
-                      />
-                      <UploadCloud className="mx-auto text-gray-400 mb-2" size={32} />
-                      <p className="text-sm font-medium text-textDark dark:text-white">
-                        Tải lên ảnh Bằng cấp / Chứng chỉ / Thẻ nhân viên
-                      </p>
-                      <p className="text-xs text-textGray dark:text-gray-500 mt-1">
-                        Hỗ trợ JPG, PNG, PDF (Tối đa {MAX_FILE_MB}MB/tệp, tối đa {MAX_FILES} tệp)
-                      </p>
+                  {/* Sửa chuyên môn */}
+                  <button
+                    onClick={isEditing ? handleSaveEdit : handleStartEdit}
+                    disabled={isProcessing}
+                    className="px-4 py-2.5 bg-white border border-blue-100 text-blue-700 font-black text-xs uppercase tracking-widest rounded-xl hover:bg-blue-50 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+                    title="Sửa chuyên môn"
+                  >
+                    {isEditing ? <Save size={16} /> : <Pencil size={16} />}
+                    {isEditing ? 'Lưu' : 'Sửa'}
+                  </button>
 
-                      {formData.files.length > 0 && (
-                        <div className="mt-4 flex flex-wrap gap-2 justify-center">
-                          {formData.files.map((f, i) => (
-                            <span
-                              key={i}
-                              className="text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-1 rounded-md font-medium"
-                            >
-                              {f.name}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  {/* Pending: duyệt / từ chối */}
+                  {selectedApp.status === 'pending' && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setShowRejectModal(true);
+                          setRejectReason('');
+                        }}
+                        disabled={isProcessing}
+                        className="px-4 py-2.5 bg-white border border-red-100 text-red-600 font-black text-xs uppercase tracking-widest rounded-xl hover:bg-red-50 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+                      >
+                        <UserX size={16} /> Từ chối
+                      </button>
+                      <button
+                        onClick={handleApprove}
+                        disabled={isProcessing}
+                        className="px-4 py-2.5 bg-green-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-green-700 transition-all flex items-center justify-center gap-2 shadow-xl shadow-green-100 active:scale-95 disabled:opacity-50"
+                      >
+                        {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <UserCheck size={16} />}
+                        Duyệt
+                      </button>
+                    </>
+                  )}
 
-                  {!!formError && (
-                    <div className="bg-red-50/70 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-2xl p-4 text-left">
-                      <p className="text-sm font-bold text-red-700 dark:text-red-200">{formError}</p>
-                    </div>
+                  {/* Approved: gỡ quyền */}
+                  {selectedApp.status === 'approved' && (
+                    <button
+                      onClick={handleRevokeExpert}
+                      disabled={isProcessing}
+                      className="px-4 py-2.5 bg-red-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-red-700 transition-all flex items-center justify-center gap-2 shadow-xl shadow-red-100 active:scale-95 disabled:opacity-50"
+                      title="Gỡ quyền chuyên gia"
+                    >
+                      {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <UserX size={16} />}
+                      Gỡ quyền
+                    </button>
                   )}
                 </div>
               </div>
 
-              <div className="bg-gray-50 dark:bg-slate-800/50 p-6 flex justify-end items-center border-t border-gray-100 dark:border-dark-border">
-                <button
-                  type="submit"
-                  disabled={isSubmitting || !formData.specialty || formData.files.length === 0}
-                  className="bg-blue-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-blue-700 hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {isSubmitting ? 'Đang gửi...' : 'Gửi hồ sơ đăng ký'}
-                </button>
-              </div>
-            </form>
+              {/* Inline edit specialty */}
+              {isEditing && (
+                <div className="bg-blue-50/60 border border-blue-100 p-4 rounded-2xl">
+                  <p className="text-xs font-black uppercase tracking-wider text-blue-700 mb-2">Chỉnh sửa chuyên môn</p>
+                  <div className="flex gap-2">
+                    <input
+                      value={editSpecialty}
+                      onChange={(e) => setEditSpecialty(e.target.value)}
+                      className="flex-1 px-4 py-3 rounded-xl border border-blue-200 bg-white outline-none focus:ring-4 focus:ring-blue-100 font-bold text-gray-900"
+                      placeholder="Ví dụ: Bác sĩ Nhi khoa"
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleSaveEdit}
+                      disabled={!editSpecialty.trim() || isProcessing}
+                      className="px-5 rounded-xl bg-blue-600 text-white font-black active:scale-95 disabled:opacity-50"
+                    >
+                      Lưu
+                    </button>
+                  </div>
+                </div>
+              )}
 
-            {latestApp?.status === 'rejected' && (
-              <p className="text-xs text-gray-400 mt-3">
-                * Hệ thống sẽ tạo một hồ sơ mới khi bạn nộp lại. Admin vẫn xem được lịch sử để đối chiếu.
-              </p>
-            )}
-          </div>
+              {selectedApp.status === 'rejected' && selectedApp.rejectionReason && (
+                <div className="bg-red-50/50 border border-red-100 p-4 rounded-2xl flex items-start gap-3 text-red-700 animate-slide-up">
+                  <AlertTriangle className="shrink-0 mt-0.5" size={18} />
+                  <div>
+                    <p className="font-black text-xs uppercase tracking-wider mb-1">Lý do từ chối:</p>
+                    <p className="text-sm font-medium leading-relaxed">{selectedApp.rejectionReason}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Info Grid */}
+              <div className="grid md:grid-cols-2 gap-8">
+                <div className="space-y-6">
+                  <div className="bg-gray-50/50 p-6 rounded-2xl border border-gray-100">
+                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                      <FileText size={12} /> Thông tin chi tiết
+                    </h4>
+                    <div className="space-y-4">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase">Số điện thoại</span>
+                        <span className="font-bold text-gray-900">{selectedApp.phone || '—'}</span>
+                      </div>
+                      <div className="flex flex-col border-t border-gray-100 pt-3">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase">Đơn vị công tác</span>
+                        <span className="font-bold text-gray-900">{selectedApp.workplace || '—'}</span>
+                      </div>
+                      <div className="flex flex-col border-t border-gray-100 pt-3">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase">Thời gian gửi hồ sơ</span>
+                        <span className="font-bold text-gray-900">
+                          {selectedApp.createdAt ? new Date(selectedApp.createdAt).toLocaleString('vi-VN') : '—'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white">
+                  <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                    <ExternalLink size={12} /> Bằng cấp & Minh chứng
+                  </h4>
+                  {selectedApp.proofImages && selectedApp.proofImages.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {selectedApp.proofImages.map((img, idx) => (
+                        <div
+                          key={idx}
+                          className="group relative aspect-[4/3] bg-gray-50 rounded-2xl overflow-hidden border border-gray-100 cursor-zoom-in shadow-sm hover:shadow-md transition-all"
+                          onClick={() => setPreviewImage(img)}
+                        >
+                          <img
+                            src={img}
+                            alt="Proof"
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                            loading="lazy"
+                          />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
+                            <div className="bg-white/90 p-2 rounded-full transform translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 shadow-xl">
+                              <ZoomIn size={20} className="text-blue-600" />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="py-10 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400">
+                      <FileText size={32} className="mb-2 opacity-20" />
+                      <p className="text-xs font-bold uppercase tracking-widest">Không có tài liệu</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-gray-200 animate-pulse">
+              <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-6">
+                <UserCheck size={48} className="opacity-20" />
+              </div>
+              <p className="font-black text-xs uppercase tracking-[0.3em] text-gray-400">Vui lòng chọn một hồ sơ để kiểm duyệt</p>
+            </div>
+          )}
         </div>
       </div>
-    );
-  }
-};
 
-const TimelineItem: React.FC<{
-  status: 'completed' | 'active' | 'pending';
-  title: string;
-  date: string;
-}> = ({ status, title, date }) => {
-  const getIcon = () => {
-    if (status === 'completed') return <CheckCircle size={16} className="text-white" />;
-    if (status === 'active') return <div className="w-2.5 h-2.5 bg-white rounded-full"></div>;
-    return <div className="w-2.5 h-2.5 bg-gray-300 dark:bg-gray-500 rounded-full"></div>;
-  };
+      {/* Lightbox Modal */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center animate-fade-in p-4"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div className="absolute top-6 right-6 flex gap-4">
+            <a
+              href={previewImage}
+              target="_blank"
+              rel="noreferrer"
+              className="text-white/60 hover:text-white transition-colors"
+              onClick={e => e.stopPropagation()}
+            >
+              <ExternalLink size={24} />
+            </a>
+            <button className="text-white/60 hover:text-white transition-colors">
+              <X size={28} />
+            </button>
+          </div>
+          <img
+            src={previewImage}
+            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl animate-pop-in"
+            onClick={e => e.stopPropagation()}
+            alt="Preview"
+          />
+          <p className="text-white/40 text-xs font-bold uppercase tracking-widest mt-6">Nhấp vào vùng trống để thoát</p>
+        </div>
+      )}
 
-  const getColor = () => {
-    if (status === 'completed') return 'bg-green-500';
-    if (status === 'active') return 'bg-blue-500';
-    return 'bg-gray-200 dark:bg-slate-700';
-  };
+      {/* Rejection Modal */}
+      {showRejectModal && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-md px-4 p-safe-bottom">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md p-8 animate-pop-in border border-gray-100">
+            <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center text-red-500 mb-6 border border-red-100">
+              <UserX size={32} />
+            </div>
+            <h3 className="text-2xl font-black text-gray-900 mb-2">Từ chối hồ sơ</h3>
+            <p className="text-sm text-gray-500 mb-6 font-medium leading-relaxed">
+              Hệ thống sẽ gửi thông báo từ chối kèm lý do cho <strong>{selectedApp?.fullName}</strong>.
+            </p>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Ví dụ: Hình ảnh bằng cấp bị mờ, thông tin không khớp thực tế..."
+              className="w-full h-40 p-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-red-100 focus:border-red-500 focus:bg-white outline-none resize-none mb-6 text-sm font-medium transition-all"
+              autoFocus
+            />
+            <div className="flex gap-4">
+              <button
+                onClick={() => setShowRejectModal(false)}
+                className="flex-1 py-3.5 text-gray-500 font-black text-xs uppercase tracking-widest hover:bg-gray-100 rounded-2xl transition-all"
+              >
+                Quay lại
+              </button>
+              <button
+                onClick={handleRejectSubmit}
+                disabled={!rejectReason.trim() || isProcessing}
+                className="flex-[2] py-3.5 bg-red-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-red-700 shadow-xl shadow-red-100 disabled:opacity-50 active:scale-95 transition-all"
+              >
+                {isProcessing ? <Loader2 size={16} className="animate-spin mx-auto" /> : 'Xác nhận từ chối'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-  return (
-    <div className="flex gap-4 mb-6 last:mb-0 relative">
-      <div className="absolute left-3.5 top-8 bottom-[-24px] w-0.5 bg-gray-100 dark:bg-slate-700 last:hidden"></div>
+      {/* ✅ Manual Create Expert Modal */}
+      {showManualModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-md px-4 p-safe-bottom">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl p-8 animate-pop-in border border-gray-100">
+            <div className="flex items-start justify-between gap-4 mb-6">
+              <div>
+                <h3 className="text-2xl font-black text-gray-900">Tạo chuyên gia thủ công</h3>
+                <p className="text-sm text-gray-500 font-medium mt-1">
+                  Dành cho user đăng nhập Google / Email&Password (đều có uid trong users).
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowManualModal(false);
+                  resetManualModal();
+                }}
+                className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center"
+              >
+                <X size={18} />
+              </button>
+            </div>
 
-      <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 z-10 ${getColor()}`}>
-        {getIcon()}
-      </div>
-      <div>
-        <h5 className={`font-bold text-sm ${status === 'pending' ? 'text-gray-400 dark:text-gray-500' : 'text-textDark dark:text-white'}`}>
-          {title}
-        </h5>
-        <span className="text-xs text-textGray dark:text-gray-500">{date}</span>
-      </div>
+            {/* Search user */}
+            <div className="bg-gray-50 rounded-2xl border border-gray-100 p-4 mb-6">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3">
+                Tìm user (theo tên/email)
+              </p>
+
+              <div className="flex gap-2">
+                <input
+                  value={userQuery}
+                  onChange={(e) => setUserQuery(e.target.value)}
+                  placeholder="Nhập tên hoặc email..."
+                  className="flex-1 px-4 py-3 rounded-xl border border-gray-200 bg-white outline-none focus:ring-4 focus:ring-blue-100 font-bold text-gray-900"
+                />
+                <button
+                  onClick={handleSearchUsers}
+                  disabled={!userQuery.trim() || userSearching}
+                  className="px-5 rounded-xl bg-blue-600 text-white font-black disabled:opacity-50 active:scale-95"
+                >
+                  {userSearching ? <Loader2 size={16} className="animate-spin" /> : 'Tìm'}
+                </button>
+              </div>
+
+              {userResults.length > 0 && (
+                <div className="mt-4 grid sm:grid-cols-2 gap-2">
+                  {userResults.map(u => (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => setSelectedUser(u)}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        selectedUser?.id === u.id ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="font-black text-sm text-gray-900">{u.name || '(Chưa đặt tên)'}</div>
+                      <div className="text-xs text-gray-500 font-medium">
+                        {(u as any)?.email || '—'} • UID: {u.id.slice(0, 8)}…
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {selectedUser && (
+                <div className="mt-4 p-4 rounded-2xl bg-white border border-blue-100">
+                  <p className="text-xs font-black uppercase tracking-wider text-blue-700 mb-1">User đã chọn</p>
+                  <p className="font-black text-gray-900">{selectedUser.name || '—'}</p>
+                  <p className="text-xs text-gray-500 font-medium">{(selectedUser as any)?.email || '—'} • {selectedUser.id}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Expert fields */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-xs font-black uppercase tracking-widest text-gray-400 mb-2">
+                  Chuyên môn (bắt buộc)
+                </label>
+                <input
+                  value={manualSpecialty}
+                  onChange={(e) => setManualSpecialty(e.target.value)}
+                  placeholder="Ví dụ: Bác sĩ Nhi khoa"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white outline-none focus:ring-4 focus:ring-blue-100 font-bold text-gray-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-gray-400 mb-2">
+                  SĐT (tuỳ chọn)
+                </label>
+                <input
+                  value={manualPhone}
+                  onChange={(e) => setManualPhone(e.target.value)}
+                  placeholder="0912xxxxxx"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white outline-none focus:ring-4 focus:ring-blue-100 font-bold text-gray-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-gray-400 mb-2">
+                  Đơn vị công tác (tuỳ chọn)
+                </label>
+                <input
+                  value={manualWorkplace}
+                  onChange={(e) => setManualWorkplace(e.target.value)}
+                  placeholder="Bệnh viện / Trường / Phòng khám..."
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white outline-none focus:ring-4 focus:ring-blue-100 font-bold text-gray-900"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-black uppercase tracking-widest text-gray-400 mb-2">
+                  Bio (tuỳ chọn)
+                </label>
+                <textarea
+                  value={manualBio}
+                  onChange={(e) => setManualBio(e.target.value)}
+                  placeholder="Giới thiệu ngắn về chuyên gia..."
+                  className="w-full h-28 px-4 py-3 rounded-xl border border-gray-200 bg-white outline-none focus:ring-4 focus:ring-blue-100 font-medium text-gray-900 resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => {
+                  setShowManualModal(false);
+                  resetManualModal();
+                }}
+                className="flex-1 py-3.5 text-gray-500 font-black text-xs uppercase tracking-widest hover:bg-gray-100 rounded-2xl transition-all"
+              >
+                Huỷ
+              </button>
+              <button
+                onClick={handleCreateExpertManual}
+                disabled={!selectedUser || !manualSpecialty.trim() || isProcessing}
+                className="flex-[2] py-3.5 bg-green-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-green-700 shadow-xl shadow-green-100 disabled:opacity-50 active:scale-95 transition-all"
+              >
+                {isProcessing ? <Loader2 size={16} className="animate-spin mx-auto" /> : 'Tạo chuyên gia'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
