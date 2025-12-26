@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import * as admin from 'firebase-admin';
 
-// 1. Khởi tạo Firebase Admin (Singleton để tránh lỗi init nhiều lần)
+// 1. Khởi tạo Firebase Admin (Singleton)
 if (!admin.apps.length) {
   const privateKey = process.env.FIREBASE_PRIVATE_KEY
     ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
@@ -30,6 +30,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
+    // 0. Kiểm tra Header và Body cơ bản
+    if (!req.body) {
+      return res.status(400).json({ message: "Request body is missing. Check Content-Type header." });
+    }
+
     // --- BƯỚC 1: XÁC THỰC QUYỀN ADMIN ---
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -49,14 +54,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // --- BƯỚC 2: VALIDATE DỮ LIỆU ---
-    const { email, password, name } = req.body;
+    // Sử dụng fallback || {} đề phòng req.body bị null (dù đã check ở trên)
+    const { email, password, name } = req.body || {};
 
     if (!email || !password) {
       return res.status(400).json({ message: 'Vui lòng nhập Email và Mật khẩu' });
     }
 
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanName = name ? name.trim() : 'Thành viên mới';
+    const cleanEmail = email.toString().trim().toLowerCase();
+    const cleanName = name ? name.toString().trim() : 'Thành viên mới';
 
     // --- BƯỚC 3: TẠO USER TRONG AUTHENTICATION ---
     const userRecord = await auth.createUser({
