@@ -15,6 +15,7 @@ import {
   QueryDocumentSnapshot,
   DocumentData,
   getCountFromServer,
+  FieldPath,
 } from "firebase/firestore";
 import { db } from "../firebaseConfig";
 import { getAuth } from "firebase/auth";
@@ -62,29 +63,51 @@ export const getSystemStats = async () => {
 /* ============================================================
    USERS MANAGEMENT
    ============================================================ */
+
+/**
+ * ✅ FIX: Phân trang không bao giờ bỏ sót user
+ * - Không orderBy joinedAt (vì user cũ có thể thiếu field)
+ * - Dùng orderBy documentId() để phân trang ổn định
+ * - Sort thủ công ở client theo joinedAt/createdAt/created_at để hiển thị “mới trước”
+ *
+ * Lưu ý:
+ * - Phân trang ổn định theo documentId => không “mất” user do thiếu field/index.
+ * - Nhưng “mới nhất lên đầu” chỉ là sắp xếp trong TRANG hiện tại (page). Muốn đúng toàn hệ thống cần 1 trường timestamp đồng nhất.
+ */
 export const fetchUsersAdminPaginated = async (
   lastVisible: QueryDocumentSnapshot<DocumentData> | null = null,
   pageSize: number = 20
 ) => {
   if (!db) return { users: [], lastDoc: null, hasMore: false };
+
   try {
-    let q = query(collection(db, "users"), orderBy("joinedAt", "desc"), limit(pageSize));
-    if (lastVisible) q = query(q, startAfter(lastVisible));
+    // ✅ Phân trang ổn định: theo documentId() (không phụ thuộc joinedAt)
+    let q = query(
+      collection(db, "users"),
+      orderBy(FieldPath.documentId()),
+      limit(pageSize)
+    );
+
+    if (lastVisible) {
+      q = query(
+        collection(db, "users"),
+        orderBy(FieldPath.documentId()),
+        startAfter(lastVisible),
+        limit(pageSize)
+      );
+    }
 
     const snapshot = await getDocs(q);
 
-    // Fallback nếu thiếu joinedAt hoặc orderBy gây empty ở trang đầu
-    if (snapshot.empty && !lastVisible) {
-      const fallbackSnap = await getDocs(query(collection(db, "users"), limit(pageSize)));
-      const users = fallbackSnap.docs.map((d) => ({ id: d.id, ...d.data() } as User));
-      return {
-        users,
-        lastDoc: fallbackSnap.docs[fallbackSnap.docs.length - 1] || null,
-        hasMore: fallbackSnap.docs.length === pageSize,
-      };
-    }
-
     const users = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as User));
+
+    // ✅ sort client để ưu tiên user mới hơn (trong trang)
+    users.sort((a: any, b: any) => {
+      const dateA = new Date(a.joinedAt || a.createdAt || a.created_at || 0).getTime();
+      const dateB = new Date(b.joinedAt || b.createdAt || b.created_at || 0).getTime();
+      return dateB - dateA;
+    });
+
     return {
       users,
       lastDoc: snapshot.docs[snapshot.docs.length - 1] || null,
@@ -93,13 +116,29 @@ export const fetchUsersAdminPaginated = async (
   } catch (error) {
     console.error("Error fetching users:", error);
 
-    // TRẢ VỀ DỮ LIỆU KHÔNG SẮP XẾP NẾU LỖI (để luôn hiện được)
-    const fallbackSnap = await getDocs(query(collection(db, "users"), limit(pageSize)));
-    return {
-      users: fallbackSnap.docs.map((d) => ({ id: d.id, ...d.data() } as User)),
-      lastDoc: fallbackSnap.docs[fallbackSnap.docs.length - 1] || null,
-      hasMore: false,
-    };
+    // fallback cuối cùng: vẫn trả dữ liệu để admin luôn nhìn thấy (khỏi trắng trang)
+    try {
+      const fallbackSnap = await getDocs(
+        query(collection(db, "users"), limit(pageSize))
+      );
+      const fallbackUsers = fallbackSnap.docs.map(
+        (d) => ({ id: d.id, ...d.data() } as User)
+      );
+
+      fallbackUsers.sort((a: any, b: any) => {
+        const dateA = new Date(a.joinedAt || a.createdAt || a.created_at || 0).getTime();
+        const dateB = new Date(b.joinedAt || b.createdAt || b.created_at || 0).getTime();
+        return dateB - dateA;
+      });
+
+      return {
+        users: fallbackUsers,
+        lastDoc: fallbackSnap.docs[fallbackSnap.docs.length - 1] || null,
+        hasMore: fallbackSnap.docs.length === pageSize,
+      };
+    } catch {
+      return { users: [], lastDoc: null, hasMore: false };
+    }
   }
 };
 
@@ -152,9 +191,13 @@ export const deleteUser = async (userId: string) => {
     throw error;
   }
 };
-export const searchUsersForAdmin = async (keyword: string, maxResults: number = 12): Promise<User[]> => {
+
+export const searchUsersForAdmin = async (
+  keyword: string,
+  maxResults: number = 12
+): Promise<User[]> => {
   if (!db) return [];
-  const k = (keyword || '').trim().toLowerCase();
+  const k = (keyword || "").trim().toLowerCase();
   if (!k) return [];
 
   try {
@@ -163,16 +206,21 @@ export const searchUsersForAdmin = async (keyword: string, maxResults: number = 
     const users = snap.docs.map((d) => ({ id: d.id, ...d.data() } as User));
 
     const filtered = users.filter((u: any) => {
-      const name = (u?.name || '').toLowerCase();
-      const email = (u?.email || '').toLowerCase();
-      const username = (u?.username || '').toLowerCase();
-      return name.includes(k) || email.includes(k) || username.includes(k) || (u?.id || '').includes(k);
+      const name = (u?.name || "").toLowerCase();
+      const email = (u?.email || "").toLowerCase();
+      const username = (u?.username || "").toLowerCase();
+      return (
+        name.includes(k) ||
+        email.includes(k) ||
+        username.includes(k) ||
+        (u?.id || "").includes(k)
+      );
     });
 
     // ưu tiên user có email/name lên đầu
     filtered.sort((a: any, b: any) => {
-      const sa = ((a?.email ? 1 : 0) + (a?.name ? 1 : 0));
-      const sb = ((b?.email ? 1 : 0) + (b?.name ? 1 : 0));
+      const sa = (a?.email ? 1 : 0) + (a?.name ? 1 : 0);
+      const sb = (b?.email ? 1 : 0) + (b?.name ? 1 : 0);
       return sb - sa;
     });
 
@@ -182,6 +230,7 @@ export const searchUsersForAdmin = async (keyword: string, maxResults: number = 
     return [];
   }
 };
+
 export const createUserByAdmin = async (payload: {
   email: string;
   password: string;
@@ -226,11 +275,6 @@ export const fetchExpertApplications = async (): Promise<ExpertApplication[]> =>
   }
 };
 
-/**
- * Duyệt / Từ chối hồ sơ ứng tuyển
- * - Update expert_applications
- * - Update users: isExpert/expertStatus/specialty + các trường audit
- */
 export const processExpertApplication = async (
   appId: string,
   userId: string,
@@ -281,15 +325,8 @@ export const processExpertApplication = async (
 
 /* ============================================================
    EXPERT MANAGEMENT (Admin CRUD chuyên gia)
-   - Xoá hồ sơ ứng tuyển
-   - Danh sách chuyên gia
-   - Sửa thông tin chuyên gia
-   - Thêm chuyên gia thủ công
-   - Gỡ quyền chuyên gia
-   - Đồng bộ/chỉnh specialty từ hồ sơ
    ============================================================ */
 
-// Xoá hồ sơ ứng tuyển (admin)
 export const deleteExpertApplication = async (appId: string) => {
   if (!db) return;
   try {
@@ -300,7 +337,6 @@ export const deleteExpertApplication = async (appId: string) => {
   }
 };
 
-// Lấy danh sách chuyên gia: where(isExpert == true) + sort client để tránh yêu cầu index
 export const fetchExperts = async (): Promise<User[]> => {
   if (!db) return [];
   try {
@@ -310,7 +346,6 @@ export const fetchExperts = async (): Promise<User[]> => {
 
     const users = snap.docs.map((d) => ({ id: d.id, ...d.data() } as User));
 
-    // sort mới nhất lên đầu nếu có joinedAt/expertApprovedAt
     users.sort((a: any, b: any) => {
       const ta =
         (a.expertApprovedAt && new Date(a.expertApprovedAt).getTime()) ||
@@ -331,22 +366,16 @@ export const fetchExperts = async (): Promise<User[]> => {
 };
 
 export type ExpertAdminUpdate = {
-  // fields phổ biến
   name?: string;
   bio?: string;
   specialty?: string;
   avatar?: string;
-
-  // optional fields (nếu User schema bạn có)
   phone?: string;
   workplace?: string;
-
-  // quyền / trạng thái
   isExpert?: boolean;
   expertStatus?: "approved" | "pending" | "rejected";
 };
 
-// Admin sửa thông tin 1 chuyên gia (hoặc user bất kỳ)
 export const updateExpertByAdmin = async (userId: string, updates: ExpertAdminUpdate) => {
   if (!db) return;
   try {
@@ -360,7 +389,6 @@ export const updateExpertByAdmin = async (userId: string, updates: ExpertAdminUp
   }
 };
 
-// Admin thêm chuyên gia thủ công (không cần hồ sơ)
 export const addExpertManually = async (payload: {
   userId: string;
   specialty: string;
@@ -377,7 +405,6 @@ export const addExpertManually = async (payload: {
     const now = new Date().toISOString();
     const userRef = doc(db, "users", userId);
 
-    // check tồn tại
     const snap = await getDoc(userRef);
     if (!snap.exists()) throw new Error("USER_NOT_FOUND");
 
@@ -397,10 +424,9 @@ export const addExpertManually = async (payload: {
   }
 };
 
-// Admin gỡ quyền chuyên gia (kể cả đã approved)
 export const revokeExpertByAdmin = async (payload: {
   userId: string;
-  appId?: string; // nếu muốn đồng bộ expert_applications
+  appId?: string;
   reason?: string;
 }) => {
   if (!db) return;
@@ -435,7 +461,6 @@ export const revokeExpertByAdmin = async (payload: {
   }
 };
 
-// Admin chỉnh specialty từ hồ sơ (update cả application + user)
 export const updateExpertSpecialtyFromApp = async (payload: {
   appId: string;
   userId: string;
@@ -614,7 +639,7 @@ export const addCategory = async (
 export const updateCategory = async (
   id: string,
   name: string,
-  style?: { icon: string; color: string; bg: string }
+ style?: { icon: string; color: string; bg: string }
 ) => {
   if (!db) return;
   try {
