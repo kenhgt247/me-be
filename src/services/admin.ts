@@ -65,20 +65,13 @@ export const fetchUsersAdminPaginated = async (
     if (lastVisible) q = query(q, startAfter(lastVisible));
     const snapshot = await getDocs(q);
     const users = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as User));
-
     users.sort((a: any, b: any) => {
       const dateA = new Date(a.joinedAt || a.createdAt || a.created_at || 0).getTime();
       const dateB = new Date(b.joinedAt || b.createdAt || b.created_at || 0).getTime();
       return dateB - dateA;
     });
-
-    return {
-      users,
-      lastDoc: snapshot.docs[snapshot.docs.length - 1] || null,
-      hasMore: snapshot.docs.length === pageSize,
-    };
+    return { users, lastDoc: snapshot.docs[snapshot.docs.length - 1] || null, hasMore: snapshot.docs.length === pageSize };
   } catch (error) {
-    console.error("Error fetching users:", error);
     return { users: [], lastDoc: null, hasMore: false };
   }
 };
@@ -110,10 +103,7 @@ export const searchUsersForAdmin = async (keyword: string, maxResults: number = 
   const k = (keyword || '').trim().toLowerCase();
   const snap = await getDocs(query(collection(db, "users"), limit(200)));
   const users = snap.docs.map((d) => ({ id: d.id, ...d.data() } as User));
-  return users.filter((u: any) => 
-    (u?.name || '').toLowerCase().includes(k) || 
-    (u?.email || '').toLowerCase().includes(k)
-  ).slice(0, maxResults);
+  return users.filter((u: any) => (u?.name || '').toLowerCase().includes(k) || (u?.email || '').toLowerCase().includes(k)).slice(0, maxResults);
 };
 
 export const createUserByAdmin = async (payload: any) => {
@@ -155,13 +145,7 @@ export const deleteExpertApplication = async (appId: string) => {
 export const addExpertManually = async (payload: { userId: string; specialty: string; name?: string; bio?: string }) => {
   if (!db) return;
   const now = new Date().toISOString();
-  await updateDoc(doc(db, "users", payload.userId), {
-    ...payload,
-    isExpert: true,
-    expertStatus: "approved",
-    expertApprovedAt: now,
-    updatedAt: now,
-  });
+  await updateDoc(doc(db, "users", payload.userId), { ...payload, isExpert: true, expertStatus: "approved", expertApprovedAt: now, updatedAt: now });
 };
 
 export const revokeExpertByAdmin = async (payload: { userId: string; appId?: string; reason?: string }) => {
@@ -182,7 +166,7 @@ export const updateExpertSpecialtyFromApp = async (payload: { appId: string; use
 };
 
 /* ============================================================
-   QUESTIONS, REPORTS, BLOGS, DOCUMENTS, CATEGORIES
+   QUESTIONS & CATEGORIES (Sửa lỗi Import QuestionManagement)
    ============================================================ */
 export const fetchQuestionsAdminPaginated = async (lastVisible: any, pageSize: number = 15) => {
   if (!db) return { questions: [], lastDoc: null, hasMore: false };
@@ -192,6 +176,57 @@ export const fetchQuestionsAdminPaginated = async (lastVisible: any, pageSize: n
   return { questions: snap.docs.map(d => ({ id: d.id, ...d.data() })), lastDoc: snap.docs[snap.docs.length - 1], hasMore: snap.docs.length === pageSize };
 };
 
+export const bulkUpdateQuestions = async (ids: string[], updates: any) => {
+  if (!db) return;
+  const batch = writeBatch(db);
+  ids.forEach(id => batch.update(doc(db, "questions", id), updates));
+  await batch.commit();
+};
+
+export const bulkDeleteQuestions = async (ids: string[]) => {
+  if (!db) return;
+  const batch = writeBatch(db);
+  ids.forEach(id => batch.delete(doc(db, "questions", id)));
+  await batch.commit();
+};
+
+export const fetchCategories = async () => {
+  if (!db) return [];
+  const snap = await getDocs(collection(db, "categories"));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Category));
+};
+
+export const addCategory = async (name: string, style?: any) => {
+  if (!db) return;
+  await addDoc(collection(db, "categories"), { name, slug: toSlug(name), ...style });
+};
+
+export const updateCategory = async (id: string, name: string, style?: any) => {
+  if (!db) return;
+  await updateDoc(doc(db, "categories", id), { name, slug: toSlug(name), ...style });
+};
+
+export const deleteCategory = async (id: string) => {
+  if (!db) return;
+  await deleteDoc(doc(db, "categories", id));
+};
+
+export const syncCategoriesFromCode = async () => {
+  if (!db) return;
+  const batch = writeBatch(db);
+  const snap = await getDocs(collection(db, "categories"));
+  const existingNames = snap.docs.map(d => d.data().name);
+  CATEGORIES.forEach(cat => {
+    if (!existingNames.includes(cat)) {
+      batch.set(doc(collection(db, "categories")), { name: cat, slug: toSlug(cat), icon: "Tag" });
+    }
+  });
+  await batch.commit();
+};
+
+/* ============================================================
+   REPORTS, BLOGS, DOCUMENTS
+   ============================================================ */
 export const fetchReports = async () => {
   if (!db) return [];
   const snap = await getDocs(query(collection(db, "reports"), orderBy("createdAt", "desc")));
@@ -201,22 +236,6 @@ export const fetchReports = async () => {
 export const resolveReport = async (reportId: string, action: string) => {
   if (!db) return;
   await updateDoc(doc(db, "reports", reportId), { status: action, resolvedAt: new Date().toISOString() });
-};
-
-export const fetchCategories = async () => {
-  if (!db) return [];
-  const snap = await getDocs(collection(db, "categories"));
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-};
-
-export const addCategory = async (name: string, style?: any) => {
-  if (!db) return;
-  await addDoc(collection(db, "categories"), { name, slug: toSlug(name), ...style });
-};
-
-export const deleteCategory = async (id: string) => {
-  if (!db) return;
-  await deleteDoc(doc(db, "categories", id));
 };
 
 export const fetchAllBlogs = async () => {
