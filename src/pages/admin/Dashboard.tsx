@@ -3,7 +3,7 @@ import {
   Users, FileQuestion, GraduationCap, FileText, 
   BookOpen, TrendingUp, Activity, ArrowUpRight, Loader2 
 } from 'lucide-react';
-import { getSystemStats } from '../../services/stats';
+import { getSystemStats } from '../../services/admin';
 
 export const Dashboard = () => {
   const [stats, setStats] = useState({
