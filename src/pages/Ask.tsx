@@ -154,6 +154,9 @@ function useKeyboardInset() {
     vv.addEventListener('resize', handle);
     vv.addEventListener('scroll', handle);
     window.addEventListener('orientationchange', handle);
+
+    return () => {
+      vv.removeEventListener('resize', handle);
       vv.removeEventListener('scroll', handle);
       window.removeEventListener('orientationchange', handle);
     };
@@ -516,7 +519,6 @@ export const Ask: React.FC<AskProps> = ({
     if (!e.target.files) return;
     const filesArray = Array.from(e.target.files);
 
-    // reset input để chọn lại cùng file vẫn trigger change
     try {
       e.target.value = '';
     } catch {
@@ -709,7 +711,6 @@ export const Ask: React.FC<AskProps> = ({
   const handleSubmit = async () => {
     if (!validateBeforePreviewOrSubmit()) return;
 
-    // guest -> login anonymous trước
     if ((currentUser as any)?.isGuest) {
       try {
         setIsSubmitting(true);
@@ -753,7 +754,6 @@ export const Ask: React.FC<AskProps> = ({
   };
 
   // ==========================
-// ==========================
   // CATEGORY FILTERING
   // ==========================
   const filteredCategories = useMemo(() => {
@@ -767,7 +767,7 @@ export const Ask: React.FC<AskProps> = ({
     [allCategories]
   );
 
-  // UI guards - Xác định điều kiện để nút Xem trước sáng lên
+  // UI guards - Phải đặt ở đây, ngay trước return
   const canTogglePreview = title.trim().length > 0 || content.trim().length > 0 || attachments.length > 0;
 
   return (
@@ -784,8 +784,8 @@ export const Ask: React.FC<AskProps> = ({
       />
 
       {/* =========================
-          HEADER (Progress + Advice)
-         ========================= */}
+          HEADER
+          ========================= */}
       <div className="w-full bg-white/95 dark:bg-dark-card/95 backdrop-blur-md sticky top-0 z-30 pt-safe-top border-b border-gray-50 dark:border-dark-border shadow-sm transition-colors">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
           <button
@@ -829,7 +829,6 @@ export const Ask: React.FC<AskProps> = ({
           </button>
         </div>
 
-        {/* Progress + Advice under header (ẩn khi đang gõ để đỡ xao nhãng) */}
         <div className="max-w-3xl mx-auto px-4 pb-3">
           <div className="h-1.5 w-full bg-gray-100 dark:bg-slate-800 rounded-full overflow-hidden">
             <div
@@ -867,11 +866,10 @@ export const Ask: React.FC<AskProps> = ({
 
       {/* =========================
           MAIN
-         ========================= */}
+          ========================= */}
       <div className="flex-1 w-full max-w-3xl mx-auto px-4 py-6 overflow-y-auto pb-[190px]">
         {!isPreview ? (
           <>
-            {/* User & Category Selector */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
                 <img
@@ -899,9 +897,7 @@ export const Ask: React.FC<AskProps> = ({
               </div>
             </div>
 
-            {/* Content Area */}
             <div className="space-y-6">
-              {/* Title Section */}
               <div className="space-y-2">
                 <div className="flex justify-between items-end">
                   <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider ml-1">
@@ -936,7 +932,6 @@ export const Ask: React.FC<AskProps> = ({
                 </div>
               </div>
 
-              {/* AI Suggestions Dropdown */}
               {showSuggestions && (
                 <div className="bg-gradient-to-br from-orange-50 to-white dark:from-slate-800 dark:to-slate-900 rounded-2xl p-4 border border-orange-100 dark:border-slate-700 animate-slide-down shadow-sm">
                   <div className="flex justify-between items-center mb-3">
@@ -969,7 +964,6 @@ export const Ask: React.FC<AskProps> = ({
 
               <div className="h-px bg-gray-100 dark:bg-dark-border w-full"></div>
 
-              {/* Main Content Section */}
               <div className="relative min-h-[200px] group">
                 <div className="flex justify-between items-center mb-2">
                   <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider ml-1">
@@ -1014,7 +1008,6 @@ export const Ask: React.FC<AskProps> = ({
                 </div>
               </div>
 
-              {/* Image Previews */}
               {attachments.length > 0 && (
                 <div className="flex gap-3 overflow-x-auto pb-4 pt-2 px-1 no-scrollbar">
                   {attachments.map((att) => (
@@ -1045,9 +1038,6 @@ export const Ask: React.FC<AskProps> = ({
             </div>
           </>
         ) : (
-          // ==========================
-          // PREVIEW MODE
-          // ==========================
           <div className="space-y-4">
             <div className="bg-white dark:bg-dark-card p-5 rounded-[1.5rem] shadow-sm border border-gray-100 dark:border-dark-border overflow-hidden">
               <div className="flex items-start justify-between mb-3">
@@ -1103,7 +1093,7 @@ export const Ask: React.FC<AskProps> = ({
                 <div className="flex-1">
                   <p className="text-sm font-bold text-gray-800 dark:text-white mb-1">Sẵn sàng đăng?</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                    Nếu cần, bấm <b>Chỉnh sửa</b> để thêm thông tin (độ tuổi, thời gian, triệu chứng…). Bài càng rõ thì
+                    Nếu cần, bấm <b>Chỉnh sửa</b> để thêm thông tin. Bài càng rõ thì
                     càng dễ được trả lời đúng trọng tâm.
                   </p>
                 </div>
@@ -1114,8 +1104,8 @@ export const Ask: React.FC<AskProps> = ({
       </div>
 
       {/* =========================
-          TOOLBAR (FLOAT ABOVE KEYBOARD)
-         ========================= */}
+          TOOLBAR
+          ========================= */}
       <div
         className="fixed left-0 right-0 bg-white dark:bg-dark-card border-t border-gray-100 dark:border-dark-border px-4 py-3 pb-safe-bottom z-40 shadow-[0_-5px_25px_rgba(0,0,0,0.03)] dark:shadow-none transition-colors"
         style={{ bottom: keyboardInset }}
@@ -1170,7 +1160,6 @@ export const Ask: React.FC<AskProps> = ({
           )}
 
           <div className="flex items-center justify-between gap-4">
-            {/* Left: tools */}
             <div className="flex items-center gap-2">
               <label
                 className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all cursor-pointer active:scale-95 border ${
@@ -1227,7 +1216,6 @@ export const Ask: React.FC<AskProps> = ({
               </button>
             </div>
 
-            {/* Right: submit */}
             <button
               onClick={handleSubmit}
               disabled={isSubmitting || attachments.some((a) => a.uploading) || !title.trim() || !content.trim()}
@@ -1247,8 +1235,8 @@ export const Ask: React.FC<AskProps> = ({
       </div>
 
       {/* =========================
-          CATEGORY SHEET (MODAL)
-         ========================= */}
+          CATEGORY SHEET
+          ========================= */}
       {showCategorySheet && (
         <div className="fixed inset-0 z-[60] flex flex-col justify-end">
           <div
