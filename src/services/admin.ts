@@ -184,7 +184,7 @@ export const searchUsersForAdmin = async (keyword: string, maxResults: number = 
   }
 };
 
-// ✅ HÀM QUAN TRỌNG ĐÃ SỬA: Thêm Header Content-Type
+// ✅ HÀM QUAN TRỌNG ĐÃ SỬA: Thêm Header Content-Type để tránh lỗi 500
 export const createUserByAdmin = async (payload: {
   email: string;
   password: string;
