@@ -22,7 +22,7 @@ import { db } from '../firebaseConfig';
 import { User, Question, ExpertApplication, Report, Category, toSlug, CATEGORIES } from '../types';
 
 /* ============================================================
-   SYSTEM STATS (Dashboard)
+   SYSTEM STATS (Tối ưu cho Dashboard)
    ============================================================ */
 export const getSystemStats = async () => {
   if (!db) return { totalUsers: 0, totalQuestions: 0, totalBlogs: 0, totalDocuments: 0 };
@@ -53,7 +53,7 @@ export const getSystemStats = async () => {
 };
 
 /* ============================================================
-   USERS MANAGEMENT
+   USERS MANAGEMENT (Bản sửa lỗi không hiện người dùng thật)
    ============================================================ */
 export const fetchUsersAdminPaginated = async (
   lastVisible: QueryDocumentSnapshot<DocumentData> | null = null,
@@ -70,7 +70,7 @@ export const fetchUsersAdminPaginated = async (
 
     const snapshot = await getDocs(q);
 
-    // Fallback nếu joinedAt thiếu / index lỗi / snapshot rỗng trang đầu
+    // CỨU HỘ: Nếu trang đầu tiên trống (do thiếu joinedAt / lỗi index)
     if (snapshot.empty && !lastVisible) {
       const fallbackSnap = await getDocs(query(collection(db, 'users'), limit(pageSize)));
       const users = fallbackSnap.docs.map((d) => ({ id: d.id, ...d.data() } as User));
@@ -90,7 +90,7 @@ export const fetchUsersAdminPaginated = async (
   } catch (error) {
     console.error('Error fetching users:', error);
 
-    // Fallback cuối cùng: vẫn hiện user dù lỗi sort/index
+    // Fallback: vẫn hiện được user dù lỗi sort/index
     const fallbackSnap = await getDocs(query(collection(db, 'users'), limit(pageSize)));
     return {
       users: fallbackSnap.docs.map((d) => ({ id: d.id, ...d.data() } as User)),
@@ -100,9 +100,10 @@ export const fetchUsersAdminPaginated = async (
   }
 };
 
+// ✅ để UserManagement.tsx không lỗi build
 export const updateUserInfo = async (
   userId: string,
-  data: { name?: string; bio?: string; specialty?: string; workplace?: string; coverUrl?: string; avatar?: string }
+  data: { name?: string; bio?: string; specialty?: string; workplace?: string; avatar?: string; coverUrl?: string }
 ) => {
   if (!db) return false;
   try {
@@ -202,7 +203,7 @@ export const processExpertApplication = async (
 };
 
 /* ============================================================
-   QUESTIONS MANAGEMENT (Paginated + Bulk)
+   QUESTIONS MANAGEMENT (Phân trang & Bulk)
    ============================================================ */
 export const fetchQuestionsAdminPaginated = async (
   lastVisible: QueryDocumentSnapshot<DocumentData> | null = null,
@@ -229,6 +230,7 @@ export const fetchQuestionsAdminPaginated = async (
 
     let questions = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Question));
 
+    // searchTerm lọc client-side
     if (filters?.searchTerm) {
       const term = filters.searchTerm.toLowerCase();
       questions = questions.filter((qq) => (qq.title || '').toLowerCase().includes(term));
@@ -295,7 +297,10 @@ export const resolveReport = async (reportId: string, action: 'resolved' | 'dism
   if (!db) return;
   try {
     const ref = doc(db, 'reports', reportId);
-    await updateDoc(ref, { status: action, resolvedAt: new Date().toISOString() });
+    await updateDoc(ref, {
+      status: action,
+      resolvedAt: new Date().toISOString(),
+    });
   } catch (error) {
     console.error('Error resolving report:', error);
     throw error;
@@ -307,6 +312,7 @@ export const deleteReportedContent = async (report: Report) => {
   try {
     const batch = writeBatch(db);
     const reportRef = doc(db, 'reports', report.id);
+
     batch.update(reportRef, { status: 'resolved', resolvedAt: new Date().toISOString() });
 
     if (report.targetType === 'question') {
@@ -339,7 +345,11 @@ export const fetchCategories = async (): Promise<Category[]> => {
 export const addCategory = async (name: string, style?: { icon: string; color: string; bg: string }) => {
   if (!db) return;
   try {
-    await addDoc(collection(db, 'categories'), { name, slug: toSlug(name), ...(style || {}) });
+    await addDoc(collection(db, 'categories'), {
+      name,
+      slug: toSlug(name),
+      ...(style || {}), // ✅ tránh crash khi style undefined
+    });
   } catch (error) {
     console.error('Error adding category:', error);
     throw error;
@@ -349,7 +359,11 @@ export const addCategory = async (name: string, style?: { icon: string; color: s
 export const updateCategory = async (id: string, name: string, style?: { icon: string; color: string; bg: string }) => {
   if (!db) return;
   try {
-    await updateDoc(doc(db, 'categories', id), { name, slug: toSlug(name), ...(style || {}) });
+    await updateDoc(doc(db, 'categories', id), {
+      name,
+      slug: toSlug(name),
+      ...(style || {}), // ✅ tránh crash khi style undefined
+    });
   } catch (error) {
     console.error('Error updating category:', error);
     throw error;
@@ -373,8 +387,8 @@ export const syncCategoriesFromCode = async () => {
     const batch = writeBatch(db);
     const existing = await fetchCategories();
     const existingNames = existing.map((c) => c.name);
-    let count = 0;
 
+    let count = 0;
     CATEGORIES.forEach((catName) => {
       if (!existingNames.includes(catName)) {
         const docRef = doc(collection(db, 'categories'));
@@ -398,7 +412,7 @@ export const syncCategoriesFromCode = async () => {
 };
 
 /* ============================================================
-   BLOGS & DOCUMENTS (Admin lists)
+   BLOGS & DOCUMENTS
    ============================================================ */
 export const fetchAllBlogs = async () => {
   if (!db) return [];
