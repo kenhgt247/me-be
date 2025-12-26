@@ -1,19 +1,20 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as admin from 'firebase-admin';
 
-// Hàm init Firebase Admin
+// 1. Init Admin SDK (Singleton)
 function initAdmin() {
   if (admin.apps.length) return;
 
   const projectId = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
+  // Xử lý xuống dòng cho Private Key
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY 
+    ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') 
+    : undefined;
 
-  if (!projectId || !clientEmail || !privateKeyRaw) {
-    throw new Error("❌ Thiếu biến môi trường: Kiểm tra file .env");
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error("❌ Thiếu biến môi trường FIREBASE (kiểm tra .env trên Vercel)");
   }
-
-  const privateKey = privateKeyRaw.replace(/\\n/g, '\n');
 
   admin.initializeApp({
     credential: admin.credential.cert({
@@ -24,9 +25,9 @@ function initAdmin() {
   });
 }
 
-// Handler chuẩn cho Vercel (Không dùng Next.js types)
+// 2. Handler chuẩn cho Vercel (Không dùng Next.js)
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // 1. Xử lý CORS (Quan trọng để Frontend gọi được Backend)
+  // --- CẤU HÌNH CORS (Bắt buộc cho Vite) ---
   res.setHeader('Access-Control-Allow-Credentials', "true");
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -35,7 +36,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
   );
 
-  // Xử lý preflight request
+  // Trả về ngay nếu là preflight request
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
@@ -50,43 +51,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const db = admin.firestore();
     const auth = admin.auth();
 
-    // 2. Lấy dữ liệu từ Body (Vercel tự parse JSON nếu có header Content-Type)
+    // 3. Parse Body (An toàn)
     const body = req.body || {};
     const { email, password, name } = body;
 
-    console.log("📥 API Body:", body); // Debug log
+    // Debug log (xem trong Vercel Logs)
+    console.log("📥 API Request Body:", body);
 
     if (!email || !password) {
       return res.status(400).json({ message: 'Thiếu email hoặc mật khẩu.' });
     }
 
-    // 3. Xác thực Token Admin
+    // 4. Verify Token Admin
     const authHeader = req.headers['authorization'];
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ message: 'Chưa đăng nhập (Thiếu Token)' });
+      return res.status(401).json({ message: 'Chưa đăng nhập (Thiếu Token).' });
     }
 
     const token = authHeader.split('Bearer ')[1];
+    const decodedToken = await auth.verifyIdToken(token);
     
-    // Verify token
-    let decodedToken;
-    try {
-      decodedToken = await auth.verifyIdToken(token);
-    } catch (e) {
-      return res.status(401).json({ message: 'Token không hợp lệ.' });
-    }
-
     // Check quyền Admin trong Firestore
     const adminDoc = await db.collection('users').doc(decodedToken.uid).get();
     if (!adminDoc.exists || !adminDoc.data()?.isAdmin) {
-      return res.status(403).json({ message: 'Bạn không có quyền Admin.' });
+      return res.status(403).json({ message: 'Không có quyền Admin.' });
     }
 
-    // 4. Logic tạo User
+    // 5. Logic Tạo User
     const cleanEmail = String(email).trim().toLowerCase();
     const cleanName = name ? String(name).trim() : 'Thành viên mới';
 
-    // Tạo Auth
+    // A. Tạo Auth
     const userRecord = await auth.createUser({
       email: cleanEmail,
       password: password,
@@ -94,7 +89,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       photoURL: 'https://cdn-icons-png.flaticon.com/512/3177/3177440.png',
     });
 
-    // Lưu Firestore (Bypass Rules)
+    // B. Tạo Firestore Data (Admin SDK bypass Rules)
     const now = new Date().toISOString();
     await db.collection('users').doc(userRecord.uid).set({
       uid: userRecord.uid,
@@ -118,7 +113,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       workplace: ''
     });
 
-    return res.status(200).json({ ok: true, uid: userRecord.uid, message: 'Tạo thành công!' });
+    return res.status(200).json({ ok: true, uid: userRecord.uid });
 
   } catch (error: any) {
     console.error('API Error:', error);
