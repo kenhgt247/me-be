@@ -1,70 +1,76 @@
-const CACHE_NAME = 'asking-v2'; // Tăng version để xóa cache cũ
+/* public/service-worker.js */
+
+const CACHE_NAME = 'asking-v3'; // tăng version mỗi lần deploy thay đổi SW
 const OFFLINE_URL = '/index.html';
 
-// 1. Cài đặt: Buộc SW mới kích hoạt ngay lập tức
+// Install: kích hoạt SW mới ngay + cache offline page
 self.addEventListener('install', (event) => {
   self.skipWaiting();
-});
-
-// 2. Kích hoạt: Xóa bỏ toàn bộ kho lưu trữ (cache) cũ để tránh xung đột
-self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll([OFFLINE_URL]))
   );
-  self.clients.claim();
 });
 
-// 3. Xử lý yêu cầu (Fetch)
-self.addEventListener('fetch', (event) => {
-  // Chỉ xử lý các yêu cầu GET và bỏ qua Chrome Extensions
-  if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) {
-    return;
-  }
+// Activate: xóa cache cũ + claim clients (đặt trong waitUntil để chắc chắn)
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(
+      keys.map((k) => (k !== CACHE_NAME ? caches.delete(k) : null))
+    );
+    await self.clients.claim();
+  })());
+});
 
-  // CHIẾN LƯỢC: NETWORK FIRST cho điều hướng (Tránh lỗi trắng trang)
-  if (event.request.mode === 'navigate') {
+// Fetch
+self.addEventListener('fetch', (event) => {
+  const req = event.request;
+
+  // Chỉ xử lý GET và request http(s)
+  if (req.method !== 'GET' || !req.url.startsWith('http')) return;
+
+  const url = new URL(req.url);
+
+  // Chỉ xử lý cùng origin (tránh đụng Adsense, analytics...)
+  if (url.origin !== self.location.origin) return;
+
+  // 1) Điều hướng trang (SPA): Network first, fallback index.html
+  if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => {
-        return caches.match(OFFLINE_URL);
-      })
+      fetch(req).catch(() => caches.match(OFFLINE_URL))
     );
     return;
   }
 
-  // CHIẾN LƯỢC: CACHE FIRST cho tài nguyên tĩnh (Ảnh, CSS, JS)
-  event.respondWith(
-    caches.match(event.request).then((response) => {
-      if (response) return response;
+  // 2) CỰC QUAN TRỌNG: /assets (JS chunk của Vite) => KHÔNG cache-first
+  // Tránh cache nhầm HTML cho JS gây trắng trang.
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      fetch(req).catch(() => caches.match(req))
+    );
+    return;
+  }
 
-      return fetch(event.request).then((networkResponse) => {
-        // Kiểm tra tính hợp lệ trước khi cache (Tránh lỗi Screenshot 330)
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-          return networkResponse;
-        }
+  // 3) Static assets khác: cache-first + fallback fetch
+  event.respondWith((async () => {
+    const cached = await caches.match(req);
+    if (cached) return cached;
 
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          // Không cache các file của Google Adsense để tránh lỗi bảo mật
-          if (!event.request.url.includes('googlesyndication')) {
-             cache.put(event.request, responseToCache);
-          }
-        });
+    try {
+      const res = await fetch(req);
 
-        return networkResponse;
-      }).catch(() => {
-          // Trả về Response rỗng thay vì ném lỗi nếu là ảnh
-          if (event.request.destination === 'image') {
-              return new Response('', { status: 404 });
-          }
-      });
-    })
-  );
+      // Chỉ cache response hợp lệ (basic + 200)
+      if (res && res.status === 200 && res.type === 'basic') {
+        const cache = await caches.open(CACHE_NAME);
+        cache.put(req, res.clone());
+      }
+      return res;
+    } catch (e) {
+      // LUÔN trả về Response để không lỗi "Failed to convert value to Response"
+      if (req.destination === 'image') {
+        return new Response('', { status: 404 });
+      }
+      return new Response('Offline', { status: 503, statusText: 'Offline' });
+    }
+  })());
 });
