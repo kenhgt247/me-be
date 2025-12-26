@@ -1,134 +1,149 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+// api/admin/create-user.ts
 import admin from "firebase-admin";
 
-/**
- * ENV cần có (Vercel Project Settings -> Environment Variables):
- * - FIREBASE_SERVICE_ACCOUNT_JSON  (toàn bộ service account json dạng 1 dòng)
- *
- * Ví dụ value: {"type":"service_account","project_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n","client_email":"..."}
- */
-
+// ---- Safe init Firebase Admin (only once) ----
 function initAdmin() {
   if (admin.apps.length) return;
 
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!raw) {
-    throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_JSON");
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error("Missing Firebase Admin env vars.");
   }
 
-  // Nếu bạn copy JSON lên env, nhớ giữ nguyên \n trong private_key
-  const serviceAccount = JSON.parse(raw);
-
-  // Một số nơi env bị mất \n thật, nên normalize:
-  if (serviceAccount.private_key && typeof serviceAccount.private_key === "string") {
-    serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, "\n");
-  }
+  // Vercel env often stores newlines as \\n
+  privateKey = privateKey.replace(/\\n/g, "\n");
 
   admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+    credential: admin.credential.cert({
+      projectId,
+      clientEmail,
+      privateKey,
+    } as any),
   });
 }
 
-async function requireAdmin(req: VercelRequest) {
-  const authHeader = req.headers.authorization || "";
-  const m = authHeader.match(/^Bearer (.+)$/i);
-  if (!m) throw new Error("UNAUTHORIZED");
-
-  const idToken = m[1];
-  const decoded = await admin.auth().verifyIdToken(idToken);
-
-  // Check quyền admin theo users/{uid}.isAdmin == true (đúng theo rules của bạn)
-  const uid = decoded.uid;
-  const userSnap = await admin.firestore().collection("users").doc(uid).get();
-  const isAdmin = userSnap.exists && userSnap.data()?.isAdmin === true;
-  if (!isAdmin) throw new Error("FORBIDDEN");
-
-  return { uid };
+function json(res: any, status: number, body: any) {
+  res.statusCode = status;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.end(JSON.stringify(body));
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+function getBearerToken(req: any) {
+  const h = req.headers?.authorization || req.headers?.Authorization;
+  if (!h || typeof h !== "string") return null;
+  const m = h.match(/^Bearer\s+(.+)$/i);
+  return m ? m[1] : null;
+}
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+export default async function handler(req: any, res: any) {
   try {
     initAdmin();
 
     if (req.method !== "POST") {
-      return res.status(405).json({ message: "Method Not Allowed" });
+      return json(res, 405, { message: "Method not allowed" });
     }
 
-    await requireAdmin(req);
+    // Parse body (Vercel may give object or string)
+    const body =
+      typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
 
-    const { email, password, name } = (req.body || {}) as {
-      email?: string;
-      password?: string;
-      name?: string;
-    };
+    const email = String(body.email || "").trim().toLowerCase();
+    const password = String(body.password || "");
+    const name = String(body.name || "").trim();
 
     if (!email || !password) {
-      return res.status(400).json({ message: "Thiếu email hoặc password." });
+      return json(res, 400, { message: "Thiếu email hoặc mật khẩu." });
+    }
+    if (!isValidEmail(email)) {
+      return json(res, 400, { message: "Email không hợp lệ." });
+    }
+    if (password.length < 6) {
+      return json(res, 400, { message: "Mật khẩu tối thiểu 6 ký tự." });
     }
 
-    if (typeof password !== "string" || password.length < 6) {
-      return res.status(400).json({ message: "Password tối thiểu 6 ký tự." });
+    // ---- Verify caller (must be logged in) ----
+    const token = getBearerToken(req);
+    if (!token) return json(res, 401, { message: "Thiếu Authorization Bearer token." });
+
+    let decoded: admin.auth.DecodedIdToken;
+    try {
+      decoded = await admin.auth().verifyIdToken(token);
+    } catch (e) {
+      return json(res, 401, { message: "Token không hợp lệ hoặc đã hết hạn." });
     }
 
-    // 1) Tạo user auth
-    const created = await admin.auth().createUser({
-      email,
-      password,
-      displayName: name || undefined,
-      emailVerified: false,
-      disabled: false,
-    });
+    const callerUid = decoded.uid;
 
+    // ---- Check admin by Firestore users/{uid}.isAdmin ----
+    const callerSnap = await admin.firestore().doc(`users/${callerUid}`).get();
+    const callerData = callerSnap.exists ? (callerSnap.data() as any) : null;
+
+    if (!callerData?.isAdmin) {
+      return json(res, 403, { message: "Bạn không có quyền admin." });
+    }
+
+    // ---- Create user in Firebase Auth ----
+    let userRecord: admin.auth.UserRecord | null = null;
+
+    try {
+      userRecord = await admin.auth().createUser({
+        email,
+        password,
+        displayName: name || undefined,
+        disabled: false,
+      });
+    } catch (e: any) {
+      // Handle common errors
+      const code = String(e?.code || "");
+      if (code.includes("email-already-exists")) {
+        return json(res, 409, { message: "Email đã tồn tại trong hệ thống." });
+      }
+      return json(res, 500, { message: "Không tạo được user Auth.", error: e?.message || String(e) });
+    }
+
+    const newUid = userRecord.uid;
     const now = new Date().toISOString();
 
-    // 2) Tạo doc users/{uid} để app bạn dùng được ngay
-    // (Bạn có thể chỉnh fields theo schema của bạn)
-    await admin.firestore().collection("users").doc(created.uid).set(
-      {
-        name: name || "Thành viên",
-        email,
-        avatar: "",
-        bio: "",
-        username: "",
-        points: 0,
+    // ---- Create Firestore user profile doc (optional but recommended) ----
+    // Use set with merge to be safe if doc already exists for some reason
+    await admin
+      .firestore()
+      .doc(`users/${newUid}`)
+      .set(
+        {
+          name: name || userRecord.displayName || "Thành viên",
+          email: userRecord.email,
+          avatar: userRecord.photoURL || "",
+          joinedAt: now,
+          createdAt: now,
+          updatedAt: now,
+          isAdmin: false,
+          isExpert: false,
+          isBanned: false,
+          expertStatus: null,
+          points: 0,
+          createdByAdmin: true,
+        },
+        { merge: true }
+      );
 
-        isAdmin: false,
-        isExpert: false,
-        isBanned: false,
-        expertStatus: null,
-
-        joinedAt: now,
-        createdAt: now,
-        updatedAt: now,
-        isAnonymous: false,
-      },
-      { merge: true }
-    );
-
-    return res.status(200).json({
+    return json(res, 200, {
       ok: true,
-      uid: created.uid,
-      email: created.email,
-      name: created.displayName,
+      uid: newUid,
+      email: userRecord.email,
+      name: userRecord.displayName || name || "",
     });
-  } catch (err: any) {
-    const msg = String(err?.message || err);
-
-    if (msg === "UNAUTHORIZED") return res.status(401).json({ message: "Thiếu token." });
-    if (msg === "FORBIDDEN") return res.status(403).json({ message: "Bạn không có quyền admin." });
-
-    // Firebase Admin error mapping
-    if (msg.includes("auth/email-already-exists")) {
-      return res.status(409).json({ message: "Email đã tồn tại." });
-    }
-    if (msg.includes("auth/invalid-email")) {
-      return res.status(400).json({ message: "Email không hợp lệ." });
-    }
-    if (msg.includes("Missing FIREBASE_SERVICE_ACCOUNT_JSON")) {
-      return res.status(500).json({ message: "Thiếu env FIREBASE_SERVICE_ACCOUNT_JSON trên Vercel." });
-    }
-
-    console.error("create-user error:", err);
-    return res.status(500).json({ message: "Lỗi server khi tạo user." });
+  } catch (e: any) {
+    return json(res, 500, {
+      message: "Server error create-user",
+      error: e?.message || String(e),
+    });
   }
 }
