@@ -47,10 +47,7 @@ const mapUser = (fbUser: firebaseAuth.User, dbUser?: any): User => {
    - Dùng merge:true
    - Preserve createdAt/joinedAt nếu đã có
 ========================= */
-const ensureUserDoc = async (
-  fbUser: firebaseAuth.User,
-  partialData: any = {}
-) => {
+const ensureUserDoc = async (fbUser: firebaseAuth.User, partialData: any = {}) => {
   const userDocRef = doc(db, 'users', fbUser.uid);
 
   let existing: any = {};
@@ -61,15 +58,8 @@ const ensureUserDoc = async (
     // ignore
   }
 
-  const createdAt =
-    existing?.createdAt ||
-    partialData?.createdAt ||
-    new Date().toISOString();
-
-  const joinedAt =
-    existing?.joinedAt ||
-    partialData?.joinedAt ||
-    createdAt;
+  const createdAt = existing?.createdAt || partialData?.createdAt || new Date().toISOString();
+  const joinedAt = existing?.joinedAt || partialData?.joinedAt || createdAt;
 
   const savedQuestions = Array.isArray(existing?.savedQuestions)
     ? existing.savedQuestions
@@ -115,7 +105,6 @@ const ensureUserDoc = async (
 
       // ✅ để toggleSaveQuestion arrayUnion/arrayRemove không lỗi
       savedQuestions,
-
       followers,
       following,
     },
@@ -326,15 +315,15 @@ export const logoutUser = async () => {
 };
 
 /* =========================
-   Subscribe Auth Changes (FIX TRIỆT ĐỂ 1000 LỖI)
-   - Không leak listener
+   Subscribe Auth Changes (FIX TRIỆT ĐỂ SPAM LỖI)
    - Cleanup đúng chuẩn
-   - Nếu doc chưa có -> tự tạo (merge) để tránh lỗi về sau
+   - Nếu permission-denied => unsubscribe để dừng retry spam
 ========================= */
 export const subscribeToAuthChanges = (callback: (user: User | null) => void) => {
   if (!auth) return () => {};
 
   let unsubUserDoc: (() => void) | null = null;
+  let stoppedDueToPermission = false;
 
   const unsubAuth = firebaseAuth.onAuthStateChanged(auth, (fbUser) => {
     // ✅ huỷ listener cũ mỗi khi auth thay đổi
@@ -342,6 +331,7 @@ export const subscribeToAuthChanges = (callback: (user: User | null) => void) =>
       unsubUserDoc();
       unsubUserDoc = null;
     }
+    stoppedDueToPermission = false;
 
     if (!fbUser) {
       callback(null);
@@ -353,6 +343,9 @@ export const subscribeToAuthChanges = (callback: (user: User | null) => void) =>
     unsubUserDoc = onSnapshot(
       userDocRef,
       (docSnap) => {
+        // nếu trước đó đã permission-denied thì thôi (đỡ loop)
+        if (stoppedDueToPermission) return;
+
         void (async () => {
           try {
             if (docSnap.exists()) {
@@ -384,14 +377,36 @@ export const subscribeToAuthChanges = (callback: (user: User | null) => void) =>
 
             const fresh = await getDoc(userDocRef);
             callback(mapUser(fbUser, fresh.exists() ? fresh.data() : undefined));
-          } catch (err) {
+          } catch (err: any) {
+            // nếu bị permission-denied trong quá trình ensureUserDoc/getDoc
+            if (err?.code === 'permission-denied') {
+              stoppedDueToPermission = true;
+              if (unsubUserDoc) {
+                unsubUserDoc();
+                unsubUserDoc = null;
+              }
+              // fallback không phá UI
+              callback(mapUser(fbUser, docSnap.exists() ? docSnap.data() : undefined));
+              return;
+            }
+
             console.error('Auth snapshot handler error:', err);
-            // fallback không phá UI
             callback(mapUser(fbUser, docSnap.exists() ? docSnap.data() : undefined));
           }
         })();
       },
-      (error) => {
+      (error: any) => {
+        // ✅ CHỐT: permission-denied => dừng retry spam
+        if (error?.code === 'permission-denied') {
+          stoppedDueToPermission = true;
+          if (unsubUserDoc) {
+            unsubUserDoc();
+            unsubUserDoc = null;
+          }
+          callback(mapUser(fbUser));
+          return;
+        }
+
         console.error('Firestore user sync error:', error);
         callback(mapUser(fbUser));
       }
