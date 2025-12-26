@@ -17,6 +17,7 @@ import {
   getCountFromServer,
 } from "firebase/firestore";
 import { db } from "../firebaseConfig";
+import { getAuth } from "firebase/auth";
 import {
   User,
   Question,
@@ -181,6 +182,35 @@ export const searchUsersForAdmin = async (keyword: string, maxResults: number = 
     return [];
   }
 };
+export const createUserByAdmin = async (payload: {
+  email: string;
+  password: string;
+  name?: string;
+}) => {
+  const auth = getAuth();
+  const me = auth.currentUser;
+  if (!me) throw new Error("Bạn chưa đăng nhập.");
+
+  const token = await me.getIdToken(true);
+
+  const res = await fetch("/api/admin/create-user", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(data?.message || "Không tạo được người dùng.");
+  }
+
+  return data;
+};
+
 /* ============================================================
    EXPERT APPLICATIONS
    ============================================================ */
