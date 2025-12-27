@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import * as admin from 'firebase-admin';
+import admin from 'firebase-admin'; // ✅ Đổi cách import để tránh lỗi undefined
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // 1. Cấu hình CORS (Rất quan trọng vì Vite chạy port 5173, API chạy port khác)
+  // 1. Cấu hình CORS
   res.setHeader('Access-Control-Allow-Credentials', "true");
-  res.setHeader('Access-Control-Allow-Origin', '*'); // Trong production nên đổi thành domain thật
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
@@ -12,8 +12,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method Not Allowed' });
 
   try {
-    // 2. KHỞI TẠO FIREBASE ADMIN
-    if (!admin.apps.length) {
+    // 2. KHỞI TẠO FIREBASE ADMIN (FIX LỖI CRASH TẠI ĐÂY)
+    // Kiểm tra kỹ lưỡng xem admin có tồn tại không trước khi chọc vào .apps
+    if (!admin || !admin.apps || !admin.apps.length) {
       const projectId = process.env.FIREBASE_PROJECT_ID;
       const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
       let privateKey = process.env.FIREBASE_PRIVATE_KEY;
@@ -22,7 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         throw new Error('Thiếu biến môi trường Server');
       }
 
-      // Fix lỗi key format
+      // Xử lý key
       if (privateKey.startsWith('"') && privateKey.endsWith('"')) privateKey = privateKey.slice(1, -1);
       if (privateKey.includes('\\n')) privateKey = privateKey.replace(/\\n/g, '\n');
 
@@ -38,9 +39,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const db = admin.firestore();
     const auth = admin.auth();
 
-    // 3. Xử lý Body
+    // 3. Parse Body
     let body = req.body;
-    // Vercel đôi khi parse sẵn, đôi khi chưa, kiểm tra an toàn:
     if (typeof body === 'string') {
       try { body = JSON.parse(body); } catch (e) { return res.status(400).json({ message: 'Invalid JSON body' }); }
     }
@@ -48,12 +48,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { email, password, name } = body || {};
     if (!email || !password) return res.status(400).json({ message: 'Thiếu email hoặc mật khẩu' });
 
-    // 4. Verify Admin Token
+    // 4. Verify Token
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.status(401).json({ message: 'Missing Token' });
     const token = authHeader.split('Bearer ')[1];
 
-    // Xác thực người gọi là Admin
     try {
         const decoded = await auth.verifyIdToken(token);
         const adminSnap = await db.collection('users').doc(decoded.uid).get();
@@ -101,6 +100,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   } catch (error: any) {
     console.error("API Error:", error);
-    return res.status(500).json({ message: error.message || 'Internal Server Error', error: error.code });
+    if (error.code === 'auth/email-already-exists') {
+      return res.status(400).json({ message: 'Email này đã được sử dụng.' });
+    }
+    return res.status(500).json({ message: error.message || 'Internal Server Error' });
   }
 }
