@@ -184,7 +184,9 @@ export const searchUsersForAdmin = async (keyword: string, maxResults: number = 
   }
 };
 
-// ✅ HÀM QUAN TRỌNG ĐÃ SỬA: Thêm Header Content-Type
+// ... các import khác giữ nguyên
+
+// ✅ HÀM GỌI API
 export const createUserByAdmin = async (payload: {
   email: string;
   password: string;
@@ -196,10 +198,16 @@ export const createUserByAdmin = async (payload: {
 
   const token = await me.getIdToken(true);
 
-  const res = await fetch("/api/admin/create-user", {
+  // Khi deploy lên Vercel, API sẽ nằm ở /api/admin/create-user
+  // Lưu ý: Khi chạy local 'npm run dev', bạn cần dùng 'vercel dev' để test được API này,
+  // hoặc trỏ thẳng vào link production nếu đã deploy.
+  
+  const apiUrl = '/api/admin/create-user'; 
+
+  const res = await fetch(apiUrl, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json", // ⚠️ QUAN TRỌNG: Backend cần dòng này để đọc body
+      "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
