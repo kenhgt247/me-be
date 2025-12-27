@@ -75,7 +75,7 @@ export const UserManagement: React.FC = () => {
       setLastDoc(nextDoc);
       setHasMore(more);
     } catch (error) {
-      console.error('Error loading users:', error);
+      console.error('Lỗi tải users:', error);
     } finally {
       setLoading(false);
     }
@@ -95,7 +95,7 @@ export const UserManagement: React.FC = () => {
       setLastDoc(nextDoc);
       setHasMore(more);
     } catch (error) {
-      console.error('Error loading more users:', error);
+      console.error('Lỗi tải thêm users:', error);
     } finally {
       setLoadingMore(false);
     }
@@ -182,20 +182,20 @@ export const UserManagement: React.FC = () => {
 
     setCreating(true);
     try {
+      // Gọi service (service sẽ gọi /api/admin/create-user)
       const result = await createUserByAdmin({ email, password, name });
       
       if (result && result.uid) {
         setShowCreateModal(false);
         setCreateForm({ email: '', password: '', name: '' }); 
         
-        // Làm mới danh sách sau 1s để Firestore kịp index
+        // Load lại danh sách sau 1s
         setTimeout(() => {
             loadInitialUsers(); 
         }, 1000);
       }
     } catch (e: any) {
       console.error("Create User Error:", e);
-      // Hiển thị message lỗi thực tế từ API
       setCreateError(e.message || 'Lỗi không xác định khi tạo người dùng.');
     } finally {
       setCreating(false);
@@ -421,7 +421,7 @@ export const UserManagement: React.FC = () => {
             )}
             
             <p className="text-[10px] text-gray-400 italic">
-              * Lưu ý: User được tạo bằng Admin SDK (secondary auth) để tránh đăng xuất admin hiện tại.
+              * Lưu ý: Tạo user bằng Admin SDK (secondary auth) để không ảnh hưởng phiên đăng nhập hiện tại.
             </p>
           </div>
           <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t border-gray-100">
