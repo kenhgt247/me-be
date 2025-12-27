@@ -124,11 +124,11 @@ export const UserManagement: React.FC = () => {
   // --- Action: Toggle Role/Status ---
   const handleToggleStatus = async (user: ExtendedUser, field: 'isAdmin' | 'isBanned') => {
     const currentValue = !!user[field];
-    const actionName = field === 'isAdmin' ? 'Admin' : 'Lock Account';
+    const actionName = field === 'isAdmin' ? 'Admin' : 'Khóa tài khoản';
     
     const confirmMsg = field === 'isAdmin' 
-      ? `Are you sure you want to ${currentValue ? 'REMOVE' : 'GRANT'} Admin rights for ${user.name}?`
-      : `Are you sure you want to ${currentValue ? 'UNLOCK' : 'LOCK'} account ${user.name}?`;
+      ? `Bạn có chắc chắn muốn ${currentValue ? 'GỠ' : 'CẤP'} quyền Admin cho ${user.name}?`
+      : `Bạn có chắc chắn muốn ${currentValue ? 'MỞ KHÓA' : 'KHÓA'} tài khoản ${user.name}?`;
 
     if (!window.confirm(confirmMsg)) return;
 
@@ -139,7 +139,7 @@ export const UserManagement: React.FC = () => {
       );
     } catch (e) {
       console.error(e);
-      alert(`Could not update ${actionName} status.`);
+      alert(`Không thể cập nhật trạng thái ${actionName}.`);
     }
   };
 
@@ -164,7 +164,7 @@ export const UserManagement: React.FC = () => {
       setEditingUser(null);
     } catch (error) {
       console.error(error);
-      alert('Error updating user info!');
+      alert('Lỗi cập nhật thông tin!');
     } finally {
       setIsSaving(false);
     }
@@ -175,10 +175,10 @@ export const UserManagement: React.FC = () => {
     setCreateError('');
     const email = createForm.email.trim();
     const password = createForm.password;
-    const name = createForm.name.trim() || 'User';
+    const name = createForm.name.trim() || 'Người dùng';
 
-    if (!email || !email.includes('@')) return setCreateError('Invalid email.');
-    if (!password || password.length < 6) return setCreateError('Password must be at least 6 characters.');
+    if (!email || !email.includes('@')) return setCreateError('Email không hợp lệ.');
+    if (!password || password.length < 6) return setCreateError('Mật khẩu tối thiểu 6 ký tự.');
 
     setCreating(true);
     try {
@@ -188,15 +188,15 @@ export const UserManagement: React.FC = () => {
         setShowCreateModal(false);
         setCreateForm({ email: '', password: '', name: '' }); 
         
-        // Refresh the list after a short delay to allow Firestore to index
+        // Làm mới danh sách sau 1s để Firestore kịp index
         setTimeout(() => {
             loadInitialUsers(); 
         }, 1000);
       }
     } catch (e: any) {
-      // The error message from API is thrown here
       console.error("Create User Error:", e);
-      setCreateError(e.message || 'Failed to create user. Please try again.');
+      // Hiển thị message lỗi thực tế từ API
+      setCreateError(e.message || 'Lỗi không xác định khi tạo người dùng.');
     } finally {
       setCreating(false);
     }
@@ -211,7 +211,7 @@ export const UserManagement: React.FC = () => {
             onClick={loadInitialUsers}
             disabled={loading}
             className="p-2.5 bg-gray-50 text-gray-500 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all disabled:opacity-50"
-            title="Refresh"
+            title="Làm mới"
           >
             <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -220,7 +220,7 @@ export const UserManagement: React.FC = () => {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500" size={20} />
             <input
               type="text"
-              placeholder="Search by name or email..."
+              placeholder="Tìm tên hoặc email..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-12 pr-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none font-medium text-sm transition-all"
@@ -231,10 +231,10 @@ export const UserManagement: React.FC = () => {
         <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end overflow-x-auto">
           <div className="flex gap-1.5 p-1 bg-gray-50 rounded-xl whitespace-nowrap">
             {([
-              { key: 'all', label: 'All' },
-              { key: 'expert', label: 'Expert' },
-              { key: 'admin', label: 'Admin' },
-              { key: 'banned', label: 'Banned' },
+              { key: 'all', label: 'Tất cả' },
+              { key: 'expert', label: 'Chuyên gia' },
+              { key: 'admin', label: 'Quản trị' },
+              { key: 'banned', label: 'Bị khóa' },
             ] as const).map((f) => (
               <button
                 key={f.key}
@@ -253,7 +253,7 @@ export const UserManagement: React.FC = () => {
             className="px-4 py-2.5 rounded-xl bg-blue-600 text-white font-bold text-xs uppercase shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all flex items-center gap-2 whitespace-nowrap"
           >
             <UserPlus size={16} />
-            <span className="hidden sm:inline">Add New</span>
+            <span className="hidden sm:inline">Thêm mới</span>
           </button>
         </div>
       </div>
@@ -264,10 +264,10 @@ export const UserManagement: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50/50 border-b border-gray-100 text-[10px] uppercase text-gray-400 font-black tracking-widest">
-                <th className="px-6 py-4">Member</th>
-                <th className="px-6 py-4">Role</th>
-                <th className="px-6 py-4 text-center">Status</th>
-                <th className="px-6 py-4 text-right">Actions</th>
+                <th className="px-6 py-4">Thành viên</th>
+                <th className="px-6 py-4">Vai trò</th>
+                <th className="px-6 py-4 text-center">Trạng thái</th>
+                <th className="px-6 py-4 text-right">Tác vụ</th>
               </tr>
             </thead>
 
@@ -275,13 +275,13 @@ export const UserManagement: React.FC = () => {
               {loading && users.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="text-center py-20 text-gray-400 font-bold uppercase tracking-widest animate-pulse">
-                    <Loader2 className="animate-spin inline mr-2" /> Loading data...
+                    <Loader2 className="animate-spin inline mr-2" /> Đang tải dữ liệu...
                   </td>
                 </tr>
               ) : displayUsers.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="text-center py-20 text-gray-400 italic">
-                    No users found.
+                    Không tìm thấy người dùng phù hợp.
                   </td>
                 </tr>
               ) : (
@@ -296,8 +296,8 @@ export const UserManagement: React.FC = () => {
                           alt="avatar"
                         />
                         <div className="min-w-0 max-w-[150px] sm:max-w-xs">
-                          <p className="font-bold text-gray-900 truncate">{user.name || 'Member'}</p>
-                          <p className="text-[11px] text-gray-400 truncate">{user.email || 'Hidden Email'}</p>
+                          <p className="font-bold text-gray-900 truncate">{user.name || 'Thành viên'}</p>
+                          <p className="text-[11px] text-gray-400 truncate">{user.email || 'Email ẩn'}</p>
                         </div>
                       </div>
                     </td>
@@ -337,7 +337,7 @@ export const UserManagement: React.FC = () => {
                         <ActionButton 
                           onClick={() => handleEditClick(user)} 
                           icon={<Edit size={16} />} 
-                          tooltip="Edit" 
+                          tooltip="Chỉnh sửa" 
                           variant="default"
                         />
                         <ActionButton 
@@ -371,7 +371,7 @@ export const UserManagement: React.FC = () => {
               className="px-6 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold uppercase text-gray-600 shadow-sm hover:bg-gray-100 hover:text-blue-600 flex items-center gap-2 mx-auto transition-all disabled:opacity-50"
             >
               {loadingMore ? <Loader2 className="animate-spin" size={14} /> : <ChevronDown size={14} />}
-              Load More
+              Tải thêm
             </button>
           </div>
         )}
@@ -379,12 +379,12 @@ export const UserManagement: React.FC = () => {
 
       {/* --- MODAL: EDIT USER --- */}
       {editingUser && (
-        <ModalWrapper onClose={() => setEditingUser(null)} title="Update Profile">
+        <ModalWrapper onClose={() => setEditingUser(null)} title="Cập nhật hồ sơ">
           <div className="p-6 space-y-4">
-            <InputGroup label="Display Name" value={editForm.name} onChange={(v: string) => setEditForm({...editForm, name: v})} />
-            <InputGroup label="Specialty" value={editForm.specialty} onChange={(v: string) => setEditForm({...editForm, specialty: v})} />
+            <InputGroup label="Tên hiển thị" value={editForm.name} onChange={(v: string) => setEditForm({...editForm, name: v})} />
+            <InputGroup label="Chuyên môn (Specialty)" value={editForm.specialty} onChange={(v: string) => setEditForm({...editForm, specialty: v})} />
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Bio</label>
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Tiểu sử</label>
               <textarea
                 rows={3}
                 value={editForm.bio}
@@ -394,13 +394,13 @@ export const UserManagement: React.FC = () => {
             </div>
           </div>
           <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t border-gray-100">
-            <button onClick={() => setEditingUser(null)} className="px-4 py-2 font-bold text-xs text-gray-400 uppercase hover:text-gray-600">Cancel</button>
+            <button onClick={() => setEditingUser(null)} className="px-4 py-2 font-bold text-xs text-gray-400 uppercase hover:text-gray-600">Hủy</button>
             <button
               onClick={handleSaveEdit}
               disabled={isSaving}
               className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold text-xs uppercase flex items-center gap-2 shadow-lg shadow-blue-200 hover:bg-blue-700 disabled:opacity-50"
             >
-              {isSaving ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />} Save Changes
+              {isSaving ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />} Lưu thay đổi
             </button>
           </div>
         </ModalWrapper>
@@ -408,11 +408,11 @@ export const UserManagement: React.FC = () => {
 
       {/* --- MODAL: CREATE USER --- */}
       {showCreateModal && (
-        <ModalWrapper onClose={() => setShowCreateModal(false)} title="Add New User">
+        <ModalWrapper onClose={() => setShowCreateModal(false)} title="Thêm người dùng mới">
           <div className="p-6 space-y-4">
             <InputGroup label="Email" type="email" placeholder="user@example.com" value={createForm.email} onChange={(v: string) => setCreateForm({...createForm, email: v})} />
-            <InputGroup label="Password" type="password" placeholder="Min 6 characters" value={createForm.password} onChange={(v: string) => setCreateForm({...createForm, password: v})} />
-            <InputGroup label="Display Name" placeholder="John Doe" value={createForm.name} onChange={(v: string) => setCreateForm({...createForm, name: v})} />
+            <InputGroup label="Mật khẩu" type="password" placeholder="Min 6 ký tự" value={createForm.password} onChange={(v: string) => setCreateForm({...createForm, password: v})} />
+            <InputGroup label="Tên hiển thị" placeholder="Nguyễn Văn A" value={createForm.name} onChange={(v: string) => setCreateForm({...createForm, name: v})} />
 
             {createError && (
               <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-xl p-3 text-xs font-bold text-red-600">
@@ -421,17 +421,17 @@ export const UserManagement: React.FC = () => {
             )}
             
             <p className="text-[10px] text-gray-400 italic">
-              * Note: User is created via Admin SDK to avoid logging out the current admin.
+              * Lưu ý: User được tạo bằng Admin SDK (secondary auth) để tránh đăng xuất admin hiện tại.
             </p>
           </div>
           <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t border-gray-100">
-            <button onClick={() => setShowCreateModal(false)} className="px-4 py-2 font-bold text-xs text-gray-400 uppercase hover:text-gray-600" disabled={creating}>Cancel</button>
+            <button onClick={() => setShowCreateModal(false)} className="px-4 py-2 font-bold text-xs text-gray-400 uppercase hover:text-gray-600" disabled={creating}>Hủy</button>
             <button
               onClick={handleCreateUser}
               disabled={creating}
               className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold text-xs uppercase flex items-center gap-2 shadow-lg shadow-blue-200 hover:bg-blue-700 disabled:opacity-50"
             >
-              {creating ? <Loader2 className="animate-spin" size={14} /> : <UserPlus size={14} />} Create
+              {creating ? <Loader2 className="animate-spin" size={14} /> : <UserPlus size={14} />} Tạo mới
             </button>
           </div>
         </ModalWrapper>
