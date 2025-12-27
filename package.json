@@ -25,6 +25,7 @@
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^22.14.0",
     "@types/react-router-dom": "^5.3.3",
+    "@vercel/node": "^5.5.16",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.23",
     "postcss": "^8.5.6",
