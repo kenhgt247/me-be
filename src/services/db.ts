@@ -1,4 +1,3 @@
-// src/services/db.ts
 import {
   collection,
   doc,
@@ -52,16 +51,26 @@ export const getUsersByIds = async (userIds: string[]): Promise<User[]> => {
   }
 };
 
+// ✅ FIX: Sửa lại hàm này để không tạo document nếu chưa tồn tại
 export const updateUserStatus = async (userId: string, isOnline: boolean) => {
   if (!db || !userId) return;
   try {
     const userRef = doc(db, USERS_COLLECTION, userId);
-    await setDoc(
-      userRef,
-      { isOnline: isOnline, lastActiveAt: new Date().toISOString() },
-      { merge: true }
-    );
-  } catch (e) {}
+    
+    // Dùng updateDoc thay vì setDoc(merge) để đảm bảo chỉ update khi user đã tồn tại.
+    // Nếu user chưa đăng ký xong (document chưa có), lệnh này sẽ lỗi và rơi vào catch,
+    // nhờ đó tránh được việc tạo ra document thiếu field (gây lỗi permission).
+    await updateDoc(userRef, { 
+        isOnline: isOnline, 
+        lastActiveAt: new Date().toISOString() 
+    });
+  } catch (e: any) {
+    // Nếu lỗi là do document chưa tồn tại (code: 'not-found'), ta bỏ qua không làm gì cả.
+    // Chờ đến khi process đăng ký hoàn tất thì lần update sau sẽ thành công.
+    if (e.code !== 'not-found') {
+        // console.warn('Update status error:', e);
+    }
+  }
 };
 
 export const subscribeToUser = (
